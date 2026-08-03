@@ -305,10 +305,51 @@ cd haystack-fast-api
 
 ### 8.1 Prerequisites
 
-1. Python **3.12** available (uv can install via `.python-version`).
-2. **uv** installed and on `PATH`.
+1. Python **3.12** available (uv can install via `.python-version` if missing).
+2. **uv** installed and on `PATH` (see **§8.1.1**).
 3. PostgreSQL reachable on host **`db`** (TCP `db:5432`), with defaults user/password/db `postgres` unless overridden.
 4. Env vars optional if defaults match the shared instance (`POSTGRES_*` / `DATABASE_URL`).
+
+### 8.1.1 Install uv (new machine)
+
+Install the **uv** CLI once per machine, then confirm it is on `PATH`. Official docs: [https://docs.astral.sh/uv/getting-started/installation/](https://docs.astral.sh/uv/getting-started/installation/).
+
+#### Linux / macOS (recommended)
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Load the install location into the current shell (or open a new terminal):
+
+```bash
+source "$HOME/.local/bin/env"
+# or:
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+#### Windows (PowerShell)
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+#### Alternative installers
+
+| Method | Example |
+|--------|---------|
+| Homebrew (macOS/Linux) | `brew install uv` |
+| WinGet (Windows) | `winget install --id=astral-sh.uv -e` |
+| pipx | `pipx install uv` |
+| pip | `pip install uv` (works; standalone installer or pipx preferred for a global CLI) |
+
+#### Verify
+
+```bash
+uv --version
+```
+
+After uv is available, continue with **§8.2** (`uv sync`) and **§8.3** (`uv run uvicorn …`). uv can provision the project Python version and virtualenv; you do not need to `pip install` project packages system-wide.
 
 ### 8.2 Install dependencies (uv)
 
@@ -523,5 +564,6 @@ Unless a dedicated SDD says otherwise:
 | 1.6.0 | 2026-08-03 | Add runtime `xgboost`, `joblib`, `pydantic`; add dev `faker`; document Uvicorn as required ASGI server for FastAPI |
 | 1.7.0 | 2026-08-03 | Expand §8 runbook: uv + Uvicorn host FastAPI endpoints; command breakdown, URLs, dev vs production-style |
 | 1.8.0 | 2026-08-03 | Add runtime `shap` (+ `numba>=0.61`, `llvmlite>=0.44` for Py3.12/NumPy 2.x); matplotlib/seaborn already direct |
+| 1.9.0 | 2026-08-03 | §8.1.1 Install uv on a new machine (curl/PowerShell, alternatives, PATH, verify) |
 
 When changing stack, database strategy, package manager, default security model, layout, or SDD file locations, bump this table and notify dependent feature specs.
