@@ -11,10 +11,17 @@ Produces:
 - outputs/shap_condition_check.png -- predicted price vs condition, all other
   features (including duration_days) held fixed. Expected: non-decreasing as
   condition improves NEEDS_REPAIR -> FAIR -> GOOD -> EXCELLENT.
+- outputs/shap_capacity_check.png -- predicted price vs capacity, swept within
+  the frozen row's own category range (capacity scales differ wildly across
+  categories -- e.g. excavator 1000-30000kg vs boom lift 200-450kg). Expected:
+  non-decreasing (bigger equipment costs more within a category).
+- outputs/shap_distance_check.png -- predicted price vs distance_km, all other
+  features held fixed. Expected: non-decreasing (per the masterplan's locked
+  "small, monotonic" delivery-distance premium).
 
-Both checks tolerate a small fraction of adjacent-step violations (XGBoost
-trees aren't constrained to be monotonic) rather than requiring a perfectly
-monotonic sweep.
+All four sweep checks tolerate a small fraction of adjacent-step violations
+(XGBoost trees aren't constrained to be monotonic) rather than requiring a
+perfectly monotonic sweep.
 """
 
 import argparse
@@ -45,7 +52,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Exit non-zero if the duration or condition monotonicity checks fail.",
+        help="Exit non-zero if any of the duration/condition/capacity/distance monotonicity checks fail.",
     )
     return parser.parse_args()
 
@@ -71,6 +78,27 @@ def sweep(model, base_row: pd.Series, feature: str, values) -> np.ndarray:
     return model.predict(rows[fs.FEATURE_COLUMNS])
 
 
+def active_category(base_row: pd.Series) -> str:
+    category_cols = [c for c in base_row.index if c.startswith("category_")]
+    return next(c for c in category_cols if base_row[c] == 1).removeprefix("category_")
+
+
+def describe_frozen_row(base_row: pd.Series, varying_feature: str) -> str:
+    """Human-readable summary of the representative row's fixed values,
+    excluding whichever feature the sweep is varying."""
+    condition_labels = {v: k for k, v in fs.CONDITION_ORDER.items()}
+
+    fields = {
+        "category": f"category={active_category(base_row)}",
+        "condition_ordinal": f"condition={condition_labels[int(base_row['condition_ordinal'])]}",
+        "duration_days": f"duration_days={base_row['duration_days']:g}",
+        "capacity": f"capacity={base_row['capacity']:g}kg",
+        "distance_km": f"distance_km={base_row['distance_km']:g}km",
+    }
+    fields.pop(varying_feature, None)
+    return "frozen: " + ", ".join(fields.values())
+
+
 def check_monotonic(values: np.ndarray, direction: str, tolerance: float = VIOLATION_TOLERANCE):
     diffs = np.diff(values)
     step_threshold = STEP_NOISE_TOLERANCE * np.abs(values[:-1])
@@ -90,15 +118,48 @@ def plot_summary(explainer, X: pd.DataFrame, out_path: Path) -> None:
     plt.close()
 
 
-def plot_sweep(x_values, y_values, xlabel: str, title: str, out_path: Path) -> None:
+def plot_sweep(
+    x_values, y_values, xlabel: str, title: str, frozen_description: str, out_path: Path
+) -> None:
     fig, ax = plt.subplots(figsize=(7, 4.5))
     ax.plot(x_values, y_values, marker="o")
     ax.set_xlabel(xlabel)
     ax.set_ylabel("Predicted price_per_day")
-    ax.set_title(title)
+    fig.suptitle(title, fontsize=12)
+    ax.set_title(frozen_description, fontsize=9, color="gray")
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
+
+
+def run_sweep_check(
+    model,
+    base_row: pd.Series,
+    feature: str,
+    values,
+    x_labels,
+    direction: str,
+    xlabel: str,
+    plot_title: str,
+    out_path: Path,
+) -> bool:
+    frozen = describe_frozen_row(base_row, feature)
+    print(f"  {frozen}")
+    predictions = sweep(model, base_row, feature, values)
+    passed, violation_frac = check_monotonic(predictions, direction)
+    plot_sweep(
+        x_labels,
+        predictions,
+        xlabel,
+        f"{plot_title} ({'PASS' if passed else 'FAIL'}, {violation_frac:.1%} adjacent-step violations)",
+        frozen,
+        out_path,
+    )
+    print(
+        f"  {'PASS' if passed else 'FAIL'} -- "
+        f"{violation_frac:.1%} adjacent-step violations (tolerance {VIOLATION_TOLERANCE:.0%})"
+    )
+    return passed
 
 
 def main() -> None:
@@ -109,49 +170,45 @@ def main() -> None:
     X = fs.build_features(df)
     model = joblib.load(args.model)
 
-    print("[1/3] SHAP summary plot")
+    print("[1/5] SHAP summary plot")
     explainer = shap.TreeExplainer(model)
     plot_summary(explainer, X, args.plots_dir / "shap_summary.png")
 
-    print("[2/3] Duration check (holding category/condition/capacity/distance_km fixed)")
     base_row = representative_row(X)
+
+    print("[2/5] Duration check (holding category/condition/capacity/distance_km fixed)")
     durations = np.linspace(df["duration_days"].min(), df["duration_days"].max(), 30).round().astype(int)
-    duration_predictions = sweep(model, base_row, "duration_days", durations)
-    duration_passed, duration_violation_frac = check_monotonic(duration_predictions, "decreasing")
-    plot_sweep(
-        durations,
-        duration_predictions,
-        "duration_days",
-        f"Predicted price vs duration ({'PASS' if duration_passed else 'FAIL'}, "
-        f"{duration_violation_frac:.1%} adjacent-step violations)",
-        args.plots_dir / "shap_duration_check.png",
-    )
-    print(
-        f"  {'PASS' if duration_passed else 'FAIL'} -- "
-        f"{duration_violation_frac:.1%} adjacent-step violations (tolerance {VIOLATION_TOLERANCE:.0%})"
+    duration_passed = run_sweep_check(
+        model, base_row, "duration_days", durations, durations, "decreasing",
+        "duration_days", "Predicted price vs duration", args.plots_dir / "shap_duration_check.png",
     )
 
-    print("[3/3] Condition check (holding category/duration_days/capacity/distance_km fixed)")
+    print("[3/5] Condition check (holding category/duration_days/capacity/distance_km fixed)")
     condition_levels = np.array(sorted(fs.CONDITION_ORDER.values()))
-    condition_predictions = sweep(model, base_row, "condition_ordinal", condition_levels)
-    condition_passed, condition_violation_frac = check_monotonic(condition_predictions, "increasing")
     condition_labels = [k for k, v in sorted(fs.CONDITION_ORDER.items(), key=lambda kv: kv[1])]
-    plot_sweep(
-        condition_labels,
-        condition_predictions,
-        "condition",
-        f"Predicted price vs condition ({'PASS' if condition_passed else 'FAIL'}, "
-        f"{condition_violation_frac:.1%} adjacent-step violations)",
-        args.plots_dir / "shap_condition_check.png",
+    condition_passed = run_sweep_check(
+        model, base_row, "condition_ordinal", condition_levels, condition_labels, "increasing",
+        "condition", "Predicted price vs condition", args.plots_dir / "shap_condition_check.png",
     )
-    print(
-        f"  {'PASS' if condition_passed else 'FAIL'} -- "
-        f"{condition_violation_frac:.1%} adjacent-step violations (tolerance {VIOLATION_TOLERANCE:.0%})"
+
+    print("[4/5] Capacity check (holding category/condition/duration_days/distance_km fixed)")
+    category_capacity = df.loc[df["category"] == active_category(base_row), "capacity"]
+    capacities = np.linspace(category_capacity.min(), category_capacity.max(), 30)
+    capacity_passed = run_sweep_check(
+        model, base_row, "capacity", capacities, capacities, "increasing",
+        "capacity (kg)", "Predicted price vs capacity", args.plots_dir / "shap_capacity_check.png",
+    )
+
+    print("[5/5] Distance check (holding category/condition/duration_days/capacity fixed)")
+    distances = np.linspace(df["distance_km"].min(), df["distance_km"].max(), 30)
+    distance_passed = run_sweep_check(
+        model, base_row, "distance_km", distances, distances, "increasing",
+        "distance_km (km)", "Predicted price vs distance", args.plots_dir / "shap_distance_check.png",
     )
 
     print(f"\nPlots saved to {args.plots_dir}")
 
-    if args.strict and not (duration_passed and condition_passed):
+    if args.strict and not (duration_passed and condition_passed and capacity_passed and distance_passed):
         raise SystemExit(1)
 
 
