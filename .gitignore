@@ -25,3 +25,7 @@ htmlcov/
 .vscode/
 *.swp
 .DS_Store
+
+# ml-experiments generated artifacts (Phase 1a scratch data/plots)
+ml-experiments/data/*.csv
+ml-experiments/outputs/*.png
