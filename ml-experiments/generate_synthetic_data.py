@@ -414,8 +414,13 @@ def run_sanity_checks(df: pd.DataFrame, plots_dir: Path, strict: bool) -> None:
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    sns.scatterplot(data=df, x="distance_km", y="price_per_day", hue="category", alpha=0.4, ax=ax)
-    ax.set_title("distance_km vs price_per_day")
+    by_distance = df.groupby("distance_km").apply(
+        lambda g: (g["price_per_day"] / g["baseDailyRate"]).mean(), include_groups=False
+    )
+    ax.plot(by_distance.index, by_distance.values, marker=".", linestyle="none", alpha=0.6)
+    ax.set_xlabel("distance_km")
+    ax.set_ylabel("price_per_day / baseDailyRate")
+    ax.set_title("Distance price effect (mean ratio by distance_km, expect mild upward trend)")
     fig.tight_layout()
     fig.savefig(plots_dir / "distance_effect_check.png")
     plt.close(fig)
