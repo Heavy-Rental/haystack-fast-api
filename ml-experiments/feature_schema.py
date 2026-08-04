@@ -17,8 +17,15 @@ taught a specific, misleading height value for "no platform."
 
 Deliberately excluded: ``minDailyRate``/``maxDailyRate``/``baseDailyRate``/
 ``price_clamped`` (guardrail/derivation artifacts of the target -- would leak
-it), and ``purchaseYear``/``booking_month``/``asset_id``/``booking_id``
-(outside the locked Day 2-3 feature list).
+it), ``asset_id``/``booking_id`` (identifiers, no signal), and ``purchaseYear``
+(evaluated -- condition alone passed its SHAP check cleanly, so not added).
+
+``booking_month`` is NOT locked out -- it's a tentative exclusion, not a
+decided one. A per-``booking_month`` MAE/R^2 check found a mild pattern
+(January worst) consistent with the model missing seasonality signal, but
+small enough that the lean is against adding it for now. See
+docs/dynamic-pricing-masterplan.md's open questions; decide explicitly in
+Phase 2 before this module gets ported.
 
 This module is intentionally free of CLI/plotting dependencies so it can be
 lifted into ``app/services/pricing/feature_schema.py`` largely unchanged once

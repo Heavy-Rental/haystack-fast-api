@@ -102,7 +102,7 @@ haystack-fast-api/                         # workspace root
 | ASGI server | **Uvicorn** (`uvicorn[standard]`) — required to serve the FastAPI ASGI app |
 | LLM / RAG framework | **deepset Haystack** (`haystack-ai`) |
 | Agent graphs | **LangGraph** (`langgraph`) — dependency present; no app wiring yet |
-| ML | **XGBoost**, **joblib** |
+| ML | **XGBoost**, **joblib**, **scikit-learn** |
 | Model explainability | **SHAP** (`shap`) — with **numba** / **llvmlite** pins for Python 3.12 + NumPy 2.x |
 | Numerical / data | **NumPy**, **Pandas** |
 | Visualization | **Matplotlib**, **Seaborn** |
@@ -127,6 +127,7 @@ haystack-fast-api/                         # workspace root
 - `langgraph`
 - `xgboost`
 - `joblib`
+- `scikit-learn` (train/test split + regression metrics; used by the dynamic-pricing model's offline training scripts under `ml-experiments/`)
 - `shap`
 - `numba>=0.61` (required so `shap` resolves on Python 3.12 + NumPy 2.x; bare `uv add shap` may pull ancient numba)
 - `llvmlite>=0.44` (paired with modern numba)
@@ -493,6 +494,7 @@ Unless a dedicated SDD says otherwise:
 | uv as package manager | Fast, lockfile-based, modern Python workflow |
 | FastAPI + Uvicorn | FastAPI is the framework; Uvicorn is the ASGI server needed to bind host/port and serve the app |
 | XGBoost + joblib | ML training/inference and joblib utilities as direct runtime deps |
+| scikit-learn added | Train/test split + regression metrics (MAE/RMSE/R²) for the dynamic-pricing model's offline training scripts under `ml-experiments/` |
 | SHAP + modern numba/llvmlite | Model explainability; explicit numba/llvmlite lower bounds so resolution works with Python 3.12 and NumPy ≥ 2.5 |
 | Faker as dev dependency | Fake data for tests/fixtures without shipping in production runtime by default |
 | Pydantic as direct dependency | Explicit pin for models/validation; aligns with FastAPI and pydantic-settings |
@@ -523,5 +525,6 @@ Unless a dedicated SDD says otherwise:
 | 1.6.0 | 2026-08-03 | Add runtime `xgboost`, `joblib`, `pydantic`; add dev `faker`; document Uvicorn as required ASGI server for FastAPI |
 | 1.7.0 | 2026-08-03 | Expand §8 runbook: uv + Uvicorn host FastAPI endpoints; command breakdown, URLs, dev vs production-style |
 | 1.8.0 | 2026-08-03 | Add runtime `shap` (+ `numba>=0.61`, `llvmlite>=0.44` for Py3.12/NumPy 2.x); matplotlib/seaborn already direct |
+| 1.9.0 | 2026-08-04 | Add runtime `scikit-learn` — train/test split + regression metrics for the dynamic-pricing model's Phase 1b offline training scripts (`ml-experiments/train.py`, `category_metrics.py`) |
 
 When changing stack, database strategy, package manager, default security model, layout, or SDD file locations, bump this table and notify dependent feature specs.
