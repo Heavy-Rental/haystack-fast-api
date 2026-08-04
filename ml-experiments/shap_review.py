@@ -18,8 +18,18 @@ Produces:
 - outputs/shap_distance_check.png -- predicted price vs distance_km, all other
   features held fixed. Expected: non-decreasing (per the masterplan's locked
   "small, monotonic" delivery-distance premium).
+- outputs/shap_platform_height_check.png -- predicted price vs platform_height,
+  swept within the frozen row's own aerial-category range. Frozen category is
+  forced to the more common of scissor lift/boom lift, not the dataset-wide
+  mode category (forklift/excavator have no platform_height, so a sweep frozen
+  to either would be meaningless). Expected: non-decreasing (taller platform
+  costs more within a category).
+- outputs/shap_category_ranking.png -- predicted price for each category at
+  its own representative row (own typical capacity/platform_height, shared
+  condition/duration_days/distance_km). No monotonicity expectation -- purely
+  descriptive, not part of --strict.
 
-All four sweep checks tolerate a small fraction of adjacent-step violations
+All five sweep checks tolerate a small fraction of adjacent-step violations
 (XGBoost trees aren't constrained to be monotonic) rather than requiring a
 perfectly monotonic sweep.
 """
@@ -53,32 +63,51 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Exit non-zero if any of the duration/condition/capacity/distance monotonicity checks fail.",
+        help="Exit non-zero if any of the duration/condition/capacity/distance/platform_height "
+        "monotonicity checks fail.",
     )
     return parser.parse_args()
 
 
-def representative_row(X: pd.DataFrame) -> pd.Series:
+def representative_row(X: pd.DataFrame, category: str | None = None) -> pd.Series:
     """A single feature row at the dataset's typical values, used as the
-    "hold everything else fixed" baseline for the duration/condition sweeps.
+    "hold everything else fixed" baseline for a sweep check.
+
+    By default the frozen category is the dataset-wide mode. Pass ``category``
+    to force a specific one instead (e.g. the platform_height sweep needs an
+    aerial category, since forklift/excavator never have a platform_height).
     """
     row = X.median(numeric_only=True)
 
     category_cols = [c for c in X.columns if c.startswith("category_")]
-    mode_category = X[category_cols].sum().idxmax()
+    target_category_col = f"category_{category}" if category is not None else X[category_cols].sum().idxmax()
     for col in category_cols:
-        row[col] = 1 if col == mode_category else 0
+        row[col] = 1 if col == target_category_col else 0
 
     row["condition_ordinal"] = int(round(row["condition_ordinal"]))
 
+    # X.median(numeric_only=True) above is a dataset-wide median, which can be
+    # out of range for the frozen category -- capacity in particular varies
+    # wildly by category (e.g. scissor lift tops out at 450kg, well under the
+    # dataset-wide median). Recompute both conditioned on the frozen category;
+    # for platform_height this also fixes non-aerial baselines incorrectly
+    # inheriting a real aerial height instead of staying NaN.
+    category_rows = X[X[target_category_col] == 1]
+    row["capacity"] = category_rows["capacity"].median()
     if "platform_height" in row.index:
-        # X.median(numeric_only=True) above skips NaNs dataset-wide, which would
-        # otherwise hand a forklift/excavator baseline an aerial-lift height it
-        # never has in training data. Recompute conditioned on the frozen
-        # category so non-aerial baselines correctly stay NaN.
-        row["platform_height"] = X.loc[X[mode_category] == 1, "platform_height"].median()
+        row["platform_height"] = category_rows["platform_height"].median()
 
     return row
+
+
+def mode_aerial_category(X: pd.DataFrame) -> str:
+    """The more common of the categories that actually have a platform_height
+    (i.e. scissor lift/boom lift), for use as the platform_height sweep's
+    frozen category."""
+    category_cols = [c for c in X.columns if c.startswith("category_")]
+    aerial_rows = X[X["platform_height"].notna()]
+    mode_col = aerial_rows[category_cols].sum().idxmax()
+    return mode_col.removeprefix("category_")
 
 
 def sweep(model, base_row: pd.Series, feature: str, values) -> np.ndarray:
@@ -147,6 +176,38 @@ def plot_sweep(
     plt.close(fig)
 
 
+def category_ranking(model, X: pd.DataFrame) -> pd.DataFrame:
+    """Predicted price for each category's own representative row: shared
+    condition/duration_days/distance_km, but each category's own typical
+    capacity/platform_height (those vary too wildly by category -- see
+    representative_row -- to hold at one fixed value across all of them)."""
+    rows = []
+    for category in fs.CATEGORIES:
+        row = representative_row(X, category=category)
+        pred = model.predict(pd.DataFrame([row])[fs.FEATURE_COLUMNS])[0]
+        rows.append({"category": category, "predicted_price": pred})
+    return pd.DataFrame(rows).sort_values("predicted_price", ascending=False).reset_index(drop=True)
+
+
+def plot_category_ranking(ranking: pd.DataFrame, frozen_description: str, out_path: Path) -> None:
+    fig, ax = plt.subplots(figsize=(7, 4.8))
+    bars = ax.bar(ranking["category"], ranking["predicted_price"], color="#1f77b4")
+    ax.set_xlabel("category")
+    ax.set_ylabel("Predicted price_per_day")
+    for bar, price in zip(bars, ranking["predicted_price"]):
+        ax.annotate(
+            f"{price:.0f}",
+            (bar.get_x() + bar.get_width() / 2, bar.get_height()),
+            ha="center", va="bottom", fontsize=9,
+        )
+    fig.suptitle("Predicted price by category (ranked)", fontsize=12)
+    wrapped_frozen = "\n".join(textwrap.wrap(frozen_description, width=55))
+    ax.set_title(wrapped_frozen, fontsize=9, color="gray")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+
+
 def run_sweep_check(
     model,
     base_row: pd.Series,
@@ -185,20 +246,20 @@ def main() -> None:
     X = fs.build_features(df)
     model = joblib.load(args.model)
 
-    print("[1/5] SHAP summary plot")
+    print("[1/7] SHAP summary plot")
     explainer = shap.TreeExplainer(model)
     plot_summary(explainer, X, args.plots_dir / "shap_summary.png")
 
     base_row = representative_row(X)
 
-    print("[2/5] Duration check (holding category/condition/capacity/distance_km fixed)")
+    print("[2/7] Duration check (holding category/condition/capacity/distance_km fixed)")
     durations = np.linspace(df["duration_days"].min(), df["duration_days"].max(), 30).round().astype(int)
     duration_passed = run_sweep_check(
         model, base_row, "duration_days", durations, durations, "decreasing",
         "duration_days", "Predicted price vs duration", args.plots_dir / "shap_duration_check.png",
     )
 
-    print("[3/5] Condition check (holding category/duration_days/capacity/distance_km fixed)")
+    print("[3/7] Condition check (holding category/duration_days/capacity/distance_km fixed)")
     condition_levels = np.array(sorted(fs.CONDITION_ORDER.values()))
     condition_labels = [k for k, v in sorted(fs.CONDITION_ORDER.items(), key=lambda kv: kv[1])]
     condition_passed = run_sweep_check(
@@ -206,7 +267,7 @@ def main() -> None:
         "condition", "Predicted price vs condition", args.plots_dir / "shap_condition_check.png",
     )
 
-    print("[4/5] Capacity check (holding category/condition/duration_days/distance_km fixed)")
+    print("[4/7] Capacity check (holding category/condition/duration_days/distance_km fixed)")
     category_capacity = df.loc[df["category"] == active_category(base_row), "capacity"]
     capacities = np.linspace(category_capacity.min(), category_capacity.max(), 30)
     capacity_passed = run_sweep_check(
@@ -214,16 +275,41 @@ def main() -> None:
         "capacity (kg)", "Predicted price vs capacity", args.plots_dir / "shap_capacity_check.png",
     )
 
-    print("[5/5] Distance check (holding category/condition/duration_days/capacity fixed)")
+    print("[5/7] Distance check (holding category/condition/duration_days/capacity fixed)")
     distances = np.linspace(df["distance_km"].min(), df["distance_km"].max(), 30)
     distance_passed = run_sweep_check(
         model, base_row, "distance_km", distances, distances, "increasing",
         "distance_km (km)", "Predicted price vs distance", args.plots_dir / "shap_distance_check.png",
     )
 
+    print("[6/7] Platform height check (holding category/condition/duration_days/capacity/distance_km fixed)")
+    aerial_category = mode_aerial_category(X)
+    platform_base_row = representative_row(X, category=aerial_category)
+    category_platform_height = df.loc[df["category"] == aerial_category, "platform_height"]
+    platform_heights = np.linspace(category_platform_height.min(), category_platform_height.max(), 30)
+    platform_height_passed = run_sweep_check(
+        model, platform_base_row, "platform_height", platform_heights, platform_heights, "increasing",
+        "platform_height (m)", "Predicted price vs platform height",
+        args.plots_dir / "shap_platform_height_check.png",
+    )
+
+    print("[7/7] Category ranking (shared condition/duration_days/distance_km, each category's own capacity/platform_height)")
+    ranking = category_ranking(model, X)
+    print(ranking.to_string(index=False))
+    condition_name_by_ordinal = {v: k for k, v in fs.CONDITION_ORDER.items()}
+    ranking_frozen = (
+        f"frozen: condition={condition_name_by_ordinal[int(base_row['condition_ordinal'])]}, "
+        f"duration_days={base_row['duration_days']:g}, distance_km={base_row['distance_km']:g}km "
+        "(capacity/platform_height at each category's own typical value)"
+    )
+    plot_category_ranking(ranking, ranking_frozen, args.plots_dir / "shap_category_ranking.png")
+
     print(f"\nPlots saved to {args.plots_dir}")
 
-    if args.strict and not (duration_passed and condition_passed and capacity_passed and distance_passed):
+    all_passed = (
+        duration_passed and condition_passed and capacity_passed and distance_passed and platform_height_passed
+    )
+    if args.strict and not all_passed:
         raise SystemExit(1)
 
 
