@@ -25,6 +25,7 @@ perfectly monotonic sweep.
 """
 
 import argparse
+import textwrap
 from pathlib import Path
 
 import joblib
@@ -69,6 +70,14 @@ def representative_row(X: pd.DataFrame) -> pd.Series:
         row[col] = 1 if col == mode_category else 0
 
     row["condition_ordinal"] = int(round(row["condition_ordinal"]))
+
+    if "platform_height" in row.index:
+        # X.median(numeric_only=True) above skips NaNs dataset-wide, which would
+        # otherwise hand a forklift/excavator baseline an aerial-lift height it
+        # never has in training data. Recompute conditioned on the frozen
+        # category so non-aerial baselines correctly stay NaN.
+        row["platform_height"] = X.loc[X[mode_category] == 1, "platform_height"].median()
+
     return row
 
 
@@ -95,6 +104,11 @@ def describe_frozen_row(base_row: pd.Series, varying_feature: str) -> str:
         "capacity": f"capacity={base_row['capacity']:g}kg",
         "distance_km": f"distance_km={base_row['distance_km']:g}km",
     }
+    if "platform_height" in base_row.index:
+        height = base_row["platform_height"]
+        fields["platform_height"] = (
+            f"platform_height={height:g}m" if pd.notna(height) else "platform_height=n/a"
+        )
     fields.pop(varying_feature, None)
     return "frozen: " + ", ".join(fields.values())
 
@@ -121,12 +135,13 @@ def plot_summary(explainer, X: pd.DataFrame, out_path: Path) -> None:
 def plot_sweep(
     x_values, y_values, xlabel: str, title: str, frozen_description: str, out_path: Path
 ) -> None:
-    fig, ax = plt.subplots(figsize=(7, 4.5))
+    fig, ax = plt.subplots(figsize=(7, 4.8))
     ax.plot(x_values, y_values, marker="o")
     ax.set_xlabel(xlabel)
     ax.set_ylabel("Predicted price_per_day")
     fig.suptitle(title, fontsize=12)
-    ax.set_title(frozen_description, fontsize=9, color="gray")
+    wrapped_frozen = "\n".join(textwrap.wrap(frozen_description, width=55))
+    ax.set_title(wrapped_frozen, fontsize=9, color="gray")
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
     plt.close(fig)

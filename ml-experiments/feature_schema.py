@@ -5,10 +5,20 @@ features"): one-hot ``category`` (mirrors ``AssetCategory.name``), ordinal
 ``condition``, plus the numeric features ``duration_days``, ``capacity``,
 ``distance_km``. Target is ``price_per_day``.
 
+``platform_height`` was added after the Phase 1b baseline SHAP review showed
+boom lift/scissor lift fitting dramatically worse than forklift/excavator
+(R^2 0.70/0.80 vs 0.95/0.96) -- consistent with pricing_tables.py's note that
+platform_height, not capacity, is the primary size driver for aerial lifts.
+It's structurally missing (not just noisy) for forklift/excavator, which have
+no platform -- left as NaN rather than imputed to a sentinel like 0, so
+XGBoost's native missing-value handling (a learned per-split default
+direction) can route those categories around it instead of the model being
+taught a specific, misleading height value for "no platform."
+
 Deliberately excluded: ``minDailyRate``/``maxDailyRate``/``baseDailyRate``/
 ``price_clamped`` (guardrail/derivation artifacts of the target -- would leak
-it), and ``platform_height``/``purchaseYear``/``booking_month``/``asset_id``/
-``booking_id`` (outside the locked Day 2-3 feature list).
+it), and ``purchaseYear``/``booking_month``/``asset_id``/``booking_id``
+(outside the locked Day 2-3 feature list).
 
 This module is intentionally free of CLI/plotting dependencies so it can be
 lifted into ``app/services/pricing/feature_schema.py`` largely unchanged once
@@ -23,10 +33,17 @@ CONDITION_ORDER = {"NEEDS_REPAIR": 0, "FAIR": 1, "GOOD": 2, "EXCELLENT": 3}
 
 NUMERIC_FEATURES = ["duration_days", "capacity", "distance_km"]
 
+# Only populated for scissor lift/boom lift; NaN for forklift/excavator. See
+# module docstring for why this is left as a native missing value, not imputed.
+NULLABLE_NUMERIC_FEATURES = ["platform_height"]
+
 TARGET_COLUMN = "price_per_day"
 
 FEATURE_COLUMNS = (
-    [f"category_{c}" for c in CATEGORIES] + ["condition_ordinal"] + NUMERIC_FEATURES
+    [f"category_{c}" for c in CATEGORIES]
+    + ["condition_ordinal"]
+    + NUMERIC_FEATURES
+    + NULLABLE_NUMERIC_FEATURES
 )
 
 
@@ -52,7 +69,7 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     """Build the model-ready feature matrix ``X`` from a raw dataframe."""
     category_dummies = encode_category(df)
     condition_ordinal = encode_condition(df["condition"]).rename("condition_ordinal")
-    numeric = df[NUMERIC_FEATURES]
+    numeric = df[NUMERIC_FEATURES + NULLABLE_NUMERIC_FEATURES]
     X = pd.concat([category_dummies, condition_ordinal, numeric], axis=1)
     return X[FEATURE_COLUMNS]
 
