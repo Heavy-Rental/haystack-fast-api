@@ -27,8 +27,9 @@ def register_exception_handlers(app: FastAPI) -> None:
             f"{'.'.join(str(loc) for loc in err.get('loc', ()))}: {err.get('msg', 'invalid')}"
             for err in exc.errors()
         )
+        # Feature SDD FR-043: validation errors map to 400 with shared error shape.
         return JSONResponse(
-            status_code=422,
+            status_code=400,
             content={"error": "bad_request", "message": message or "Validation failed"},
         )
 
