@@ -1,0 +1,100 @@
+"""Phase 1c prototype: in-process predict_price() (dynamic-pricing feature).
+
+Scratch/offline script -- lives outside the app's SDD structure per
+docs/dynamic-pricing-masterplan.md, same convention as generate_synthetic_data.py
+and shap_review.py. Not the production implementation: the real
+predict_price() is speced for Phase 2a in specification/SPEC-dynamic-pricing.md,
+at app/services/pricing/model.py, clamped against the real per-asset
+Asset.minDailyRate/maxDailyRate read from the database.
+
+This prototype exists so the in-development agent prototype can fetch
+experimental ML pricing before Phase 2 lands. It reuses the Phase 1b
+model.pkl and feature_schema.py unchanged, but since it has no database
+access, its guardrail bounds come from pricing_tables.CATEGORY_BASE_RATE
+(static, per-category) instead of a real asset's min/maxDailyRate. Phase 2
+supersedes this entirely -- see docs/dynamic-pricing-masterplan.md's "Locked
+decisions" for why the bound source differs.
+"""
+
+from dataclasses import dataclass
+from pathlib import Path
+
+import joblib
+import pandas as pd
+
+import feature_schema as fs
+import pricing_tables as pt
+
+_MODEL_PATH = Path(__file__).parent / "artifacts" / "model.pkl"
+_model = joblib.load(_MODEL_PATH)
+
+
+@dataclass(frozen=True)
+class PricePrediction:
+    raw_price: float
+    clamped_price: float
+    was_clamped: bool
+    min_daily_rate: float
+    max_daily_rate: float
+
+
+def _guardrail_bounds(category: str) -> tuple[float, float]:
+    """Stand-in guardrail bounds: static per-category rate_at_min/rate_at_max
+    from pricing_tables.py, not a real asset's minDailyRate/maxDailyRate."""
+    rates = pt.CATEGORY_BASE_RATE[category]
+    return float(rates["rate_at_min"]), float(rates["rate_at_max"])
+
+
+def predict_price(
+    category: str,
+    condition: str,
+    duration_days: float,
+    capacity: float,
+    distance_km: float,
+    platform_height: float | None,
+) -> PricePrediction:
+    """Predict price_per_day and clamp it to the category's guardrail bounds.
+
+    platform_height should be None for forklift/excavator, matching how the
+    model was trained (native NaN, not a sentinel -- see feature_schema.py).
+    """
+    row = pd.DataFrame([{
+        "category": category,
+        "condition": condition,
+        "duration_days": duration_days,
+        "capacity": capacity,
+        "distance_km": distance_km,
+        "platform_height": float("nan") if platform_height is None else platform_height,
+    }])
+    features = fs.build_features(row)
+    raw_price = float(_model.predict(features)[0])
+
+    min_rate, max_rate = _guardrail_bounds(category)
+    clamped_price = min(max(raw_price, min_rate), max_rate)
+
+    return PricePrediction(
+        raw_price=round(raw_price, 2),
+        clamped_price=round(clamped_price, 2),
+        was_clamped=clamped_price != raw_price,
+        min_daily_rate=min_rate,
+        max_daily_rate=max_rate,
+    )
+
+
+if __name__ == "__main__":
+    print(f"Loaded model from {_MODEL_PATH}")
+    print(f"{'category':<14} {'condition':<12} {'raw':>8} {'clamped':>8} {'clamped?':>9}")
+    for category in fs.CATEGORIES:
+        is_aerial = category in pt.AERIAL_CATEGORIES
+        result = predict_price(
+            category=category,
+            condition="GOOD",
+            duration_days=7,
+            capacity=(300 if is_aerial else 2000),
+            distance_km=15,
+            platform_height=10 if is_aerial else None,
+        )
+        print(
+            f"{category:<14} {'GOOD':<12} {result.raw_price:>8.2f} "
+            f"{result.clamped_price:>8.2f} {str(result.was_clamped):>9}"
+        )

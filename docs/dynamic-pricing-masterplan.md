@@ -6,7 +6,7 @@
 > before Phase 2 starts** — per this project's SDD conventions in
 > `SPEC-project-setup.md` §9.
 
-Last updated: 2026-08-04
+Last updated: 2026-08-05
 
 > **Note for any agent reading this file (including Claude Code):** this document
 > lives outside `specification/` on purpose and is not a spec. If anything here
@@ -21,9 +21,10 @@ Last updated: 2026-08-04
 ## Phase execution order
 
 1. **Phase 1** — offline experimentation in `ml-experiments/` (scratch, outside SDD, no spec needed)
-2. **→ Write `SPEC-dynamic-pricing.md` + `SPEC-domain-seed-data.md` here ←**
-3. **Phase 2** — productionize into `app/services/pricing/`
-4. **Phase 3** — seeding + scheduled retrain, guided by `SPEC-domain-seed-data.md`
+2. **Phase 1c** — prototype `predict_price()` + guardrail clamping in `ml-experiments/` (still scratch, no spec), so the upcoming agent prototype can call it before Phase 2 lands
+3. **→ Write `SPEC-dynamic-pricing.md` + `SPEC-domain-seed-data.md` here ←**
+4. **Phase 2** — productionize into `app/services/pricing/`
+5. **Phase 3** — seeding + scheduled retrain, guided by `SPEC-domain-seed-data.md`
 
 > Day-by-day tasks, Jira subtasks, and branch mapping for the current build: see
 > `dynamic-pricing-execution-plan.md`. This file only records decisions and
@@ -86,6 +87,11 @@ Only the fields that matter for pricing — not the full schema. Field names as 
 - **DB access**: sync SQLAlchemy + `psycopg` only, per the setup constitution. No async wiring for this feature.
 - **Migrations**: no Alembic. Pricing reuses existing `Asset`/`Booking`/`BookingItem`/`AIRecommendation` schema — doesn't create new tables, so no migration story needed on the FastAPI side at all.
 
+### Phase 1c — prototype `predict_price()` (ml-experiments)
+- **Why it exists**: the agent prototype being built next needs to fetch experimental ML pricing before Phase 2 productionizes the real service. Rather than block it on Phase 2, `ml-experiments/predict_price.py` reuses the already-trained `model.pkl` and `feature_schema.py` unchanged, in-process, with guardrail clamping included.
+- **Guardrail bound source deliberately differs from Phase 2**: this prototype has no database/`Asset` access, so it can't read a real asset's `minDailyRate`/`maxDailyRate`. It clamps against static per-category `pricing_tables.CATEGORY_BASE_RATE` (`rate_at_min`/`rate_at_max`) instead — an approximation, not the real guardrail. **This is explicitly a stand-in.** Phase 2a's `app/services/pricing/model.py` must still clamp against the real per-asset `Asset.minDailyRate`/`maxDailyRate` per `SPEC-dynamic-pricing.md` §5.4 — do not carry the static-table approach forward into Phase 2.
+- **Scope stays scratch**: same convention as the rest of `ml-experiments/` — no formal spec section, no DB models, no pytest suite, lighter-weight PR review. Superseded entirely once Phase 2a lands.
+
 ### Phase 3 — seeding & retrain
 - **Seed data ownership**: Spring Boot owns schema/migrations (source of truth for `Booking`/`Asset`/etc.); Python prototypes and inserts seed rows into that existing schema — faster to iterate on the numbers, doesn't create tables itself. Belongs in its **own spec** (`SPEC-domain-seed-data.md`), separate from pricing, since the schema is shared across other teammates' features too.
 - **Retrain job**: **scheduled**, not just on-demand. In-process **APScheduler** inside the FastAPI app lifespan (no external cron/infra needed). Interval **configurable via env var** (e.g. `RETRAIN_INTERVAL_DAYS`, real default TBD — monthly vs. quarterly, pick one), overridable to a short interval for live demos. Persist last-run timestamp (in `current.json` or similar) so app restarts don't cause missed or duplicate runs. **Also** keep a manual "retrain now" endpoint as a fallback/demo safety net — cheap to add once the retrain logic exists.
@@ -120,3 +126,4 @@ Only the fields that matter for pricing — not the full schema. Field names as 
 | 2026-08-04 | Added `distance_km` as a locked Phase 1 feature (delivery distance from the Tuas yard to job site), with a real, small, monotonic effect on `price_per_day` — not a passthrough column. Sampled directly from a distribution (same approach as `duration_days`), no geocoding call and no derivation from real postal codes/coordinates. Updated the `Booking` schema-fields note: `site_address`/`site_postal_code`/`site_latitude`/`site_longitude` remain out of scope for real geocoding, now explicitly deferred rather than "don't build it into the generator yet" since a synthetic proxy for the same effect now exists. |
 | 2026-08-04 | Phase 1b complete. Added `platform_height` as a locked feature mid-review (per-category MAE/R² breakdown showed boom lift/scissor lift fitting far worse than forklift/excavator without it; closed the gap from R² 0.70/0.80 to 0.95-0.97 across all categories) — NaN-native for forklift/excavator, not imputed. `purchaseYear` evaluated and not added (condition alone passed its SHAP check cleanly). Closed the "finalize exact feature list" open question. Next: `SPEC-dynamic-pricing.md` + `SPEC-domain-seed-data.md`, per the phase order above, before Phase 2 starts. |
 | 2026-08-04 | Added `booking_month`/seasonality as an explicit open question, kept deliberately unresolved rather than locked either way — a per-`booking_month` MAE/R² check found a mild, not-fully-clean pattern (January worst) consistent with unmodeled seasonality, but small enough that the lean is against adding it for now. Final call deferred to Phase 2. |
+| 2026-08-05 | Added Phase 1c — prototype `predict_price()` in `ml-experiments/`, inserted into the Phase execution order between Phase 1 and writing the formal spec. Unblocks the upcoming agent prototype ahead of Phase 2. Locked that its guardrail bounds come from static per-category `pricing_tables.CATEGORY_BASE_RATE`, not a real asset's `minDailyRate`/`maxDailyRate` (no DB access at this stage) — explicitly a stand-in, superseded by Phase 2a's real per-asset clamp. |
