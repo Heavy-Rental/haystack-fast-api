@@ -1,4 +1,5 @@
-"""Haystack pipeline construction and execution helpers.
+"""Haystack pipelines and custom components for recommendation (FR-010)."""
 
-Feature SDDs introduce concrete pipelines. Keep routers free of pipeline wiring.
-"""
+from app.pipelines.intake_front import build_intake_front_pipeline, run_intake_front
+
+__all__ = ["build_intake_front_pipeline", "run_intake_front"]

@@ -25,6 +25,7 @@ dependencies = [
     "llvmlite>=0.44",
     "scikit-learn>=1.9.0",
     "python-multipart>=0.0.32",
+    "httpx>=0.28.1",
 ]
 
 [dependency-groups]
