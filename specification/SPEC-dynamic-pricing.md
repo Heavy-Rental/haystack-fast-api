@@ -12,6 +12,8 @@
 
 **Read [`SPEC-project.md`](./SPEC-project.md) and [`SPEC-project-setup.md`](./SPEC-project-setup.md) before this document.**
 
+> **Phase 1c note (2026-08-05):** `ml-experiments/predict_price.py` prototypes this spec's `predict_price(...)` contract early — guardrail clamping included — so the in-development agent prototype can call it before Phase 2 (this spec) lands. It remains `ml-experiments/` scratch code, out of SDD scope like the rest of Phase 1, and its guardrail bounds are a **static per-category stand-in** (`pricing_tables.CATEGORY_BASE_RATE`), not the real per-asset `Asset.minDailyRate`/`maxDailyRate` this spec requires (§5.4). It is fully superseded once this spec is implemented — do not treat it as satisfying any requirement in §4.
+
 ---
 
 ## 1. Purpose
@@ -218,3 +220,4 @@ Full rationale lives in `docs/dynamic-pricing-masterplan.md` — summarized here
 |---------|------|--------|
 | 1.0.0 | 2026-08-04 | Initial draft, written at the Phase 1→2 boundary per the masterplan's phase order. Productionization plan for the Phase 1b-validated model (category/condition/duration_days/capacity/distance_km/platform_height, R²=0.976 overall on synthetic holdout). Not yet implemented — `app/services/pricing/` does not exist yet. |
 | 1.1.0 | 2026-08-04 | Added `booking_month`/seasonality as an explicit open decision (§5.2, §8) carried into implementation task 1 (§7) — a per-`booking_month` MAE/R² check in Phase 1b found a mild pattern worth a deliberate call, not locked either way. |
+| 1.2.0 | 2026-08-05 | Added Phase 1c disambiguation note (after header table) — `ml-experiments/predict_price.py` prototypes this spec's contract early for the upcoming agent prototype, with static per-category guardrail bounds standing in for the real per-asset clamp this spec requires. No change to scope, requirements, or design — this spec's implementation is still Phase 2, not started. |
