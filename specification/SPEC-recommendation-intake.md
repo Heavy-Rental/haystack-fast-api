@@ -13,11 +13,7 @@
 | **Tests** | `tests/test_recommendations_intake.py` |
 | **Parent feature** | [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) |
 | **Depends on** | [`SPEC-project.md`](./SPEC-project.md), [`SPEC-project-setup.md`](./SPEC-project-setup.md), [`01-domain.md`](./01-domain.md) |
-<<<<<<< HEAD
 | **Related** | [`SPEC-recommendation-intake-and-pipeline-front.md`](./SPEC-recommendation-intake-and-pipeline-front.md); [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md) (Postman); [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md); [`00-overview.md`](./00-overview.md) |
-=======
-| **Related** | [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md); [`00-overview.md`](./00-overview.md) |
->>>>>>> develop
 | **Audience** | Engineers and agents implementing or consuming intake; portal / Spring integrators |
 
 **Read [`SPEC-project.md`](./SPEC-project.md) and [`SPEC-project-setup.md`](./SPEC-project-setup.md) first.** Domain language: [`01-domain.md`](./01-domain.md). Full recommendation pipeline (Asset SQL, availability, `predict_price()`, Haystack ranking) remains normative in the **parent** agentic SPEC.

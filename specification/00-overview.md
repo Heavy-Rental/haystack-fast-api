@@ -7,11 +7,7 @@
 | **SPDD Ready** | Yes |
 | **Application** | `haystack-fast-api` |
 
-<<<<<<< HEAD
 **Related specs:** [`01-domain.md`](./01-domain.md) · [`SPEC-project.md`](./SPEC-project.md) · [`SPEC-project-setup.md`](./SPEC-project-setup.md) · [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) · [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) · [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) · [`SPEC-recommendation-pipeline-testing-guide.md`](./SPEC-recommendation-pipeline-testing-guide.md) · [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md) · [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md)
-=======
-**Related specs:** [`01-domain.md`](./01-domain.md) · [`SPEC-project.md`](./SPEC-project.md) · [`SPEC-project-setup.md`](./SPEC-project-setup.md) · [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) · [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) · [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md)
->>>>>>> develop
 
 ## Vision
 
