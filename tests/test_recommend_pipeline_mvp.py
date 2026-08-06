@@ -76,14 +76,20 @@ def test_price_adapter_attaches_pricing() -> None:
             "platform_height": 10.0,
         }
     ]
+    duration_days = 7.0
     out = PredictPriceAdapter().run(
-        candidates=candidates, duration_days=7.0, include_pricing=True
+        candidates=candidates, duration_days=duration_days, include_pricing=True
     )
     priced = out["priced_candidates"]
     assert len(priced) == 1
     pricing = priced[0]["pricing"]
     assert pricing is not None
     assert pricing["daily_rate"] is not None
+    assert "weekly_rate" not in pricing
+    assert pricing["total_price"] is not None
+    assert pricing["total_price"] == round(
+        float(pricing["daily_rate"]) * duration_days, 2
+    )
     assert pricing["currency"] == "SGD"
     assert pricing["deposit_rate"] == 0.30
 

@@ -46,7 +46,7 @@ class PredictPriceAdapter:
                 )
                 candidate["pricing"] = {
                     "daily_rate": price.daily_rate,
-                    "weekly_rate": price.weekly_rate,
+                    "total_price": price.total_price,
                     "currency": price.currency,
                     "deposit_rate": price.deposit_rate,
                     "model_version": price.model_version,

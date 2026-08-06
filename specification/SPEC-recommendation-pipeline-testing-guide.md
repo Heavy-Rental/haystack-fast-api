@@ -31,6 +31,8 @@ uv sync --all-groups
 | Postgres | Not required for seed-fleet happy path; `/health` may show `degraded` if DB is down |
 | Default decomposer | `NEED_DECOMPOSER=stub` (no LLM key) |
 | Pricing model | Optional `ml-experiments/artifacts/model.pkl`; fallback pricing still works |
+| Async offload | Route uses `run_in_threadpool` for the sync service call — transparent to TestClient/Postman |
+| Pricing fields | Expect `daily_rate` + `total_price`; no fabricated `weekly_rate` |
 
 ---
 
@@ -108,7 +110,7 @@ curl -s -X POST http://localhost:8000/api/v1/recommendations/from-project-spec \
 | `item.rank` | `1` |
 | `item.asset_id` | Present (e.g. `AST-SL-…`) |
 | `item.rationale` | Non-empty (template; schema-gap text) |
-| `item.pricing` | `daily_rate`, `currency: "SGD"`, `deposit_rate: 0.3` |
+| `item.pricing` | `daily_rate` (number), `total_price` (number = daily × duration for request), `currency: "SGD"`, `deposit_rate: 0.3`; **no** `weekly_rate` |
 | `item.availability` | `"available"` |
 | Response shape | Singular **`item`**, not `items[]` |
 

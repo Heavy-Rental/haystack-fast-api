@@ -124,8 +124,9 @@ When this specification is implemented and followed:
 | **FR-I-009** | Optional `options.include_pricing` (default `true`) MUST be accepted. |
 | **FR-I-010** | If both dates are present, `end_date` MUST be on or after `start_date`; otherwise **400**. |
 | **FR-I-011** | Errors use `{"error","message"}`; validation and empty extract → **400**. |
-| **FR-I-012** | Routers stay thin; no SQL/Haystack graph in handlers. |
+| **FR-I-012** | Routers stay thin; no SQL/Haystack graph in handlers. Async handlers MUST still **await** an offloaded call to the sync recommendation service (`run_in_threadpool` or equivalent) so pipeline/LLM I/O does not block the ASGI event loop (see pipeline **FR-P-012**). |
 | **FR-I-013** | Public structured `needs[]` / “add another need” form body is **not** the MVP contract (removed). |
+| **FR-I-014** | When a selected item includes pricing, payload fields follow pipeline **FR-P-011**: `daily_rate`, `total_price` (estimated total for the request duration), `currency`, `deposit_rate`, `model_version`, `explanation`. MUST NOT include fabricated `weekly_rate`. |
 
 ---
 
@@ -192,6 +193,19 @@ When both `file` and `project_text` are present, source text is **file text firs
 | `rationale` | string \| null |
 | `pricing` | PricingPayload \| null |
 | `availability` | string (`available` \| `unavailable` \| `unknown` …) |
+
+**PricingPayload** (when `include_pricing` and a match is selected; see pipeline **FR-P-011**)
+
+| Field | Type | Notes |
+|-------|------|--------|
+| `daily_rate` | number \| null | Predicted price **per day for the requested duration window** (duration is a model input). Do not re-scale for a different window — call recommend / `predict_price` again. |
+| `total_price` | number \| null | Estimated total for that window: `daily_rate × duration_days` (mockup “Estimated total”). |
+| `currency` | string | Default **SGD** |
+| `deposit_rate` | number | Default **0.30** (FR-024) |
+| `model_version` | string \| null | e.g. experimental or fallback id |
+| `explanation` | string \| null | Human-readable; SHOULD note duration scope |
+
+MUST NOT expose **`weekly_rate`** fabricated as `daily_rate × 7`.
 
 #### Example response (quantity expansion: 2 scissors → 2 unit-needs; excavator → 1; stub items)
 
@@ -482,5 +496,6 @@ uv run pytest tests/ -v
 | **0.1.0** | 2026-08-05 | Initial as-built structured `from-needs` intake |
 | **0.2.0** | 2026-08-05 | **Breaking:** free-text/file MVP; LLM decompose; quantity expansion; singular `item` per unit-need; remove public structured multi-need form |
 | **0.2.1** | 2026-08-05 | Added §8 Manual testing (Postman / Swagger) verification runbook |
+| **0.3.0** | 2026-08-06 | **PR review:** document `PricingPayload` (`daily_rate` + `total_price`, no `weekly_rate`); **FR-I-012** threadpool offload; **FR-I-014** pricing fields |
 
 When the public intake contract changes, update **this file**, parent intake sections, and as-built code/tests in the same change set.

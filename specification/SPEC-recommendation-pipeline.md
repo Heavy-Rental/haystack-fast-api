@@ -133,6 +133,8 @@ When this specification is followed and as-built code remains compliant:
 | **FR-P-008** | Rationale MUST mention assumptions and schema-gap (terrain/operator-required) in template form. |
 | **FR-P-009** | Routers MUST remain thin; no SQL/rank logic in handlers. |
 | **FR-P-010** | Per unit-need processing MUST be independent (multi-need / quantity expansion). |
+| **FR-P-011** | When `include_pricing` is true and a match is selected, `item.pricing` MUST expose: `daily_rate` (predicted for the **requested duration window** — duration is a model input), `total_price` (= `daily_rate × duration_days` for that window), `currency`, `deposit_rate`, `model_version`, `explanation`. MUST NOT expose a fabricated `weekly_rate` (e.g. `daily × 7`). A different date window requires a fresh `predict_price()` call — clients MUST NOT re-scale `daily_rate` by multiplying/dividing days. |
+| **FR-P-012** | Async recommend handlers (`async def`) MUST NOT run the full sync `RecommendationService.recommend_from_project_spec` path on the event loop. Offload via `fastapi.concurrency.run_in_threadpool` (or equivalent) for **both** JSON and multipart success paths so stub pipeline work and `NEED_DECOMPOSER=llm` sync HTTP do not stall concurrent requests on the worker. |
 
 ---
 
@@ -144,7 +146,13 @@ When this specification is followed and as-built code remains compliant:
 POST /api/v1/recommendations/from-project-spec
         │
         ▼
-RecommendationService
+async router (app/api/recommendations.py)   # thin: parse body, await offload
+        │
+        ▼
+run_in_threadpool(...)                      # FR-P-012 — keep event loop free
+        │
+        ▼
+RecommendationService                       # sync domain orchestration
         │
         ├─► intake_front Pipeline (Haystack)
         │     resolve → decompose → expand
@@ -166,6 +174,8 @@ RecommendationService
                     ▼
               results_by_need[{ need_id, item, warnings }]
 ```
+
+**Pricing payload (when selected + `include_pricing`):** see **FR-P-011** / §5.6 — `daily_rate` + `total_price`, not `weekly_rate`.
 
 ### 5.2 Component inventory (MVP)
 
@@ -200,7 +210,7 @@ RecommendationService
 
 1. Prefer `ml-experiments/predict_price.predict_price` when `artifacts/model.pkl` loads.
 2. Else **category fallback** table (still structured pricing payload; model_version indicates fallback).
-3. Payload: `daily_rate`, `weekly_rate` (×7), `currency=SGD`, `deposit_rate=0.30`, `model_version`, `explanation`.
+3. Payload: `daily_rate` (scoped to the requested duration window), `total_price` (= `daily_rate × duration_days`), `currency=SGD`, `deposit_rate=0.30`, `model_version`, `explanation`. Do **not** fabricate a weekly rate as `daily × 7` — duration is a model input; a different window needs a fresh `predict_price()` call.
 4. Production swap: change **only** `app/services/pricing_client.py`.
 
 ### 5.7 Rank & rationale
@@ -263,7 +273,7 @@ Public contract details: [`SPEC-recommendation-intake.md`](./SPEC-recommendation
     "rationale": "Selected Scissors Lift ... schema does not capture terrain/operator-required).",
     "pricing": {
       "daily_rate": 180.0,
-      "weekly_rate": 1260.0,
+      "total_price": 1260.0,
       "currency": "SGD",
       "deposit_rate": 0.3,
       "model_version": "fallback-category-table",
@@ -324,6 +334,8 @@ See testing guide §8 and intake-and-pipeline-front SPEC §13.
 |----------|--------|-----------|
 | Fleet source MVP | In-memory seed | No Spring models yet; SPEC allows seed subset |
 | Pricing source MVP | ml-experiments + fallback | FR-021; no block if pkl missing |
+| Public pricing fields | `daily_rate` + `total_price` (not `weekly_rate = daily × 7`) | Duration is a model input; fabricated weekly misquotes; mockup “Estimated total” |
+| Async route + sync service | `run_in_threadpool` at router | FR-P-012 / parent NFR-008; LLM sync httpx must not block ASGI loop |
 | Rank MVP | Deterministic + template rationale | CI without LLM; honest schema-gap text |
 | Unit loop vs one giant graph | Service loop for 4–8 | Matches parent §8.1; easier testing |
 | Production pricing swap | Single `pricing_client` module | FR-022 |
@@ -338,6 +350,7 @@ See testing guide §8 and intake-and-pipeline-front SPEC §13.
 | 2 | Train/commit `model.pkl` for CI experimental pricing | Pricing team / artifact policy |
 | 3 | LLM-generated rank rationale | Optional follow-on; template is MVP |
 | 4 | AsyncPipeline for price ∥ availability | Parent open question; serial MVP is fine |
+| 5 | **LLM warm-up DI:** lifespan may warm an `LlmNeedDecomposer`, but routes still construct a fresh `RecommendationService` (and decomposer) per request — warmed client unused; potential connection leak under sustained `NEED_DECOMPOSER=llm` | Before production LLM traffic: store decomposer on `app.state`, inject into service, `close()` on shutdown |
 
 ---
 
@@ -346,5 +359,6 @@ See testing guide §8 and intake-and-pipeline-front SPEC §13.
 | Version | Date | Notes |
 |---------|------|--------|
 | **1.0.0** | 2026-08-05 | Initial SDD for as-built full FR-010.1–8 MVP pipeline (seed fleet, availability, pricing adapter, rank/assemble, verification) |
+| **1.1.0** | 2026-08-06 | **PR review:** pricing payload `total_price` (not fabricated `weekly_rate`); duration-scoped `daily_rate` (**FR-P-011**); async route offloads sync service via `run_in_threadpool` (**FR-P-012**); open Q #5 warm-up DI follow-up |
 
 When pipeline component contracts, seed data semantics, or assemble rules change, update **this SPEC** and as-built code/tests in the **same change set**.

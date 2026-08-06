@@ -175,7 +175,7 @@ class RecommendationService:
         if isinstance(pricing_raw, dict):
             pricing = PricingPayload(
                 daily_rate=pricing_raw.get("daily_rate"),
-                weekly_rate=pricing_raw.get("weekly_rate"),
+                total_price=pricing_raw.get("total_price"),
                 currency=str(pricing_raw.get("currency") or "SGD"),
                 deposit_rate=float(pricing_raw.get("deposit_rate") or 0.30),
                 model_version=pricing_raw.get("model_version"),

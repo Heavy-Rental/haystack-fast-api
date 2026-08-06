@@ -126,7 +126,9 @@ Health may be `degraded` if Postgres is down; recommend still works with seed fl
 | `item.rationale` | Non-empty string |
 | `item.pricing.currency` | `"SGD"` |
 | `item.pricing.deposit_rate` | `0.3` |
-| `item.pricing.daily_rate` | Number |
+| `item.pricing.daily_rate` | Number (scoped to request duration window) |
+| `item.pricing.total_price` | Number (estimated total ≈ `daily_rate × duration_days`; not a fabricated weekly rate) |
+| `item.pricing.weekly_rate` | **Must not appear** |
 | `item.availability` | `"available"` |
 | Shape | Key is **`item`**, not `items` |
 
@@ -143,6 +145,13 @@ pm.test("Singular item present", () => {
   pm.expect(row.item).to.not.be.null;
   pm.expect(row.item.equipment_type).to.eql("Scissors Lift");
   pm.expect(row.item.rank).to.eql(1);
+});
+pm.test("Pricing has total_price, not weekly_rate", () => {
+  const p = j.results_by_need[0].item.pricing;
+  pm.expect(p).to.not.be.null;
+  pm.expect(p).to.have.property("daily_rate");
+  pm.expect(p).to.have.property("total_price");
+  pm.expect(p).to.not.have.property("weekly_rate");
 });
 ```
 

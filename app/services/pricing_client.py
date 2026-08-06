@@ -21,8 +21,17 @@ _load_error: str | None = None
 
 @dataclass(frozen=True)
 class PriceResult:
+    """Pricing for a specific rental duration window.
+
+    ``daily_rate`` is scoped to the ``duration_days`` used in the prediction
+    (duration is a model input). A different window needs a fresh
+    ``predict_price()`` call — do not re-scale daily_rate client-side.
+
+    ``total_price`` is estimated total for that window: daily_rate × duration_days.
+    """
+
     daily_rate: float
-    weekly_rate: float
+    total_price: float
     currency: str
     deposit_rate: float
     model_version: str
@@ -61,13 +70,14 @@ def predict_price_for_asset(
     distance_km: float,
     platform_height: float | None,
 ) -> PriceResult:
-    """Predict daily rate; fallback if experimental model missing."""
+    """Predict daily rate for this duration; fallback if experimental model missing."""
+    days = max(1.0, float(duration_days or 1.0))
     _ensure_loaded()
     if _predict_fn is not None:
         result = _predict_fn(
             category=category,
             condition=condition,
-            duration_days=duration_days,
+            duration_days=days,
             capacity=capacity,
             distance_km=distance_km,
             platform_height=platform_height,
@@ -75,11 +85,15 @@ def predict_price_for_asset(
         daily = float(result.clamped_price)
         return PriceResult(
             daily_rate=daily,
-            weekly_rate=round(daily * 7, 2),
+            total_price=round(daily * days, 2),
             currency="SGD",
             deposit_rate=0.30,
             model_version="experimental-ml_experiments",
-            explanation="From ml-experiments.predict_price() (experimental model).",
+            explanation=(
+                "From ml-experiments.predict_price() (experimental model). "
+                f"daily_rate is for a {days:g}-day rental window; "
+                "request a new prediction for a different duration."
+            ),
             was_clamped=bool(getattr(result, "was_clamped", False)),
         )
 
@@ -87,12 +101,14 @@ def predict_price_for_asset(
     daily = _fallback_daily_rate(category, condition)
     return PriceResult(
         daily_rate=daily,
-        weekly_rate=round(daily * 7, 2),
+        total_price=round(daily * days, 2),
         currency="SGD",
         deposit_rate=0.30,
         model_version="fallback-category-table",
         explanation=(
-            f"Fallback pricing (ml-experiments model unavailable: {_load_error})."
+            f"Fallback pricing (ml-experiments model unavailable: {_load_error}). "
+            f"daily_rate is for a {days:g}-day rental window; "
+            "request a new prediction for a different duration."
         ),
         was_clamped=False,
     )

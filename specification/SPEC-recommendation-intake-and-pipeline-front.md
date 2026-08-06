@@ -575,6 +575,7 @@ Environment: `baseUrl` = `http://localhost:8000` → `{{baseUrl}}/api/v1/recomme
 | 2 | When to remove stub warnings | When FR-010.4–8 produce real items |
 | 3 | PDF/DOCX in first demo | SHOULD later; text/md MVP locked |
 | 4 | LLM failure: fail-fast vs fall back to stub | Prefer fail-fast in prod when `NEED_DECOMPOSER=llm`; document choice when implementing |
+| 5 | Share lifespan-warmed `LlmNeedDecomposer` with route/service (avoid per-request client leak) | Before sustained production LLM traffic; see §13.1 ASGI note |
 
 ---
 
@@ -590,6 +591,10 @@ This section is **implementation guidance** for integrating an LLM with the **as
 | **B. Rank / rationale** | FR-010.**7** | Candidates → one `item` + honest rationale | **Out of stage** — after FR-010.4–6 |
 
 Do **not** call the LLM from FastAPI route handlers. Layering: **router → service → pipelines/components**.
+
+**ASGI note (as-built):** the async recommend route still **awaits** `run_in_threadpool(service.recommend_from_project_spec, ...)` so sync pipeline work and sync LLM HTTP (`LlmNeedDecomposer` + `httpx.Client`) do not block the event loop. That is not the same as calling the LLM in the router—the decomposer stays behind the service/component boundary.
+
+**Follow-up before production `NEED_DECOMPOSER=llm` traffic:** lifespan may warm an LLM client, but per-request `RecommendationService()` construction does not reuse it (dead warm-up + possible connection leak). Share the decomposer via `app.state` (or DI) and close on shutdown.
 
 ### 13.2 As-built extension point (slot A)
 
@@ -753,5 +758,6 @@ LATER          each unit-need ──► SQL ──► avail ──► price ─�
 | **1.2.0** | 2026-08-05 | Expanded **§10 branch testing guide** (Postman/curl/negatives/collection); added **§13 LLM integration guidance** (slot A decomposer, slot B ranking later, checklist) |
 | **1.3.0** | 2026-08-05 | Scaffolded `LlmNeedDecomposer` + factory (`NEED_DECOMPOSER=llm`); DigitalOcean OpenAI-compatible env in `.env.example`; mocked unit tests |
 | **2.0.0** | 2026-08-05 | **Full FR-010.1–8 MVP:** seed `AssetCandidateFilter`, `BookingAvailabilityFilter`, `PredictPriceAdapter` (ml-experiments + fallback), `RankRationaleGenerator`, assemble non-null `item`; e2e tests |
+| **2.1.0** | 2026-08-06 | **PR review docs:** threadpool offload for async recommend + LLM path; warm-up DI open Q #5; pricing field contract lives in pipeline/intake SPECs (`total_price`, no `weekly_rate`) |
 
 When public intake behaviour or FR-010 pipeline contracts change, update **this SPEC**, the companion intake SPEC as needed, and as-built code/tests in the **same change set**. When the branch gains or drops deliverables, update **As-built delivery (this branch)** in the same change set.

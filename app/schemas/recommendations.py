@@ -65,10 +65,21 @@ class UnitNeed(BaseModel):
 
 
 class PricingPayload(BaseModel):
-    """Pricing fields on a recommendation item (filled by predict_price later)."""
+    """Pricing fields on a recommendation item (from predict_price for this window).
 
-    daily_rate: float | None = None
-    weekly_rate: float | None = None
+    ``daily_rate`` is scoped to the requested rental duration (a model input).
+    Do not re-scale it for a different window — call predict_price again.
+    ``total_price`` is the estimated total: daily_rate × duration_days.
+    """
+
+    daily_rate: float | None = Field(
+        default=None,
+        description="Predicted price per day for the requested duration window",
+    )
+    total_price: float | None = Field(
+        default=None,
+        description="Estimated total for the requested duration (daily_rate × duration_days)",
+    )
     currency: str = "SGD"
     deposit_rate: float = 0.30
     model_version: str | None = None
