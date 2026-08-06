@@ -39,8 +39,11 @@ def test_from_project_spec_happy_path_free_text(client: TestClient) -> None:
     assert row["need_id"] == "need_1"
     assert "item" in row
     assert "items" not in row
-    assert row["item"] is None  # stub pipeline
-    assert row["warnings"]
+    # Full FR-010 path: seed fleet match → singular RecommendationItem
+    assert row["item"] is not None
+    assert row["item"]["equipment_type"] == "Scissors Lift"
+    assert row["item"]["rank"] == 1
+    assert row["item"]["rationale"]
 
 
 def test_empty_project_text_returns_400(client: TestClient) -> None:
@@ -107,10 +110,8 @@ def test_quantity_expansion_two_unit_needs() -> None:
     assert result.results_by_need[0].need_id == "need_1__u1"
     assert result.results_by_need[1].need_id == "need_1__u2"
     for row in result.results_by_need:
-        assert row.item is None
-        # schema: item is singular optional; no quantity field on model
-        if row.item is not None:
-            assert not hasattr(row.item, "quantity") or "quantity" not in row.item.model_dump()
+        assert row.item is not None
+        assert "quantity" not in row.item.model_dump()
 
 
 def test_multi_need_from_decomposer_independent_rows() -> None:
@@ -135,7 +136,7 @@ def test_multi_need_from_decomposer_independent_rows() -> None:
     assert len(result.results_by_need) == 2
     assert [r.need_id for r in result.results_by_need] == ["need_1", "need_2"]
     for row in result.results_by_need:
-        assert row.item is None
+        assert row.item is not None
         dumped = row.model_dump()
         assert "item" in dumped
         assert "items" not in dumped

@@ -9,7 +9,7 @@
 | **Application module** | `haystack-fast-api` |
 | **Python package** | `app` |
 | **Spec location** | `specification/SPEC-agentic-equipment-recommendation-and-pricing.md` (also tracked locally as this file) |
-| **Related** | [`SPEC-project.md`](./SPEC-project.md), [`SPEC-project-setup.md`](./SPEC-project-setup.md); **child stage:** [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) (locked MVP free-text/file intake + LLM decompose); companion docs: `recommendation-agent-masterplan.md` (decisions/rationale), `recommendation-agent-decided-approach.md` (prototype hour-by-hour), `recommendation-agent-execution-plan.md` (schedule only), `dynamic-pricing-execution-plan.md` / `SPEC-dynamic-pricing.md` (pricing team) |
+| **Related** | [`SPEC-project.md`](./SPEC-project.md), [`SPEC-project-setup.md`](./SPEC-project-setup.md); **child stages:** [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) (intake API + Postman); [`SPEC-recommendation-intake-and-pipeline-front.md`](./SPEC-recommendation-intake-and-pipeline-front.md) (stage notes + LLM guide); [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) (**as-built FR-010.1–8 pipeline**); [`SPEC-recommendation-pipeline-testing-guide.md`](./SPEC-recommendation-pipeline-testing-guide.md) (how to test); companion docs: `recommendation-agent-masterplan.md` (decisions/rationale), `recommendation-agent-decided-approach.md` (prototype hour-by-hour), `recommendation-agent-execution-plan.md` (schedule only), `dynamic-pricing-execution-plan.md` / `SPEC-dynamic-pricing.md` (pricing team) |
 | **Haystack reference** | *Building Natural Language and LLM Pipelines* — Ch. 3–5, **7** (local EPUBs). Ch. 7: FastAPI vs Hayhooks deployment, Docker, CI/CD, MCP |
 | **Depends on** | `haystack-ai` (Haystack 2.0), LangGraph (declared deps), real `Asset` / `Booking` / `BookingItem` schema, pricing team’s `predict_price()`; **(target KG)** `ragas`, `ragas-haystack`, LangChain document types, LLM + embedder providers |
 | **Audience** | Engineers and agents implementing agentic recommendation, pricing integration, and (post-MVP) ML training tool invocation |
@@ -186,10 +186,10 @@ Normative detail also lives in [`SPEC-recommendation-intake.md`](./SPEC-recommen
   7. **Rank / rationale** — Haystack `PromptBuilder` / `Generator` (Bedrock); select **one** best match per unit-need; include assumption callouts, refinement suggestions, and schema-gap acknowledgments (terrain / operator-required) where applicable.
   8. **Assemble** — one `item` (`RecommendationItem | null`) per unit-need.
 - **FR-011**: Responses MUST only include equipment consistent with the approved product catalog (**Boom Lift, Scissors Lift, Fork Lift, Excavator**) unless product policy explicitly expands later.
-- **FR-012**: Each `RecommendationItem` MUST include at least: identity/type fields needed by the UI, rank or score, **rationale** (honest: assumptions stated, refinement suggestion when specs were inferred), pricing fields from `predict_price()`, and availability outcome. MUST NOT include `quantity`.
+- **FR-012**: Each `RecommendationItem` MUST include at least: identity/type fields needed by the UI, rank or score, **rationale** (honest: assumptions stated, refinement suggestion when specs were inferred), pricing fields derived from `predict_price()` when pricing is included, and availability outcome. MUST NOT include `quantity`. When pricing is present, expose **`daily_rate`** (scoped to the request duration window) and **`total_price`** (`daily_rate × duration_days` for that window)—MUST NOT fabricate a **`weekly_rate`** as `daily × 7` (see child pipeline **FR-P-011**).
 - **FR-013**: When dates are provided, availability filtering MUST run before final ranking presentation for that unit-need.
 - **FR-014**: Prototype code MUST live under `app/pipelines/` and MUST NOT be registered on a public route/entrypoint until the Day 2+ scaffold wires the real endpoint (call via standalone script or one-off test on Day 1).
-- **FR-015**: Routers MUST stay thin; pipeline construction and SQL live in services/pipelines/repositories—not in route handlers.
+- **FR-015**: Routers MUST stay thin; pipeline construction and SQL live in services/pipelines/repositories—not in route handlers. Async recommend handlers MUST offload the sync service call (e.g. `run_in_threadpool`) so LLM/pipeline I/O does not block the ASGI event loop (child pipeline **FR-P-012**, **NFR-008**).
 
 ### 5.2.1 Haystack 2.0 component rules (from Chapters 3–5)
 
@@ -272,7 +272,7 @@ Each custom component MUST ship with: unit tests (standalone `run`), empty-input
 | **NFR-005** | Snake_case JSON for request/response bodies. |
 | **NFR-006** | Day 1 exit: Scenario A runs end-to-end with honest rationale before Day 2 SPEC lock / full-build scaffolding proceeds. |
 | **NFR-007** | Prefer **pipeline-first** validation: deterministic components testable without an agent loop (Chapter 3 roadmap). |
-| **NFR-008** | Production serve path SHOULD use async-capable ASGI (Uvicorn/FastAPI) so LLM I/O does not block the whole worker process (Chapter 7). |
+| **NFR-008** | Production serve path SHOULD use async-capable ASGI (Uvicorn/FastAPI) so LLM I/O does not block the whole worker process (Chapter 7). **As-built:** recommend route is `async` and offloads sync `RecommendationService` (including sync `httpx` need-decomposer) via `run_in_threadpool`. Full async decomposer / shared lifespan-warmed client remains a follow-up before high-volume `NEED_DECOMPOSER=llm` traffic. |
 | **NFR-009** | Containerized deploys SHOULD be configurable solely via environment/settings; no secrets in image layers. |
 
 ---
@@ -316,11 +316,11 @@ JSON (`project_text`) or multipart (`file` ± `project_text`). Full field tables
         "rationale": "Assumed indoor platform work near 8m; scissors preferred. Refine height/capacity if outdoor or rough terrain is required (schema does not capture terrain/operator-required).",
         "pricing": {
           "daily_rate": 180.0,
-          "weekly_rate": 900.0,
+          "total_price": 1260.0,
           "currency": "SGD",
           "deposit_rate": 0.30,
           "model_version": "experimental-ml_experiments-or-production-id",
-          "explanation": "From predict_price()."
+          "explanation": "From predict_price() for this duration window."
         },
         "availability": "available"
       },
@@ -335,11 +335,11 @@ JSON (`project_text`) or multipart (`file` ± `project_text`). Full field tables
         "rationale": "Second unit for quantity requested in project text.",
         "pricing": {
           "daily_rate": 180.0,
-          "weekly_rate": 900.0,
+          "total_price": 1260.0,
           "currency": "SGD",
           "deposit_rate": 0.30,
           "model_version": "experimental-ml_experiments-or-production-id",
-          "explanation": "From predict_price()."
+          "explanation": "From predict_price() for this duration window."
         },
         "availability": "available"
       },
@@ -871,5 +871,6 @@ Chapter 7: **MCP** lets external agents discover deployed Haystack pipelines as 
 | 0.6.1 | 2026-08-05 | Strengthened §11.1 against Chapter 5 EPUB + book `knowledge_graph_component.py` / `ch5/pyproject.toml`: explicit storage model (in-memory → JSON); `HaystackLLMWrapper` / `HaystackEmbeddingsWrapper`; full install tables; lazy-import note for MVP routes |
 | 0.7.0 | 2026-08-05 | Incorporated Chapter 7 (Deploying Haystack-Based Applications): Method 1 FastAPI primary (lifespan/`warm_up`, Pydantic, DI); Docker multi-stage; CI/CD; security; optional Method 2 Hayhooks serialization + MCP; deployment NFRs and AC 14–15; section renumber 15–18 |
 | 0.8.0 | 2026-08-05 | **Intake correction:** MVP is free-text/file + LLM decompose (not structured multi-need form); quantity expansion to unit-needs; **exactly one** `item` per unit-need (no top-N `items[]`); public API `POST .../from-project-spec`; child intake SPEC v0.2.0 |
+| 0.9.0 | 2026-08-06 | **PR review alignment:** pricing on recommend items is `daily_rate` + `total_price` (no fabricated `weekly_rate`); **FR-012/015** + **NFR-008** note threadpool offload; warm-up DI still follow-up |
 
 When behaviour, API paths, tool names, or schedule gates change, bump this table and align OpenAPI / tests / execution plan in the same change set.

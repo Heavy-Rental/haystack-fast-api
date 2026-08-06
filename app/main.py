@@ -21,10 +21,24 @@ def configure_logging(level: str) -> None:
 async def lifespan(_app: FastAPI):
     settings = get_settings()
     configure_logging(settings.log_level)
-    logging.getLogger(__name__).info(
-        "Starting %s (env=%s)", settings.app_name, settings.app_env
-    )
+    log = logging.getLogger(__name__)
+    log.info("Starting %s (env=%s)", settings.app_name, settings.app_env)
+
+    # Warm LLM decomposer client when enabled (DigitalOcean / OpenAI-compatible).
+    decomposer = None
+    if (settings.need_decomposer or "stub").strip().lower() == "llm":
+        from app.services.llm_need_decomposer import LlmNeedDecomposer
+        from app.services.need_decomposer_factory import create_need_decomposer
+
+        decomposer = create_need_decomposer(settings)
+        if isinstance(decomposer, LlmNeedDecomposer):
+            decomposer.warm_up()
+            log.info("LLM need decomposer warmed (model=%s)", settings.llm_model)
+
     yield
+
+    if decomposer is not None and hasattr(decomposer, "close"):
+        decomposer.close()
 
 
 def create_app() -> FastAPI:

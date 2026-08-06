@@ -1,0 +1,273 @@
+# Testing Guide: Recommendation Pipeline (FR-010 MVP)
+
+| Field | Value |
+|-------|--------|
+| **Document type** | SDD verification / testing guide |
+| **Status** | As-built (matches HR-65 pipeline MVP) |
+| **Feature id** | `recommendation-pipeline-testing` |
+| **Spec location** | `specification/SPEC-recommendation-pipeline-testing-guide.md` |
+| **Normative behaviour** | [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) |
+| **API contract / Postman fields** | [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) |
+| **Parent** | [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) |
+| **Postman-only guide** | [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md) |
+| **Audience** | Engineers verifying the recommendation intake + pipeline |
+
+This guide is the **how to test** companion for the as-built recommendation pipeline. For **Postman step-by-step only**, see [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md). When behaviour changes, update the normative SPECs and this guide in the **same change set**.
+
+---
+
+## 0. Prerequisites
+
+Work from the application module (where `pyproject.toml` and `app/` live):
+
+```bash
+cd haystack-fast-api
+uv sync --all-groups
+```
+
+| Note | Detail |
+|------|--------|
+| Auth | Not required on recommend routes |
+| Postgres | Not required for seed-fleet happy path; `/health` may show `degraded` if DB is down |
+| Default decomposer | `NEED_DECOMPOSER=stub` (no LLM key) |
+| Pricing model | Optional `ml-experiments/artifacts/model.pkl`; fallback pricing still works |
+| Async offload | Route uses `run_in_threadpool` for the sync service call — transparent to TestClient/Postman |
+| Pricing fields | Expect `daily_rate` + `total_price`; no fabricated `weekly_rate` |
+
+---
+
+## 1. Automated tests (pytest)
+
+```bash
+cd haystack-fast-api
+
+# Intake front — FR-010.1–3 (resolve → decompose → expand)
+uv run pytest tests/test_pipeline_intake_front.py -v
+
+# Pipeline MVP — FR-010.4–8 + e2e (asset, availability, price, rank, assemble)
+uv run pytest tests/test_recommend_pipeline_mvp.py -v
+
+# HTTP API
+uv run pytest tests/test_recommendations_intake.py -v
+
+# LLM decomposer (mocked HTTP; no DigitalOcean required)
+uv run pytest tests/test_llm_need_decomposer.py -v
+
+# Full suite
+uv run pytest tests/ -v
+```
+
+### What each suite covers
+
+| Test file | Proves |
+|-----------|--------|
+| `tests/test_pipeline_intake_front.py` | Source text resolve, quantity expansion, stub decompose, intake_front graph |
+| `tests/test_recommend_pipeline_mvp.py` | Seed asset match, booking overlap, pricing payload, top-1 rank, e2e scissors item, qty=2, Scenario C no-match |
+| `tests/test_recommendations_intake.py` | Public POST JSON/multipart, 400 validation, singular `item` |
+| `tests/test_llm_need_decomposer.py` | JSON parse, mocked chat completions, factory stub/llm |
+
+**Expect:** all tests pass.
+
+---
+
+## 2. Start the server
+
+```bash
+cd haystack-fast-api
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+| Resource | URL |
+|----------|-----|
+| Base | `http://localhost:8000` |
+| Health | `GET http://localhost:8000/health` |
+| OpenAPI / Swagger | `http://localhost:8000/docs` |
+| Recommend | `POST http://localhost:8000/api/v1/recommendations/from-project-spec` |
+
+---
+
+## 3. Happy path — free-text (curl)
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/recommendations/from-project-spec \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "project_text": "Indoor elevated work ~8m for scissors lift",
+    "start_date": "2026-09-01",
+    "end_date": "2026-09-12",
+    "options": { "include_pricing": true }
+  }' | python -m json.tool
+```
+
+### Expected result
+
+| Check | Expect |
+|-------|--------|
+| HTTP status | **200** |
+| `recommendation_id` | Starts with `rec_` |
+| `results_by_need[0].item` | **Not null** |
+| `item.equipment_type` | `"Scissors Lift"` |
+| `item.rank` | `1` |
+| `item.asset_id` | Present (e.g. `AST-SL-…`) |
+| `item.rationale` | Non-empty (template; schema-gap text) |
+| `item.pricing` | `daily_rate` (number), `total_price` (number = daily × duration for request), `currency: "SGD"`, `deposit_rate: 0.3`; **no** `weekly_rate` |
+| `item.availability` | `"available"` |
+| Response shape | Singular **`item`**, not `items[]` |
+
+---
+
+## 4. Happy path — Postman
+
+| Field | Value |
+|-------|--------|
+| Method | **POST** |
+| URL | `http://localhost:8000/api/v1/recommendations/from-project-spec` |
+| Headers | `Content-Type: application/json` |
+| Body | **raw → JSON** (same body as §3) |
+
+### Suggested collection
+
+1. `GET Health`  
+2. `POST Recommend scissors (JSON)` — §3  
+3. `POST Recommend forklift (file)` — §5  
+4. `POST Empty text (400)` — §6  
+5. `POST Bad dates (400)` — §6  
+6. `POST No match submarine (200, item null)` — §6  
+
+Environment variable: `baseUrl` = `http://localhost:8000`  
+Request URL: `{{baseUrl}}/api/v1/recommendations/from-project-spec`
+
+---
+
+## 5. Happy path — Swagger UI
+
+1. Open `http://localhost:8000/docs`
+2. Expand **POST** `/api/v1/recommendations/from-project-spec`
+3. **Try it out** → paste JSON from §3 → **Execute**
+4. Confirm response matches §3 expected result
+
+---
+
+## 6. File upload (multipart)
+
+### Postman
+
+**Body → form-data** (do **not** force JSON `Content-Type`):
+
+| Key | Type | Value |
+|-----|------|--------|
+| `file` | **File** | `.txt` or `.md`, e.g. content: `Need one forklift for warehouse loading` |
+| `start_date` | Text | `2026-09-01` (optional) |
+| `end_date` | Text | `2026-09-12` (optional) |
+| `project_text` | Text | optional extra text |
+| `include_pricing` | Text | `true` (optional) |
+
+### Expected
+
+- Status **200**
+- Forklift-related `item` when text matches catalog keywords
+- PDF/DOCX → **400** (not in MVP)
+
+---
+
+## 7. Negative and edge cases
+
+| Case | Request | Expect |
+|------|---------|--------|
+| Empty / whitespace text | `{"project_text": "   "}` | **400** `{"error":"bad_request","message":"..."}` |
+| Missing body | `{}` | **400** |
+| Invalid date window | `start_date` after `end_date` + non-empty text | **400** |
+| Empty multipart | no `file`, no `project_text` | **400** |
+| No catalog match | `"project_text": "Need a submarine for underwater work"` | **200**, `item: null`, non-empty `warnings` |
+| Quantity 2 (injected decomposer / LLM) | see pytest or §8 | Two unit-need rows (`…__u1`, `…__u2`) when decomposer returns `quantity: 2` |
+
+---
+
+## 8. Optional — DigitalOcean Inference Router (LLM decompose)
+
+Default CI path does **not** need this. Use only for manual multi-need / natural-language decompose tests.
+
+### `.env` (never commit secrets)
+
+```bash
+NEED_DECOMPOSER=llm
+LLM_BASE_URL=https://inference.do-ai.run/v1
+LLM_API_KEY=dop_v1_...                 # your DigitalOcean token
+LLM_MODEL=router:your-router-name      # exact Inference Router name
+LLM_TIMEOUT_SECONDS=60
+LLM_TEMPERATURE=0
+```
+
+See also [`.env.example`](../.env.example).
+
+### Steps
+
+1. Create/configure a DigitalOcean Inference Router and API token.  
+2. Set env vars above.  
+3. Restart uvicorn.  
+4. POST free text that implies multiple equipment units, e.g.:
+
+```json
+{
+  "project_text": "Need two scissors lifts for indoor 8m work and one excavator for trenching.",
+  "start_date": "2026-09-01",
+  "end_date": "2026-09-12"
+}
+```
+
+5. If the model returns structured needs with quantities, expect multiple `results_by_need` rows and/or `__u1`/`__u2` ids; each matched row should still have singular `item` (or null if no fleet match).
+
+### Reset for CI / default
+
+```bash
+NEED_DECOMPOSER=stub
+```
+
+---
+
+## 9. What is in scope for this branch (pass criteria)
+
+| Behaviour | Live now? |
+|-----------|-----------|
+| Free-text / `.txt` intake | Yes |
+| Seed fleet match → full `item` (type, rank, rationale, pricing) | Yes |
+| Pricing via ml-experiments or category fallback | Yes |
+| Template rank + schema-gap rationale | Yes |
+| Availability filter on seed bookings | Yes |
+| Real Spring SQL Asset/Booking | No (seed only) |
+| Multi-need from English without LLM | No (stub = one need from full text); pytest injects multi-need |
+| PDF/DOCX | No |
+
+---
+
+## 10. Troubleshooting
+
+| Symptom | Likely cause | What to do |
+|---------|--------------|------------|
+| `item` always null | Text has no catalog keywords | Use “scissors lift”, “forklift”, “excavator”, “boom lift” |
+| **400** on valid JSON | Date order or empty text | Check `end_date >= start_date`; non-empty `project_text` |
+| Pricing `fallback-category-table` | Missing `ml-experiments/artifacts/model.pkl` | OK for MVP; train/copy model for experimental path |
+| LLM mode startup error | `NEED_DECOMPOSER=llm` without `LLM_API_KEY` | Set key or switch to `stub` |
+| LLM returns empty → **400** | Model output not valid needs JSON | Check prompt/logs; try another model on the router |
+| Import / pipeline errors | Wrong working directory | Run from `haystack-fast-api/` app root |
+
+---
+
+## 11. Related specs
+
+| Spec | Role |
+|------|------|
+| [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) | Normative FR-010.1–8 pipeline SDD |
+| [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) | API fields + Postman §8 |
+| [`SPEC-recommendation-intake-and-pipeline-front.md`](./SPEC-recommendation-intake-and-pipeline-front.md) | Stage notes + LLM integration §13 |
+| [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) | Parent product SDD |
+
+---
+
+## 12. Change control
+
+| Version | Date | Notes |
+|---------|------|--------|
+| **1.0.0** | 2026-08-05 | Initial testing guide for recommendation pipeline MVP (pytest, curl, Postman, Swagger, negatives, DigitalOcean LLM, expectations) |
+
+When test commands, endpoints, or expected results change, update **this guide** and the related normative SPECs in the **same change set**.

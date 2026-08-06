@@ -29,6 +29,19 @@ class Settings(BaseSettings):
     # Optional full override; when set, wins over discrete POSTGRES_* fields.
     database_url_override: str | None = Field(default=None, alias="DATABASE_URL")
 
+    # Need decomposer: stub (default, CI-safe) | llm (OpenAI-compatible, e.g. DigitalOcean)
+    need_decomposer: str = Field(default="stub", alias="NEED_DECOMPOSER")
+    # OpenAI-compatible base URL. DigitalOcean Inference: https://inference.do-ai.run/v1
+    llm_base_url: str = Field(
+        default="https://inference.do-ai.run/v1",
+        alias="LLM_BASE_URL",
+    )
+    llm_api_key: str | None = Field(default=None, alias="LLM_API_KEY")
+    # Model id or Inference Router: router:<router-name>
+    llm_model: str = Field(default="router:default", alias="LLM_MODEL")
+    llm_timeout_seconds: float = Field(default=60.0, alias="LLM_TIMEOUT_SECONDS")
+    llm_temperature: float = Field(default=0.0, alias="LLM_TEMPERATURE")
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:

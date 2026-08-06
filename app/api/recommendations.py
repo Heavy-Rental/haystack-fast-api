@@ -3,6 +3,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Request
+from fastapi.concurrency import run_in_threadpool
 from pydantic import ValidationError
 
 from app.core.exceptions import BadRequestError
@@ -96,7 +97,10 @@ async def recommend_from_project_spec(request: Request) -> RecommendFromProjectS
                 for err in exc.errors()
             )
             raise BadRequestError(messages or "Validation failed") from exc
-        return RecommendationService().recommend_from_project_spec(
+        service = RecommendationService()
+        # Offload sync pipeline/LLM work so the event loop is not blocked.
+        return await run_in_threadpool(
+            service.recommend_from_project_spec,
             project_text=body.project_text,
             start_date=body.start_date,
             end_date=body.end_date,
@@ -123,7 +127,10 @@ async def recommend_from_project_spec(request: Request) -> RecommendFromProjectS
             if filename or raw:
                 file_text = _decode_upload(filename, ctype, raw)
 
-        return RecommendationService().recommend_from_project_spec(
+        service = RecommendationService()
+        # Offload sync pipeline/LLM work so the event loop is not blocked.
+        return await run_in_threadpool(
+            service.recommend_from_project_spec,
             project_text=project_text_str,
             file_text=file_text,
             start_date=start_date,
