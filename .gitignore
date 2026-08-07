@@ -30,3 +30,6 @@ htmlcov/
 ml-experiments/data/*.csv
 ml-experiments/outputs/*.png
 ml-experiments/artifacts/
+
+# Runtime KG JSON from ingest (user-scoped; do not commit)
+artifacts/kg/
