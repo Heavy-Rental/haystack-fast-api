@@ -175,8 +175,13 @@ HEIGHT_BINS = {
 SHORT_DURATION_PREMIUM = {1: 1.15, 2: 1.10, 3: 1.05} # default 1.0 for duration_days > 3
 
 # firmness = 1 + FIRMNESS_SLOPE * (utilization - FIRMNESS_PIVOT)
-# Higher utilization -> firmer (higher) prices, modest effect (<= ~2%).
-FIRMNESS_SLOPE = 0.15
+# Higher utilization -> firmer (higher) prices. Bumped 1.4x (Phase 1d, from
+# 0.15) after the Phase 1d SHAP review showed period_utilization/
+# lead_time_days importance too low relative to duration/condition/capacity
+# -- still deliberately kept well below those dominant features (a rental
+# price driven more by when you book than what you're renting would be a red
+# flag, not an improvement).
+FIRMNESS_SLOPE = 0.21
 FIRMNESS_PIVOT = 0.65
 
 # noise_std_frac = NOISE_SCALE * (NOISE_PIVOT - utilization)
@@ -226,16 +231,18 @@ LEAD_TIME_MAX_DAYS = 120
 # utilization feeds a lower firmness_premium. Pivot set near the lead-time
 # distribution's mean so roughly half of rows sit above/below the category
 # baseline.
-LEAD_TIME_UTILIZATION_SLOPE = 0.006
+LEAD_TIME_UTILIZATION_SLOPE = 0.003
 LEAD_TIME_UTILIZATION_PIVOT_DAYS = 18
 PERIOD_UTILIZATION_NOISE_STD = 0.08
 
 # lead_time_urgency_multiplier = 1 - LEAD_TIME_URGENCY_SLOPE * (lead_time_days - LEAD_TIME_URGENCY_PIVOT_DAYS)
 # Small, independent last-minute-urgency premium on lead_time_days --
-# separate from (and much smaller than) the period_utilization-mediated
+# separate from (and still smaller than) the period_utilization-mediated
 # effect above, so the two correlated features (see feature_schema.py) each
 # retain some standalone price signal for the Phase 1d SHAP review to
 # compare, rather than lead_time_days acting purely through
 # period_utilization with nothing left over once utilization is held fixed.
-LEAD_TIME_URGENCY_SLOPE = 0.0015
+# Bumped 1.4x (Phase 1d, from 0.0015) alongside FIRMNESS_SLOPE, same
+# reasoning -- see that constant's comment.
+LEAD_TIME_URGENCY_SLOPE = 0.0021
 LEAD_TIME_URGENCY_PIVOT_DAYS = 18
