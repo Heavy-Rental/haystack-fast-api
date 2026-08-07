@@ -1,0 +1,23 @@
+{
+  "nodes": [
+    {
+      "id": "acbae7c1-685c-4b2e-86b1-4f50202b8d29",
+      "properties": {
+        "page_content": "{\"equipment\":\"excavator\"}",
+        "document_metadata": {
+          "file_path": "needs.json",
+          "filename": "needs.json",
+          "user_id": "u_json",
+          "ingest_id": "ing_64526ec274114d1f8b91f3517a3d0eb7",
+          "source_id": "f79c62609e342cd2c8c90a3db6fb1cfc055325208c8528ea4660bbee10525950",
+          "page_number": 1,
+          "split_id": 0,
+          "split_idx_start": 0,
+          "_split_overlap": []
+        }
+      },
+      "type": "document"
+    }
+  ],
+  "relationships": []
+}

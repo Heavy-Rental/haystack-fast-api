@@ -1,8 +1,4 @@
-"""Recommendation / project-spec intake endpoints (thin routers).
-
-Part 1: ``POST /from-project-spec`` runs the indexing FileTypeRouter pipeline
-(structured vs unstructured classification), not the FR-010 recommend graph.
-"""
+"""Project-spec intake: indexing + optional user-scoped KG (HR-76)."""
 
 from datetime import date
 
@@ -33,10 +29,17 @@ def _parse_optional_date(value: object) -> date | None:
         raise BadRequestError(f"invalid date: {value}") from exc
 
 
+def _require_user_id(value: object) -> str:
+    text = str(value).strip() if value is not None else ""
+    if not text:
+        raise BadRequestError("user_id is required")
+    return text
+
+
 @router.post(
     "/from-project-spec",
     response_model=IngestFromProjectSpecResponse,
-    summary="Ingest project-spec: classify, convert, split, embed, and write",
+    summary="Ingest project-spec: index chunks and optional knowledge graph",
     openapi_extra={
         "requestBody": {
             "content": {
@@ -48,7 +51,10 @@ def _parse_optional_date(value: object) -> date | None:
                 "multipart/form-data": {
                     "schema": {
                         "type": "object",
+                        "required": ["user_id"],
                         "properties": {
+                            "user_id": {"type": "string"},
+                            "user_name": {"type": "string"},
                             "file": {"type": "string", "format": "binary"},
                             "project_text": {"type": "string"},
                             "start_date": {"type": "string", "format": "date"},
@@ -62,10 +68,9 @@ def _parse_optional_date(value: object) -> date | None:
     },
 )
 async def recommend_from_project_spec(request: Request) -> IngestFromProjectSpecResponse:
-    """Accept project_text and/or file; run full indexing pipeline (Parts 1–3).
+    """Index project-spec; optionally build KG from post-final_doc_joiner chunks.
 
-    classify → convert → clean → split → embed → DocumentStore write.
-    Recommend path remains deferred / reattach later.
+    Full Ragas transforms run only inside KnowledgeGraphGenerator when enabled.
     """
     content_type = request.headers.get("content-type", "")
     service = IndexingIngestService()
@@ -81,22 +86,29 @@ async def recommend_from_project_spec(request: Request) -> IngestFromProjectSpec
             )
             raise BadRequestError(messages or "Validation failed") from exc
 
-        # Optional dates validated by schema; Part 1 does not use them for ranking.
         return await run_in_threadpool(
             service.ingest_from_project_spec,
+            user_id=body.user_id,
+            user_name=body.user_name,
             project_text=body.project_text,
             file_sources=None,
         )
 
     if "multipart/form-data" in content_type:
         form = await request.form()
+        user_id = _require_user_id(form.get("user_id"))
+        user_name_raw = form.get("user_name")
+        user_name = (
+            str(user_name_raw).strip()
+            if user_name_raw is not None and str(user_name_raw).strip()
+            else None
+        )
         project_text = form.get("project_text")
         project_text_str = (
             str(project_text).strip()
             if project_text is not None and str(project_text).strip()
             else None
         )
-        # Accept/parse dates for API stability; unused in Part 1 classification.
         _ = _parse_optional_date(form.get("start_date"))
         _ = _parse_optional_date(form.get("end_date"))
 
@@ -112,11 +124,15 @@ async def recommend_from_project_spec(request: Request) -> IngestFromProjectSpec
                         raw=raw if isinstance(raw, (bytes, bytearray)) else bytes(raw),
                         filename=filename,
                         content_type=ctype,
+                        user_id=user_id,
+                        user_name=user_name,
                     )
                 )
 
         return await run_in_threadpool(
             service.ingest_from_project_spec,
+            user_id=user_id,
+            user_name=user_name,
             project_text=project_text_str,
             file_sources=file_sources or None,
         )

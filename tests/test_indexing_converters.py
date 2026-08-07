@@ -136,7 +136,8 @@ def test_pipeline_classify_then_convert_csv() -> None:
 def test_service_returns_document_previews() -> None:
     service = IndexingIngestService()
     result = service.ingest_from_project_spec(
-        project_text="Need one excavator for trench work"
+        user_id="u_conv",
+        project_text="Need one excavator for trench work",
     )
     assert result.document_count == 1
     assert result.unstructured_document_count == 1
@@ -155,7 +156,7 @@ def test_service_csv_has_structured_docs() -> None:
         raw=b"equipment,qty\nBoom Lift,1\n",
         filename="fleet.csv",
     )
-    result = service.ingest_from_project_spec(file_sources=[src])
+    result = service.ingest_from_project_spec(user_id="u_conv", file_sources=[src])
     assert result.data_kind == "structured"
     assert result.document_count == 1
     assert result.structured_document_count == 1

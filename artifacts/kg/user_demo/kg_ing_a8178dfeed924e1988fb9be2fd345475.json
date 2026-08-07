@@ -1,0 +1,24 @@
+{
+  "nodes": [
+    {
+      "id": "5590879a-dd43-40ce-988b-6d71dc2c0154",
+      "properties": {
+        "page_content": "Indoor elevated work ~8m for scissors lift",
+        "document_metadata": {
+          "file_path": "project_text.txt",
+          "filename": "project_text.txt",
+          "user_id": "user_demo",
+          "user_name": "Demo User",
+          "ingest_id": "ing_a8178dfeed924e1988fb9be2fd345475",
+          "source_id": "ac4942ad6b18943a2ef00ccfd04f40092685fbc86197a8b0ef656e74ac9fc1a0",
+          "page_number": 1,
+          "split_id": 0,
+          "split_idx_start": 0,
+          "_split_overlap": []
+        }
+      },
+      "type": "document"
+    }
+  ],
+  "relationships": []
+}

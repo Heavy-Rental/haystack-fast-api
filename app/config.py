@@ -57,6 +57,12 @@ class Settings(BaseSettings):
         alias="INDEXING_ST_MODEL",
     )
 
+    # Knowledge graph (HR-76): after final_doc_joiner chunks; transforms on generator only
+    kg_enabled: bool = Field(default=False, alias="KG_ENABLED")
+    kg_artifact_dir: str = Field(default="artifacts/kg", alias="KG_ARTIFACT_DIR")
+    kg_apply_transforms: bool = Field(default=False, alias="KG_APPLY_TRANSFORMS")
+    kg_strict: bool = Field(default=False, alias="KG_STRICT")
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:

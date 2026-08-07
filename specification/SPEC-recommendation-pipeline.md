@@ -11,7 +11,8 @@
 | **Python package** | `app` |
 | **Spec location** | `specification/SPEC-recommendation-pipeline.md` |
 | **Parent feature** | [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) |
-| **Related stage SPECs** | [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) (**live HTTP**); [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md); [`SPEC-recommendation-intake-and-pipeline-front.md`](./SPEC-recommendation-intake-and-pipeline-front.md) |
+| **Reading map** | [`README.md`](./README.md) Path C (deferred recommend) |
+| **Related stage SPECs** | [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) (**live HTTP**); [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md); [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) |
 | **Depends on** | [`SPEC-project.md`](./SPEC-project.md), [`SPEC-project-setup.md`](./SPEC-project-setup.md), [`01-domain.md`](./01-domain.md) |
 | **Pricing** | [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md) (production service later); prototype `ml-experiments/predict_price.py` |
 | **As-built modules** | See [§6 File map](#6-as-built-file-map) |
@@ -148,22 +149,14 @@ When this specification is followed and as-built code remains compliant:
 #### A. Live HTTP path (indexing — normative for the route)
 
 ```text
-POST /api/v1/recommendations/from-project-spec
-        │
-        ▼
-async router (app/api/recommendations.py)
-        │
-        ▼
-run_in_threadpool(IndexingIngestService.ingest_from_project_spec)
-        │
-        ▼
-indexing Pipeline: classify → convert → clean → split → embed → write
-        │
-        ▼
-IngestFromProjectSpecResponse
+POST /from-project-spec (user_id required)
+  → IndexingIngestService
+  → dual-branch index → final_doc_joiner → embed → write
+  → optional KG (KG_ENABLED) after post-join chunks
+  → IngestFromProjectSpecResponse
 ```
 
-Detail: [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md).
+Detail: [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) · [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) · map [`README.md`](./README.md).
 
 #### B. Recommend service path (FR-010 — not default HTTP)
 
@@ -378,6 +371,11 @@ See testing guide §8 and intake-and-pipeline-front SPEC §13.
 |---------|------|--------|
 | **1.0.0** | 2026-08-05 | Initial SDD for as-built full FR-010.1–8 MVP pipeline (seed fleet, availability, pricing adapter, rank/assemble, verification) |
 | **1.1.0** | 2026-08-06 | **PR review:** pricing payload `total_price` (not fabricated `weekly_rate`); duration-scoped `daily_rate` (**FR-P-011**); async route offloads sync service via `run_in_threadpool` (**FR-P-012**); open Q #5 warm-up DI follow-up |
-| **1.2.0** | 2026-08-07 | **Spec reconcile:** dual architecture (live HTTP indexing vs service FR-010); conflict rule; FR-P-012 wording; file map + tests clarified |
+| **1.2.0** | 2026-08-07 | Spec reconcile: live HTTP indexing vs service FR-010 |
+| **1.2.1** | 2026-08-07 | Sequential README; live path notes user_id + optional KG |
 
-When pipeline component contracts, seed data semantics, or assemble rules change, update **this SPEC** and as-built code/tests in the **same change set**. Live HTTP contract changes go to the indexing SPEC first.
+When pipeline contracts change, update this SPEC + tests. Live HTTP → indexing/KG SPECs first.
+
+---
+
+**Reading order:** [← Intake (deferred)](./SPEC-recommendation-intake.md) · [Map](./README.md) · [Next: Pricing →](./SPEC-dynamic-pricing.md)

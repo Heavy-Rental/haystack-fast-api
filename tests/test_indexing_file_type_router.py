@@ -86,9 +86,11 @@ def test_pipeline_run_with_path(tmp_path: Path) -> None:
 def test_service_project_text_unstructured() -> None:
     service = IndexingIngestService()
     result = service.ingest_from_project_spec(
-        project_text="Indoor elevated work for scissors lift"
+        user_id="u_svc",
+        project_text="Indoor elevated work for scissors lift",
     )
     assert result.ingest_id.startswith("ing_")
+    assert result.user_id == "u_svc"
     assert result.data_kind == "unstructured"
     assert result.unstructured_count == 1
     assert result.structured_count == 0
@@ -103,7 +105,7 @@ def test_service_csv_structured() -> None:
         filename="fleet.csv",
         content_type="text/csv",
     )
-    result = service.ingest_from_project_spec(file_sources=[src])
+    result = service.ingest_from_project_spec(user_id="u_csv", file_sources=[src])
     assert result.data_kind == "structured"
     assert result.structured_count == 1
     assert result.documents_written >= 1
@@ -117,7 +119,7 @@ def test_service_unsupported_raises() -> None:
     service = IndexingIngestService()
     src = byte_stream_from_upload(raw=b"MZ", filename="tool.exe", content_type=None)
     with pytest.raises(BadRequestError):
-        service.ingest_from_project_spec(file_sources=[src])
+        service.ingest_from_project_spec(user_id="u1", file_sources=[src])
 
 
 def test_byte_stream_from_project_text() -> None:

@@ -212,8 +212,14 @@ Notes:
 | Environment label | `APP_ENV` | e.g. `local`, `dev`, `prod` |
 | Log level | `LOG_LEVEL` | Logging verbosity (`INFO` default) |
 | Database URL | `DATABASE_URL` | Optional full SQLAlchemy URL override (see 5.2) |
+| Need decomposer | `NEED_DECOMPOSER` | `stub` \| `llm` (recommend path) |
+| LLM | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, … | OpenAI-compatible client |
+| Indexing embedder | `INDEXING_EMBEDDER` | `mock` \| `openai` \| `sentence-transformers` |
+| Indexing split | `INDEXING_SPLIT_LENGTH`, `INDEXING_SPLIT_OVERLAP` | Chunking |
+| Indexing models | `INDEXING_OPENAI_EMBEDDING_MODEL`, `INDEXING_ST_MODEL`, `INDEXING_EMBEDDING_DIM` | Embed config |
+| Knowledge graph | `KG_ENABLED`, `KG_ARTIFACT_DIR`, `KG_APPLY_TRANSFORMS`, `KG_STRICT` | Optional post-join KG (HR-76) |
 
-Feature SDDs may add Haystack-specific env vars (model endpoints, API keys, document store settings). Those keys must be documented in the feature spec **and** reflected here when they become environment-wide defaults.
+Full commented defaults: [`.env.example`](../.env.example). Feature detail: [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md), [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md). Sequential map: [`README.md`](./README.md).
 
 ### 5.4 Security model (summary)
 

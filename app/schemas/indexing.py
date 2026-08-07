@@ -1,4 +1,4 @@
-"""Schemas for project-spec indexing (Parts 1–3: classify + convert + vectorize)."""
+"""Schemas for project-spec indexing + optional knowledge graph (HR-76)."""
 
 from typing import Any, Literal
 
@@ -22,9 +22,11 @@ class IngestDocumentPreview(BaseModel):
 
 
 class IngestFromProjectSpecResponse(BaseModel):
-    """Successful ingest response for /from-project-spec (classify → write)."""
+    """Successful ingest response for /from-project-spec (index + optional KG)."""
 
     ingest_id: str = Field(..., description="ing_ + hex identifier")
+    user_id: str = Field(..., description="Echo of request user_id")
+    user_name: str | None = Field(default=None, description="Echo of request user_name")
     data_kind: Literal["structured", "unstructured", "mixed"] = Field(
         ...,
         description="Aggregate kind of classified sources",
@@ -55,5 +57,19 @@ class IngestFromProjectSpecResponse(BaseModel):
     documents: list[IngestDocumentPreview] = Field(
         default_factory=list,
         description="Chunk previews after split/embed (content truncated)",
+    )
+    kg_built: bool = Field(
+        default=False,
+        description="True when a knowledge graph artifact was written",
+    )
+    kg_node_count: int | None = Field(default=None)
+    kg_relationship_count: int | None = Field(default=None)
+    kg_artifact_path: str | None = Field(
+        default=None,
+        description="Path under KG_ARTIFACT_DIR/{user_id}/kg_{ingest_id}.json",
+    )
+    kg_transform_applied: bool = Field(
+        default=False,
+        description="True when full Ragas transforms ran on KnowledgeGraphGenerator",
     )
     warnings: list[str] = Field(default_factory=list)

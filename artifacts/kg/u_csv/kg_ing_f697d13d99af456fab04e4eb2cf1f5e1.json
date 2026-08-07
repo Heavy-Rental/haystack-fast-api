@@ -1,0 +1,39 @@
+{
+  "nodes": [
+    {
+      "id": "40c51149-90ad-4e7f-9794-926a441d40a9",
+      "properties": {
+        "page_content": "equipment,qty\n",
+        "document_metadata": {
+          "file_path": "fleet.csv",
+          "filename": "fleet.csv",
+          "user_id": "u_csv",
+          "ingest_id": "ing_f697d13d99af456fab04e4eb2cf1f5e1",
+          "source_id": "a9128df2a366eff0dc46f4da73b8e43b504d4ed9b934191addc7fe7197c4e632",
+          "row_idx_start": 0,
+          "col_idx_start": 0,
+          "split_id": 0
+        }
+      },
+      "type": "document"
+    },
+    {
+      "id": "81d80355-df15-4ee7-870f-d8720fb8c534",
+      "properties": {
+        "page_content": "Boom Lift,1\n",
+        "document_metadata": {
+          "file_path": "fleet.csv",
+          "filename": "fleet.csv",
+          "user_id": "u_csv",
+          "ingest_id": "ing_f697d13d99af456fab04e4eb2cf1f5e1",
+          "source_id": "a9128df2a366eff0dc46f4da73b8e43b504d4ed9b934191addc7fe7197c4e632",
+          "row_idx_start": 1,
+          "col_idx_start": 0,
+          "split_id": 1
+        }
+      },
+      "type": "document"
+    }
+  ],
+  "relationships": []
+}

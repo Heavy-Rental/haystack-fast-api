@@ -89,7 +89,8 @@ def test_service_returns_write_fields() -> None:
         )
     )
     result = service.ingest_from_project_spec(
-        project_text="Indoor elevated work for scissors lift"
+        user_id="u_vec",
+        project_text="Indoor elevated work for scissors lift",
     )
     assert result.chunk_count >= 1
     assert result.documents_written == result.chunk_count

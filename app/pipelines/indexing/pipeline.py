@@ -272,9 +272,11 @@ def run_indexing_pipeline(
     split_csv = dict(result.get("csv_splitter") or {})
     write_out = dict(result.get("writer") or {})
 
+    # Post-final_doc_joiner chunks (preferred KG input before/parallel to embed).
+    final_doc_joiner_documents = list(final_out.get("documents") or [])
     chunk_documents = list(
         embed_out.get("documents")
-        or final_out.get("documents")
+        or final_doc_joiner_documents
         or (
             list(split_text.get("documents") or [])
             + list(split_csv.get("documents") or [])
@@ -289,11 +291,11 @@ def run_indexing_pipeline(
         "structured_document_count": structured_document_count,
         "unstructured_document_count": unstructured_document_count,
         "conversion_warnings": [],
+        "final_doc_joiner_documents": final_doc_joiner_documents,
         "chunk_documents": chunk_documents,
         "chunk_count": len(chunk_documents),
         "documents_written": documents_written,
         "documents": chunk_documents,
-        # Expose sets used by tests/tools that still import kind names.
         "UNSTRUCTURED_MIME_TYPES": UNSTRUCTURED_MIME_TYPES,
         "STRUCTURED_MIME_TYPES": STRUCTURED_MIME_TYPES,
     }

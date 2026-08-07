@@ -1,9 +1,10 @@
-"""Project-spec indexing ingest: classify → convert → clean → split → embed → write."""
+"""Project-spec indexing + optional post-join knowledge graph (HR-76)."""
 
 from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,9 @@ def byte_stream_from_upload(
     raw: bytes,
     filename: str | None,
     content_type: str | None = None,
+    user_id: str | None = None,
+    user_name: str | None = None,
+    ingest_id: str | None = None,
 ) -> ByteStream:
     """Package upload bytes as a ByteStream with MIME from extension (preferred)."""
     if not raw:
@@ -42,24 +46,58 @@ def byte_stream_from_upload(
     if mime is None and content_type:
         mime = content_type.split(";")[0].strip() or None
 
-    return ByteStream(
-        data=raw,
-        meta={"file_path": name, "filename": name},
-        mime_type=mime,
-    )
+    meta: dict[str, Any] = {"file_path": name, "filename": name}
+    if user_id:
+        meta["user_id"] = user_id
+    if user_name:
+        meta["user_name"] = user_name
+    if ingest_id:
+        meta["ingest_id"] = ingest_id
+
+    return ByteStream(data=raw, meta=meta, mime_type=mime)
 
 
-def byte_stream_from_project_text(project_text: str) -> ByteStream:
+def byte_stream_from_project_text(
+    project_text: str,
+    *,
+    user_id: str | None = None,
+    user_name: str | None = None,
+    ingest_id: str | None = None,
+) -> ByteStream:
     """Treat free-text as unstructured plain text."""
     text = project_text.strip()
     if not text:
         raise BadRequestError("project_text must not be empty")
     data = text.encode("utf-8")
-    return ByteStream(
-        data=data,
-        meta={"file_path": "project_text.txt", "filename": "project_text.txt"},
-        mime_type=MIME_TEXT_PLAIN,
-    )
+    meta: dict[str, Any] = {
+        "file_path": "project_text.txt",
+        "filename": "project_text.txt",
+    }
+    if user_id:
+        meta["user_id"] = user_id
+    if user_name:
+        meta["user_name"] = user_name
+    if ingest_id:
+        meta["ingest_id"] = ingest_id
+    return ByteStream(data=data, meta=meta, mime_type=MIME_TEXT_PLAIN)
+
+
+def _stamp_documents(
+    documents: list[Document],
+    *,
+    user_id: str,
+    user_name: str | None,
+    ingest_id: str,
+) -> list[Document]:
+    stamped: list[Document] = []
+    for doc in documents:
+        meta = dict(doc.meta or {})
+        meta["user_id"] = user_id
+        meta["ingest_id"] = ingest_id
+        if user_name:
+            meta["user_name"] = user_name
+        stamped.append(replace(doc, meta=meta))
+    return stamped
 
 
 def _document_preview(doc: Document) -> IngestDocumentPreview:
@@ -74,6 +112,9 @@ def _document_preview(doc: Document) -> IngestDocumentPreview:
             "filename",
             "mime_type",
             "data_kind",
+            "user_id",
+            "user_name",
+            "ingest_id",
             "source_id",
             "page_number",
             "split_id",
@@ -113,7 +154,7 @@ def _build_default_pipeline() -> Pipeline:
 
 
 class IndexingIngestService:
-    """Run the full indexing pipeline for project-spec sources (Parts 1–3)."""
+    """Index project-spec sources; optionally build KG after final_doc_joiner chunks."""
 
     def __init__(self, *, pipeline: Pipeline | None = None) -> None:
         self._pipeline = pipeline or _build_default_pipeline()
@@ -121,14 +162,37 @@ class IndexingIngestService:
     def ingest_from_project_spec(
         self,
         *,
+        user_id: str,
+        user_name: str | None = None,
         project_text: str | None = None,
         file_sources: list[ByteStream] | None = None,
     ) -> IngestFromProjectSpecResponse:
+        uid = (user_id or "").strip()
+        if not uid:
+            raise BadRequestError("user_id is required")
+        uname = user_name.strip() if isinstance(user_name, str) and user_name.strip() else None
+        ingest_id = f"ing_{uuid.uuid4().hex}"
+
         sources: list[ByteStream | str | Path] = []
         if file_sources:
-            sources.extend(file_sources)
+            for src in file_sources:
+                meta = dict(src.meta or {})
+                meta["user_id"] = uid
+                meta["ingest_id"] = ingest_id
+                if uname:
+                    meta["user_name"] = uname
+                sources.append(
+                    ByteStream(data=src.data, meta=meta, mime_type=src.mime_type)
+                )
         if project_text is not None and str(project_text).strip():
-            sources.append(byte_stream_from_project_text(str(project_text)))
+            sources.append(
+                byte_stream_from_project_text(
+                    str(project_text),
+                    user_id=uid,
+                    user_name=uname,
+                    ingest_id=ingest_id,
+                )
+            )
 
         if not sources:
             raise BadRequestError(
@@ -159,7 +223,6 @@ class IndexingIngestService:
         if data_kind not in {"structured", "unstructured", "mixed"}:
             raise BadRequestError("could not determine structured vs unstructured kind")
 
-        # Convert-stage counts (pre-split).
         structured_document_count = int(out.get("structured_document_count") or 0)
         unstructured_document_count = int(out.get("unstructured_document_count") or 0)
         convert_document_count = int(
@@ -174,10 +237,24 @@ class IndexingIngestService:
             )
             raise BadRequestError(f"file conversion produced no documents: {detail}")
 
-        chunk_documents: list[Any] = list(
-            out.get("chunk_documents") or out.get("documents") or []
+        # Embedded chunks for store previews; joiner output is KG input (post-split).
+        embedded_raw = list(out.get("chunk_documents") or out.get("documents") or [])
+        joiner_raw = list(
+            out.get("final_doc_joiner_documents") or embedded_raw
         )
-        chunk_count = int(out.get("chunk_count") or len(chunk_documents))
+        embedded_docs = _stamp_documents(
+            [d for d in embedded_raw if isinstance(d, Document)],
+            user_id=uid,
+            user_name=uname,
+            ingest_id=ingest_id,
+        )
+        joiner_docs = _stamp_documents(
+            [d for d in joiner_raw if isinstance(d, Document)],
+            user_id=uid,
+            user_name=uname,
+            ingest_id=ingest_id,
+        )
+        chunk_count = int(out.get("chunk_count") or len(embedded_docs) or len(joiner_docs))
         documents_written = int(out.get("documents_written") or 0)
 
         if chunk_count == 0 or documents_written == 0:
@@ -185,37 +262,62 @@ class IndexingIngestService:
                 "indexing produced no writable chunks after clean/split/embed"
             )
 
-        previews = [
-            _document_preview(d)
-            if isinstance(d, Document)
-            else IngestDocumentPreview(
-                content_preview=str(getattr(d, "content", "") or "")[
-                    :CONTENT_PREVIEW_CHARS
-                ],
-                content_length=len(str(getattr(d, "content", "") or "")),
-                meta=dict(getattr(d, "meta", None) or {}),
-                data_kind=(getattr(d, "meta", None) or {}).get("data_kind")
-                if isinstance(getattr(d, "meta", None), dict)
-                else None,
-                has_embedding=bool(getattr(d, "embedding", None)),
-            )
-            for d in chunk_documents
-        ]
-
+        previews = [_document_preview(d) for d in (embedded_docs or joiner_docs)]
         warnings = [PART3_WARNING, *conversion_warnings]
-        ingest_id = f"ing_{uuid.uuid4().hex}"
+
+        kg_built = False
+        kg_node_count: int | None = None
+        kg_relationship_count: int | None = None
+        kg_artifact_path: str | None = None
+        kg_transform_applied = False
+
+        settings = get_settings()
+        if settings.kg_enabled:
+            try:
+                from app.pipelines.kg.runner import run_knowledge_graph
+
+                # Post-final_doc_joiner chunks; full Ragas transforms only in generator.
+                kg_result = run_knowledge_graph(
+                    joiner_docs or embedded_docs,
+                    user_id=uid,
+                    ingest_id=ingest_id,
+                    artifact_dir=settings.kg_artifact_dir,
+                    apply_transforms=bool(settings.kg_apply_transforms),
+                )
+                kg_built = kg_result.kg_built
+                kg_node_count = kg_result.kg_node_count
+                kg_relationship_count = kg_result.kg_relationship_count
+                kg_artifact_path = kg_result.kg_artifact_path
+                kg_transform_applied = kg_result.kg_transform_applied
+                warnings.extend(kg_result.warnings)
+                if not kg_built and settings.kg_strict:
+                    raise BadRequestError(
+                        "; ".join(kg_result.warnings) or "knowledge graph build failed"
+                    )
+            except BadRequestError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                msg = f"knowledge graph step failed: {exc}"
+                logger.warning(msg)
+                warnings.append(msg)
+                if settings.kg_strict:
+                    raise BadRequestError(msg) from exc
+
         logger.info(
-            "indexing_ingest ingest_id=%s data_kind=%s convert_docs=%s "
-            "chunks=%s written=%s",
+            "indexing_ingest ingest_id=%s user_id=%s data_kind=%s chunks=%s "
+            "written=%s kg_built=%s",
             ingest_id,
+            uid,
             data_kind,
-            convert_document_count,
             chunk_count,
             documents_written,
+            kg_built,
         )
 
         return IngestFromProjectSpecResponse(
             ingest_id=ingest_id,
+            user_id=uid,
+            user_name=uname,
             data_kind=data_kind,  # type: ignore[arg-type]
             mime_types_seen=list(out.get("mime_types_seen") or []),
             filenames=list(out.get("filenames") or []),
@@ -227,5 +329,10 @@ class IndexingIngestService:
             chunk_count=chunk_count,
             documents_written=documents_written,
             documents=previews,
+            kg_built=kg_built,
+            kg_node_count=kg_node_count,
+            kg_relationship_count=kg_relationship_count,
+            kg_artifact_path=kg_artifact_path,
+            kg_transform_applied=kg_transform_applied,
             warnings=warnings,
         )
