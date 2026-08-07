@@ -110,8 +110,9 @@ def test_multipart_csv_structured(client: TestClient) -> None:
     assert body["document_count"] == 1
     assert body["structured_document_count"] == 1
     assert body["documents_written"] >= 1
-    assert "Scissors" in body["documents"][0]["content_preview"]
-    assert body["documents"][0]["has_embedding"] is True
+    joined = " ".join(d["content_preview"] for d in body["documents"])
+    assert "Scissors" in joined
+    assert all(d["has_embedding"] for d in body["documents"])
     assert "text/csv" in body["mime_types_seen"] or body["mime_types_seen"]
 
 
@@ -125,8 +126,10 @@ def test_multipart_json_file_structured(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["data_kind"] == "structured"
-    assert body["document_count"] == 1
-    assert "excavator" in body["documents"][0]["content_preview"]
+    assert body["document_count"] >= 1
+    assert body["documents_written"] >= 1
+    joined = " ".join(d["content_preview"] for d in body["documents"]).lower()
+    assert "excavator" in joined
 
 
 def test_multipart_markdown_converts(client: TestClient) -> None:

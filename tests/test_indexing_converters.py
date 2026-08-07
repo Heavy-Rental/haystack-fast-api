@@ -101,26 +101,36 @@ def test_convert_docx() -> None:
 
 
 def test_pipeline_classify_then_convert_txt() -> None:
-    pipe = build_indexing_pipeline()
+    from app.pipelines.indexing.embedder_factory import build_document_embedder
+    from haystack.document_stores.in_memory import InMemoryDocumentStore
+
+    pipe = build_indexing_pipeline(
+        document_store=InMemoryDocumentStore(),
+        embedder=build_document_embedder(mode="mock", dimension=8),
+    )
     out = run_indexing_pipeline(
         pipe,
         sources=[_bs("project.txt", b"Indoor elevated work for scissors lift")],
     )
     assert out["data_kind"] == "unstructured"
-    assert out["document_count"] == 1
-    assert out["unstructured_document_count"] == 1
+    assert out["documents_written"] >= 1
     assert MIME_TEXT_PLAIN in out["mime_types_seen"]
 
 
 def test_pipeline_classify_then_convert_csv() -> None:
-    pipe = build_indexing_pipeline()
+    from app.pipelines.indexing.embedder_factory import build_document_embedder
+    from haystack.document_stores.in_memory import InMemoryDocumentStore
+
+    pipe = build_indexing_pipeline(
+        document_store=InMemoryDocumentStore(),
+        embedder=build_document_embedder(mode="mock", dimension=8),
+    )
     out = run_indexing_pipeline(
         pipe,
         sources=[_bs("needs.csv", b"type,qty\nBoom Lift,1\n")],
     )
     assert out["data_kind"] == "structured"
-    assert out["document_count"] == 1
-    assert out["structured_document_count"] == 1
+    assert out["documents_written"] >= 1
 
 
 def test_service_returns_document_previews() -> None:
@@ -136,7 +146,7 @@ def test_service_returns_document_previews() -> None:
     assert "excavator" in result.documents[0].content_preview.lower()
     assert result.documents[0].content_length > 0
     assert result.documents[0].has_embedding is True
-    assert any("Part 3" in w for w in result.warnings)
+    assert any("Indexing complete" in w or "Part 3" in w for w in result.warnings)
 
 
 def test_service_csv_has_structured_docs() -> None:
@@ -150,8 +160,9 @@ def test_service_csv_has_structured_docs() -> None:
     assert result.document_count == 1
     assert result.structured_document_count == 1
     assert result.documents_written >= 1
-    assert "Boom" in result.documents[0].content_preview
-    assert result.documents[0].has_embedding is True
+    joined = " ".join(d.content_preview for d in result.documents)
+    assert "Boom" in joined
+    assert all(d.has_embedding for d in result.documents)
 
 
 def test_empty_sources_convert_zero() -> None:

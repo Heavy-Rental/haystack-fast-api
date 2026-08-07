@@ -95,7 +95,7 @@ def test_service_returns_write_fields() -> None:
     assert result.documents_written == result.chunk_count
     assert result.documents
     assert result.documents[0].has_embedding is True
-    assert any("Part 3" in w for w in result.warnings)
+    assert any("Indexing complete" in w or "Part 3" in w for w in result.warnings)
     assert get_document_store().count_documents() >= result.documents_written
 
 

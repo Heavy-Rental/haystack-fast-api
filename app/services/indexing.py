@@ -20,8 +20,9 @@ from app.schemas.indexing import IngestDocumentPreview, IngestFromProjectSpecRes
 logger = logging.getLogger(__name__)
 
 PART3_WARNING = (
-    "Part 3 indexing complete: documents were cleaned, split, embedded, and written "
-    "to the process-local InMemoryDocumentStore (swap store for persistence later)."
+    "Indexing complete (Packt Ch.4-style dual branch): documents were converted, "
+    "cleaned/split, embedded, and written to the process-local InMemoryDocumentStore "
+    "(swap store for persistence later)."
 )
 CONTENT_PREVIEW_CHARS = 500
 
@@ -94,14 +95,15 @@ def _document_preview(doc: Document) -> IngestDocumentPreview:
 def _build_default_pipeline() -> Pipeline:
     settings = get_settings()
     mode = str(settings.indexing_embedder or "mock").strip().lower()
-    if mode not in {"mock", "openai"}:
+    if mode not in {"mock", "openai", "sentence-transformers", "st", "minilm"}:
         mode = "mock"
     embedder = build_document_embedder(
-        mode=mode,  # type: ignore[arg-type]
+        mode=mode,
         dimension=int(settings.indexing_embedding_dim),
         openai_api_key=settings.llm_api_key,
         openai_model=settings.indexing_openai_embedding_model,
         openai_base_url=settings.llm_base_url if mode == "openai" else None,
+        sentence_transformers_model=settings.indexing_st_model,
     )
     return build_indexing_pipeline(
         embedder=embedder,

@@ -55,6 +55,18 @@
 
 - [x] T021 Reconcile specification set: indexing SPEC owns live route; mark recommend HTTP as deferred; align pipeline/testing/Postman guides
 
+## Phase 8 — Packt Ch.4 flowchart alignment
+
+- [x] T022 SPEC design note (dual branch; Ch.4 reference)
+- [x] T023 Explicit `FileTypeRouter` + per-MIME converters + joiners in `pipeline.py`
+- [x] T024 CSV cleaner + row-wise splitter branch
+- [x] T025 Unstructured sanitizer + cleaner + word splitter
+- [x] T026 `final_doc_joiner` → embed → write
+- [x] T027 Service metadata from router outputs
+- [x] T028 `sentence-transformers` embedder mode (lazy import)
+- [x] T029 Branch unit tests + e2e ingest
+- [ ] T030 (optional) `LinkContentFetcher` branch
+
 ## Later (not as-built)
 
 - [ ] T017 Optional reattach recommend after unstructured extract (restore `results_by_need` or separate route)

@@ -109,6 +109,9 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 | **FR-IX-015** | Default embedder MUST be CI-safe (`MockDocumentEmbedder` or equivalent). Optional `openai` mode via `INDEXING_EMBEDDER`. |
 | **FR-IX-016** | Successful ingest MUST report `documents_written` ≥ 1 (and matching `chunk_count` for the default path). Zero written chunks → **400**. |
 | **FR-IX-017** | Successful responses MUST use `IngestFromProjectSpecResponse` (`ingest_id`, …). MUST NOT return `recommendation_id` / `results_by_need` on the default path until reattach is specified. |
+| **FR-IX-018** | Indexing graph MUST expose an explicit **FileTypeRouter** (or equivalent) with **parallel** unstructured vs CSV preprocess branches, then join before embed/write (Packt Ch. 4 pattern). |
+| **FR-IX-019** | CSV branch MUST use CSV-oriented clean/split (e.g. `CSVDocumentCleaner` + row-wise `CSVDocumentSplitter`), not only the unstructured word splitter. |
+| **FR-IX-020** | Unstructured branch MUST run sanitizer (or equivalent quality gate) → `DocumentCleaner` → word `DocumentSplitter` before the final joiner. |
 
 ---
 
@@ -143,6 +146,10 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 
 ## 6. Design
 
+Aligned with Packt Ch. 4 indexing flowchart
+([indexing_pipeline.png](https://github.com/PacktPublishing/Building-Natural-Language-and-LLM-Pipelines/blob/main/ch4/jupyter-notebooks/images/indexing_pipeline.png)):
+**FileTypeRouter → dual preprocess branches → joiner → embed → write**.
+
 ```text
   POST /from-project-spec
        │
@@ -153,14 +160,27 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
   IndexingIngestService
        │
        ▼
-  Pipeline
-       classify → convert → clean → split → embed → write
-         │          │                              │
-         └─ kinds   └─ Documents                   └─ InMemoryDocumentStore
+  Pipeline (Packt-style)
+       file_type_router
+            ├─ unstructured MIME → converters → unstructured_joiner
+            │       → sanitizer → text_cleaner → text_splitter ─┐
+            ├─ text/csv → csv_converter → csv_cleaner             │
+            │            → csv_splitter (row-wise) ───────────────┤
+            └─ json/xlsx → converters → unstructured path ───────┤
+                                                                  ▼
+                                                         final_doc_joiner
+                                                                  │
+                                                           doc_embedder
+                                                                  │
+                                                              writer
+                                                                  │
+                                                     InMemoryDocumentStore
        │
        ▼
   IngestFromProjectSpecResponse
 ```
+
+Optional later: `LinkContentFetcher` → HTML converter (book web branch; T030).
 
 ### Modules
 
@@ -211,3 +231,4 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 | **0.2.0** | 2026-08-07 | Part 2: MIME converters; response adds document previews/counts |
 | **0.3.0** | 2026-08-07 | Part 3: clean → split → embed → write; `chunk_count` / `documents_written` |
 | **0.3.1** | 2026-08-07 | Spec reconcile: authority/conflict rule; Part labels; links to postman + deferred KG/recommend; FR-IX-017 |
+| **0.4.0** | 2026-08-07 | Packt Ch.4 dual-branch graph (router, CSV branch, sanitizer, final joiner); FR-IX-018–020 |

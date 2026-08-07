@@ -42,8 +42,8 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(default=60.0, alias="LLM_TIMEOUT_SECONDS")
     llm_temperature: float = Field(default=0.0, alias="LLM_TEMPERATURE")
 
-    # Indexing pipeline (Part 3): clean → split → embed → write
-    # embedder: mock (CI-safe deterministic) | openai
+    # Indexing pipeline: Packt Ch.4 dual-branch → embed → write
+    # embedder: mock (CI-safe) | openai | sentence-transformers
     indexing_embedder: str = Field(default="mock", alias="INDEXING_EMBEDDER")
     indexing_embedding_dim: int = Field(default=384, alias="INDEXING_EMBEDDING_DIM")
     indexing_split_length: int = Field(default=200, alias="INDEXING_SPLIT_LENGTH")
@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     indexing_openai_embedding_model: str = Field(
         default="text-embedding-3-small",
         alias="INDEXING_OPENAI_EMBEDDING_MODEL",
+    )
+    indexing_st_model: str = Field(
+        default="sentence-transformers/all-MiniLM-L6-v2",
+        alias="INDEXING_ST_MODEL",
     )
 
     @computed_field  # type: ignore[prop-decorator]
