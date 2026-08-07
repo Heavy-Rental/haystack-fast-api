@@ -18,6 +18,19 @@ Produces:
 - outputs/shap_distance_check.png -- predicted price vs distance_km, all other
   features held fixed. Expected: non-decreasing (per the masterplan's locked
   "small, monotonic" delivery-distance premium).
+- outputs/shap_period_utilization_check.png -- predicted price vs
+  period_utilization, all other features held fixed. Expected: non-decreasing
+  (higher utilization -> firmer prices, per generate_synthetic_data.py's
+  firmness_premium()). Phase 1d.
+- outputs/shap_lead_time_check.png -- predicted price vs lead_time_days, all
+  other features (including period_utilization) held fixed. Expected:
+  non-increasing (longer notice -> softer prices; this is the *independent*
+  lead_time_urgency_multiplier effect, not the period_utilization-mediated
+  one, since utilization is frozen for this sweep). Phase 1d. Correlated with
+  period_utilization by construction (see feature_schema.py) -- the SHAP
+  summary plot (below) is where a human compares which of the two the model
+  actually leans on; this sweep only checks that lead_time_days still carries
+  its own standalone direction, not their relative importance.
 - outputs/shap_platform_height_check.png -- predicted price vs platform_height,
   swept within the frozen row's own aerial-category range. Frozen category is
   forced to the more common of scissor lift/boom lift, not the dataset-wide
@@ -29,7 +42,7 @@ Produces:
   condition/duration_days/distance_km). No monotonicity expectation -- purely
   descriptive, not part of --strict.
 
-All five sweep checks tolerate a small fraction of adjacent-step violations
+All seven sweep checks tolerate a small fraction of adjacent-step violations
 (XGBoost trees aren't constrained to be monotonic) rather than requiring a
 perfectly monotonic sweep.
 """
@@ -132,6 +145,8 @@ def describe_frozen_row(base_row: pd.Series, varying_feature: str) -> str:
         "duration_days": f"duration_days={base_row['duration_days']:g}",
         "capacity": f"capacity={base_row['capacity']:g}kg",
         "distance_km": f"distance_km={base_row['distance_km']:g}km",
+        "period_utilization": f"period_utilization={base_row['period_utilization']:.2f}",
+        "lead_time_days": f"lead_time_days={base_row['lead_time_days']:g}",
     }
     if "platform_height" in base_row.index:
         height = base_row["platform_height"]
@@ -246,20 +261,20 @@ def main() -> None:
     X = fs.build_features(df)
     model = joblib.load(args.model)
 
-    print("[1/7] SHAP summary plot")
+    print("[1/9] SHAP summary plot")
     explainer = shap.TreeExplainer(model)
     plot_summary(explainer, X, args.plots_dir / "shap_summary.png")
 
     base_row = representative_row(X)
 
-    print("[2/7] Duration check (holding category/condition/capacity/distance_km fixed)")
+    print("[2/9] Duration check (holding category/condition/capacity/distance_km/period_utilization/lead_time_days fixed)")
     durations = np.linspace(df["duration_days"].min(), df["duration_days"].max(), 30).round().astype(int)
     duration_passed = run_sweep_check(
         model, base_row, "duration_days", durations, durations, "decreasing",
         "duration_days", "Predicted price vs duration", args.plots_dir / "shap_duration_check.png",
     )
 
-    print("[3/7] Condition check (holding category/duration_days/capacity/distance_km fixed)")
+    print("[3/9] Condition check (holding category/duration_days/capacity/distance_km/period_utilization/lead_time_days fixed)")
     condition_levels = np.array(sorted(fs.CONDITION_ORDER.values()))
     condition_labels = [k for k, v in sorted(fs.CONDITION_ORDER.items(), key=lambda kv: kv[1])]
     condition_passed = run_sweep_check(
@@ -267,7 +282,7 @@ def main() -> None:
         "condition", "Predicted price vs condition", args.plots_dir / "shap_condition_check.png",
     )
 
-    print("[4/7] Capacity check (holding category/condition/duration_days/distance_km fixed)")
+    print("[4/9] Capacity check (holding category/condition/duration_days/distance_km/period_utilization/lead_time_days fixed)")
     category_capacity = df.loc[df["category"] == active_category(base_row), "capacity"]
     capacities = np.linspace(category_capacity.min(), category_capacity.max(), 30)
     capacity_passed = run_sweep_check(
@@ -275,14 +290,30 @@ def main() -> None:
         "capacity (kg)", "Predicted price vs capacity", args.plots_dir / "shap_capacity_check.png",
     )
 
-    print("[5/7] Distance check (holding category/condition/duration_days/capacity fixed)")
+    print("[5/9] Distance check (holding category/condition/duration_days/capacity/period_utilization/lead_time_days fixed)")
     distances = np.linspace(df["distance_km"].min(), df["distance_km"].max(), 30)
     distance_passed = run_sweep_check(
         model, base_row, "distance_km", distances, distances, "increasing",
         "distance_km (km)", "Predicted price vs distance", args.plots_dir / "shap_distance_check.png",
     )
 
-    print("[6/7] Platform height check (holding category/condition/duration_days/capacity/distance_km fixed)")
+    print("[6/9] Period utilization check (holding category/condition/duration_days/capacity/distance_km/lead_time_days fixed)")
+    utilizations = np.linspace(0, 1, 30)
+    utilization_passed = run_sweep_check(
+        model, base_row, "period_utilization", utilizations, utilizations, "increasing",
+        "period_utilization", "Predicted price vs period utilization",
+        args.plots_dir / "shap_period_utilization_check.png",
+    )
+
+    print("[7/9] Lead time check (holding category/condition/duration_days/capacity/distance_km/period_utilization fixed)")
+    lead_times = np.linspace(df["lead_time_days"].min(), df["lead_time_days"].max(), 30)
+    lead_time_passed = run_sweep_check(
+        model, base_row, "lead_time_days", lead_times, lead_times, "decreasing",
+        "lead_time_days (days)", "Predicted price vs lead time",
+        args.plots_dir / "shap_lead_time_check.png",
+    )
+
+    print("[8/9] Platform height check (holding category/condition/duration_days/capacity/distance_km/period_utilization/lead_time_days fixed)")
     aerial_category = mode_aerial_category(X)
     platform_base_row = representative_row(X, category=aerial_category)
     category_platform_height = df.loc[df["category"] == aerial_category, "platform_height"]
@@ -293,7 +324,7 @@ def main() -> None:
         args.plots_dir / "shap_platform_height_check.png",
     )
 
-    print("[7/7] Category ranking (shared condition/duration_days/distance_km, each category's own capacity/platform_height)")
+    print("[9/9] Category ranking (shared condition/duration_days/distance_km, each category's own capacity/platform_height)")
     ranking = category_ranking(model, X)
     print(ranking.to_string(index=False))
     condition_name_by_ordinal = {v: k for k, v in fs.CONDITION_ORDER.items()}
@@ -307,7 +338,13 @@ def main() -> None:
     print(f"\nPlots saved to {args.plots_dir}")
 
     all_passed = (
-        duration_passed and condition_passed and capacity_passed and distance_passed and platform_height_passed
+        duration_passed
+        and condition_passed
+        and capacity_passed
+        and distance_passed
+        and utilization_passed
+        and lead_time_passed
+        and platform_height_passed
     )
     if args.strict and not all_passed:
         raise SystemExit(1)
