@@ -4,7 +4,7 @@
 > `dynamic-pricing-masterplan.md` — don't duplicate reasoning here; link back to
 > the relevant masterplan section instead.
 
-Last updated: 2026-08-05
+Last updated: 2026-08-07
 
 Timeline: 5 days total. Day 1–3 = Phase 1 (offline experimentation). Day 4–5 = Phase 2 (productionize).
 
@@ -30,27 +30,24 @@ Timeline: 5 days total. Day 1–3 = Phase 1 (offline experimentation). Day 4–5
 - Purpose: unblock the upcoming agent prototype so it can fetch experimental ML pricing before Phase 2 productionizes the real service
 - Verification: lightweight `__main__` smoke-check block only (one prediction per category), consistent with `shap_review.py`/`category_metrics.py` — no new `tests/` files for this ml-experiments scratch code
 
-**Day 3 (extension) — Phase 1d: real-time features (ml-experiments)**
-- `pricing_tables.py`: `CAPACITY_BINS`/`HEIGHT_BINS` fixed-constant spec-band boundaries (load-class/aerial-catalog-tier grounded, kg/m to match existing units) + synthetic-simulation constants for lead time and utilization-driven pricing
-- `feature_schema.py`: add `period_utilization`/`lead_time_days` to `NUMERIC_FEATURES`; new `spec_band()` bucketing function (single source of truth for both training-time and, later, Phase 1e's live query)
-- `generate_synthetic_data.py`: sample both new features, rewire `firmness_premium()` to the live per-row `period_utilization`, add a lead-time urgency multiplier, extend the References docstring, add sanity checks for both features
-- `train.py`: rerun only (no functional change) to pick up the new columns
-- `shap_review.py`: two new sweep checks (`period_utilization` increasing, `lead_time_days` decreasing), renumbered `[n/9]`
-- `predict_price.py`: thread the two new features through as **optional kwargs with fallback defaults** (not required) — so `pricing_client.py`'s existing call keeps working after Phase 1d merges alone, ahead of Phase 1e threading real values through
-- `demo_scenarios.py` (new): script-based live demo for a lecturer, since `predict_price(...)` is intentionally in-process only (§5.1/§3, no HTTP/Postman option). Two scenario pairs (condition effect, duration effect) using placeholder asset data with clearly marked TODO swap points, one bar-chart PNG per pair showing raw + guardrail-clamped output side by side. Nominally `feature/ml-5-demo-prep` scope, scaffolded early since it's low-risk and doesn't depend on the rest of Phase 1d.
-- Also: resolve `booking_month`/seasonality (now closed — not added, see masterplan), document fuel price as considered-and-rejected, write Phase 1d/1e into the masterplan's phase order, update `SPEC-dynamic-pricing.md` to v1.3.0
+**Day 3 (extension) — Phase 1d: real-time features (ml-experiments)** ✅ done
+- `pricing_tables.py`: `CAPACITY_BINS`/`HEIGHT_BINS` + lead-time/utilization constants (see file comments and masterplan for rationale)
+- `feature_schema.py`: `period_utilization`/`lead_time_days` in `NUMERIC_FEATURES`; new `spec_band()`
+- `generate_synthetic_data.py`: sampling for both features, `firmness_premium()` rewired to live `period_utilization`, References docstring, sanity checks
+- `train.py`: rerun only. `shap_review.py`: two new sweep checks, renumbered `[n/9]`
+- `predict_price.py`: both features as **optional kwargs with fallback defaults** (keeps `pricing_client.py` working pre-Phase-1e)
+- `demo_scenarios.py` (new): condition/duration scenario pairs, raw+clamped bar charts — see masterplan for why it's here and not Day 5
+- Also: `booking_month` resolved, fuel price documented rejected, masterplan/spec updated to reflect all of the above, SHAP importance tuned (see masterplan)
 
-**Day 3 (extension, cont.) — Phase 1e: production DB wiring (separate branch/PR)**
-- First-ever read-only SQLAlchemy `Asset`/`AssetCategory`/`Booking` models (`app/models/`), mapped onto Spring Boot's existing tables — no migrations, no new tables
-- New `app/repositories/pricing_repository.py`: `compute_period_utilization()` (live overlap+count query, reusing `feature_schema.spec_band()`) and `compute_lead_time_days()` (pure)
-- Thread `db`/`start_date`/`end_date` through `app/api/recommendations.py` → `app/services/recommendations.py` → `app/pipelines/predict_price_adapter.py` → `app/services/pricing_client.py`, with graceful fallback when DB/dates are unavailable
-- **Blocked on confirming** `BookingStatus.CONFIRMED` and exact Asset/Booking column casing against the real Spring Boot schema first (see masterplan/spec open items)
+**Day 3 (extension, cont.) — Phase 1e: production DB wiring (separate branch/PR, not started)**
+- First-ever read-only SQLAlchemy `Asset`/`AssetCategory`/`Booking` models (`app/models/`) + `app/repositories/pricing_repository.py` (`compute_period_utilization()`, `compute_lead_time_days()`)
+- Thread `db`/`start_date`/`end_date` through the call chain: `app/api/recommendations.py` → `.../recommendations.py` → `.../predict_price_adapter.py` → `.../pricing_client.py`, graceful fallback when unavailable
+- **Blocked on confirming** `BookingStatus.CONFIRMED` + exact Asset/Booking column casing (see open items)
 
 **Day 4 — Phase 2a: productionize pricing service**
-- ~~Decide `booking_month`/seasonality inclusion before porting `feature_schema.py`~~ — resolved in Phase 1d (not added, see masterplan)
-- Build `app/services/pricing/` package: `model.py`, `train.py`, `feature_schema.py`, `artifacts/` — ports `period_utilization`/`lead_time_days`/`spec_band()` automatically, since Phase 1d already extended the `ml-experiments/feature_schema.py` this gets ported from; **relocates, doesn't rebuild**, Phase 1e's `app/repositories/pricing_repository.py` query logic into `model.py`
+- Build `app/services/pricing/` package: `model.py`, `train.py`, `feature_schema.py`, `artifacts/` — ports Phase 1d's `feature_schema.py` (already has the new features/`spec_band()`) and **relocates** (doesn't rebuild) Phase 1e's `pricing_repository.py` into `model.py`
 - Guardrail clamping against `Asset.minDailyRate` / `maxDailyRate`
-- Implement `/predict-price` as an **in-process function call** (see masterplan Architecture section) — called directly from `app.pipelines`, not exposed as an HTTP route
+- Implement `/predict-price` as an **in-process function call** — called directly from `app.pipelines`, not an HTTP route (see masterplan Architecture)
 
 **Day 5 — Phase 2b: integration, tests, demo prep**
 - Wire the pricing function into the agentic pipeline → persist to `RecommendationItem.mlPredictedPrice`
@@ -67,7 +64,7 @@ Timeline: 5 days total. Day 1–3 = Phase 1 (offline experimentation). Day 4–5
 | 1 | ☑ | Phase 1 — synthetic data generation | `feature/ml-1-synthetic-data` | Scaffold `ml-experiments/` + full `generate_synthetic_data.py` | 1 |
 | 2 | ☑ | Phase 1 — feature engineering, training & SHAP review | `feature/ml-2-train-and-shap` | Feature engineering, baseline training, SHAP review, finalize `feature_schema.py`, retrain final model, save artifacts | 2–3 |
 | 2b | ☑ | Phase 1c — prototype `predict_price()` (ml-experiments) | `feature/ml-2b-predict-price-prototype` | `ml-experiments/predict_price.py`: in-process prototype + guardrail clamping (static per-category bounds), for the upcoming agent prototype | 3 (ext.) |
-| 2c | ☐ | Phase 1d — real-time features (ml-experiments) | `HR-75-ml-2-c-period-utilization-lead-time` | `period_utilization`/`lead_time_days` in `pricing_tables.py`/`feature_schema.py`/`generate_synthetic_data.py`/`train.py`/`shap_review.py`/`predict_price.py`; resolves `booking_month` open item; documents fuel-price rejection; updates masterplan/spec; **also** `demo_scenarios.py` (live demo script, nominally subtask 5 scope, scaffolded early) | 3 (ext., cont.) |
+| 2c | ☑ | Phase 1d — real-time features (ml-experiments) | `HR-75-ml-2-c-period-utilization-lead-time` | See Day 3 (extension) above; also `demo_scenarios.py` (nominally subtask 5 scope, scaffolded early) | 3 (ext., cont.) |
 | 2d | ☐ | Phase 1e — production DB wiring for `period_utilization` | TBD (separate branch, created when this starts) | First-ever read-only `Asset`/`AssetCategory`/`Booking` models (`app/models/`), `app/repositories/pricing_repository.py`, wired through `predict_price_adapter.py`/`pricing_client.py`/`recommendations.py`/the API route | 3 (ext., cont.) |
 | 3 | ☐ | Phase 2 — productionize pricing service | `feature/ml-3-pricing-service` | `app/services/pricing/` package, guardrail clamping, in-process `predict_price()` function | 4 |
 | 4 | ☐ | Phase 2 — pipeline integration & tests | `feature/ml-4-integration-tests` | Wire into agentic pipeline → `mlPredictedPrice`, unit tests, manual "retrain now" endpoint | 5 (AM) |
@@ -100,3 +97,4 @@ PR/review notes:
 | 2026-08-05 | Added Phase 1c: prototype `predict_price()` in `ml-experiments/` (new "Day 3 (extension)" task, subtask 2b) — a lightweight, DB-free version so the upcoming agent prototype can fetch experimental ML pricing before Phase 2a lands. Guardrail bounds are a static per-category stand-in, not the real per-asset clamp Phase 2a still implements. |
 | 2026-08-07 | Added Phase 1d (real-time features, subtask 2c, branch `HR-75-ml-2-c-period-utilization-lead-time`) and Phase 1e (production DB wiring for `period_utilization`, subtask 2d, separate branch TBD) as new "Day 3 (extension, cont.)" tasks. Resolved the `booking_month` open item (not added). Added a new open item: confirm `BookingStatus.CONFIRMED` and exact Asset/Booking column casing before Phase 1e. Updated Day 4's task list to note `app/services/pricing/feature_schema.py` picks up the new features automatically via the Phase 1d port, and that Phase 2 relocates rather than rebuilds Phase 1e's repository query. |
 | 2026-08-07 | Corrected Phase 1d's `predict_price.py` task: the two new features are **optional kwargs with fallback defaults**, not required — required kwargs would break `pricing_client.py`'s existing call the moment Phase 1d merges, ahead of Phase 1e threading real values through. Added `demo_scenarios.py` (script-based live demo for a lecturer, since `predict_price(...)` is in-process only) to subtask 2c's scope, pulled forward from its nominal `feature/ml-5-demo-prep` slot since it's low-risk (placeholder data, no dependency on the rest of Phase 1d). Updated subtask 5's row to reflect that the script itself is already built by then — remaining Day 5 PM scope is rehearsal/polish only. |
+| 2026-08-07 | Subtask 2c (Phase 1d) marked done — implemented and verified. Condensed Day 3/Day 4 task descriptions (rationale now lives only in masterplan, per this file's own "don't duplicate reasoning" convention); no scope changes. |

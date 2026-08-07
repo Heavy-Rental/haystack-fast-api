@@ -134,11 +134,11 @@ Ports `ml-experiments/feature_schema.py` directly — same `CATEGORIES`, `CONDIT
 
 Target: `price_per_day` (training-time only; not part of the prediction input).
 
-**Spec-band sub-categorization (Phase 1d), for `period_utilization`.** Grouping by raw `category` alone would be misleading — a fully-booked small-excavator fleet shouldn't make a large excavator look scarce. Utilization is computed at category + spec-band instead: excavator/forklift key primarily off `capacity`, scissor lift/boom lift key primarily off `platform_height`. Band boundaries are **fixed constants** (`pricing_tables.CAPACITY_BINS`/`HEIGHT_BINS`), grounded in load-class/aerial-lift-catalog height-tier conventions (cited in `generate_synthetic_data.py`'s References docstring, same standard as the existing rate-card/monsoon/BCA citations) — not dynamically derived from the current fleet's distribution. Bands are computed on the fly from the existing `capacity`/`platform_height` columns; **no new persisted band column**. The exact boundary values and band count are **not locked to any specific numbers in this spec** — they're set by whoever implements Phase 1d, cross-checked against the ranges already in `pricing_tables.CATEGORY_CAPACITY_KG`/`CATEGORY_PLATFORM_HEIGHT_M` so bands actually partition the fleet, and empirically sanity-checked via `generate_synthetic_data.py --strict`.
+**Spec-band bucketing** (excavator/forklift by `capacity`, scissor/boom lift by `platform_height`) avoids a fully-booked small-excavator fleet making a large excavator look scarce. Fixed constants (`pricing_tables.CAPACITY_BINS`/`HEIGHT_BINS`, no persisted column) — see that file's comments for the exact values and grounding, and `feature_schema.spec_band()` for the bucketing logic shared by training and the live query.
 
-**Scarcity pricing is intentional, not a bug (Phase 1d).** An early booking on a not-yet-claimed window legitimately produces a lower `period_utilization`, and often a lower predicted price — the same mechanism airline/hotel pricing uses. Do not "fix" this as an early-bird pricing bug.
+**Scarcity pricing is intentional, not a bug**: an early booking on an unclaimed window legitimately prices lower (airline/hotel-style) — don't "fix" this.
 
-**Resolved (Phase 1d): `booking_month`/seasonality — not added.** Previously an open decision (Phase 1b found a mild per-`booking_month` pattern, January worst, but small enough the lean was against adding it). Now closed: `period_utilization` already captures realized seasonal demand — the monsoon-season dip shows up directly as lower utilization for outdoor/earthmoving categories — so a separate calendar feature would be largely redundant with a live signal the model can already use. See `docs/dynamic-pricing-masterplan.md`'s changelog for the full reasoning.
+`booking_month`/seasonality: resolved **not added** — `period_utilization` already captures realized seasonality (see masterplan for the full analysis).
 
 ### 5.3 Data access (open item — confirm before implementing)
 
@@ -151,7 +151,7 @@ Before implementing `model.py`, confirm against the actual Spring Boot schema (n
 
 Introduce only the minimal SQLAlchemy declarative models pricing actually reads/writes (not a full domain model set) — narrow surface, less staleness risk if the shared schema evolves elsewhere.
 
-**Phase 1e note**: `period_utilization`'s live query is pulled forward ahead of the rest of this package — it lives in `app/repositories/pricing_repository.py`, backed by the first-ever read-only SQLAlchemy models in this repo (`app/models/asset_category.py`/`asset.py`/`booking.py`), wired into the *existing* prototype call path (`app/services/pricing_client.py` → `ml-experiments/predict_price.py`) rather than waiting for `app/services/pricing/model.py` to exist. When this package is built, it **relocates** that repository logic rather than rebuilding it.
+**Phase 1e**: `period_utilization`'s live query is pulled forward ahead of this package — `app/repositories/pricing_repository.py`, first-ever read-only SQLAlchemy models, wired into the *existing* `pricing_client.py` → `predict_price.py` call path. This package **relocates**, not rebuilds, that logic when built.
 
 ### 5.4 Guardrail clamping
 
@@ -182,17 +182,19 @@ Read per-asset at prediction time (admin-editable via the asset's admin-portal t
 
 `model.py` loads `model.pkl` + `current.json` once (module-level or app-lifespan-scoped), not per-request.
 
-### 5.6 Reference metrics (Phase 1b baseline, synthetic data)
+### 5.6 Reference metrics (Phase 1d, synthetic data, 8 features)
 
-Offline-only, on synthetic data — expect this to move once Phase 3 seeds real historical bookings. Recorded here so a Phase 2 regression is easy to notice:
+Offline-only — expect this to move once Phase 3 seeds real historical bookings. Recorded here so a Phase 2 regression is easy to notice:
 
 | Category | MAE | R² |
 |---|---|---|
-| scissor lift | 5.49 | 0.969 |
-| excavator | 17.99 | 0.947 |
-| boom lift | 11.56 | 0.954 |
-| forklift | 4.80 | 0.958 |
-| **Overall** | **9.95** | **0.976** |
+| scissor lift | 5.09 | 0.971 |
+| excavator | 20.54 | 0.941 |
+| boom lift | 11.99 | 0.954 |
+| forklift | 5.07 | 0.949 |
+| **Overall** | **10.68** | **0.974** |
+
+Slightly higher MAE than the Phase 1b baseline (9.95) — expected, not a regression: two new real variance sources (`period_utilization`, `lead_time_days`) were added, not a fit quality drop. `period_utilization`/`lead_time_days` SHAP importance: 2.51/3.18 respectively (up from an initial 2.29/2.26 — see masterplan for the tuning story), still well below `duration_days` (40.3)/`capacity` (46.8)/`condition` (14.1) by design.
 
 ### 5.7 Security notes
 
@@ -241,11 +243,11 @@ Full rationale lives in `docs/dynamic-pricing-masterplan.md` — summarized here
 | No Alembic / no new tables | Spring Boot owns schema; Python maps onto existing tables only |
 | Sync SQLAlchemy + psycopg only | Matches `SPEC-project-setup.md`'s environment default; no async wiring for this feature |
 | Manual retrain now, full APScheduler later | Demo safety net now; scheduled retrain is Phase 3 scope |
-| `period_utilization` and `lead_time_days` both kept, despite being correlated | They answer different questions (is this window already claimed vs. how much notice did the booker give); a SHAP review (Phase 1d) compares which the model actually leans on, rather than assuming and dropping one upfront |
-| `period_utilization` grouped by category **+ spec-band**, not raw category | A fully-booked small-excavator fleet shouldn't make a large excavator look scarce; excavator/forklift key off `capacity`, scissor/boom lift key off `platform_height` |
-| Spec-band boundaries are fixed constants, not derived from current fleet distribution | Stable, reproducible bucketing that doesn't drift as the fleet composition changes; grounded in load-class/aerial-catalog-tier conventions (see `generate_synthetic_data.py` References) |
-| `booking_month`/seasonality: resolved, **not added** | `period_utilization` already captures realized seasonality (monsoon dip shows up as lower utilization) — a calendar feature would be largely redundant |
-| Fuel price: considered and **rejected** as a feature | Indirect/lagged signal (fuel cost → construction activity → demand, not a direct per-booking effect); would require a new external API dependency, conflicting with the in-process/no-outbound-calls architecture; on synthetic data specifically would be untrainable noise unless the generator fabricates a fuel-price-to-price correlation — a shakier "did you just make this up" risk than the existing grounded references |
+| `period_utilization`/`lead_time_days` both kept, despite correlation | Answer different questions; SHAP compares which the model leans on (see §5.6) |
+| `period_utilization` grouped by category **+ spec-band** | Raw category alone is misleading (small vs. large excavator); see §5.2 |
+| Spec-band boundaries are fixed constants | Reproducible, don't drift with fleet composition; see `pricing_tables.py` |
+| `booking_month`/seasonality: resolved, **not added** | `period_utilization` already captures realized seasonality |
+| Fuel price: considered and **rejected** | Indirect/lagged signal, needs a new external API dependency, untrainable on synthetic data without a fabricated correlation — see masterplan |
 
 **Non-goals**: renter-facing pricing API/UI, real geocoding, `purchaseYear` feature, `booking_month`/seasonality feature, fuel-price feature, Alembic migrations, async DB access, full auth/JWT stack (blocks nothing here, but the retrain path should not assume it's protected until one exists).
 
@@ -261,3 +263,4 @@ Full rationale lives in `docs/dynamic-pricing-masterplan.md` — summarized here
 | 1.2.1 | 2026-08-06 | Clarified outcomes: no public `/predict-price`; recommend API may expose `daily_rate` + app-layer `total_price` (not fabricated weekly); model still predicts per-day only. |
 | 1.3.0 | 2026-08-07 | Phase 1d/1e: added `period_utilization` (live category+spec-band booking-overlap aggregate, computed at prediction time, not a forecast) and `lead_time_days` (derived from `start_date − today`) to the feature schema (§5.2), plus fixed-constant spec-band bucketing (excavator/forklift by `capacity`, scissor/boom lift by `platform_height`) with no new persisted column. Documented that early-booking scarcity pricing is intentional, not a bug. Resolved `booking_month`/seasonality as **not added** (§5.2, §8) — superseded by `period_utilization`. Documented fuel price as considered-and-rejected (§3, §8). Added §5.8, a Phase 3 cold-start bootstrap → blend → per-category cutover design decision (no code yet). Added a third "confirm before implementing" open item to §5.3 (`BookingStatus.CONFIRMED` membership) and noted `period_utilization`'s live query is pulled forward into Phase 1e (`app/repositories/pricing_repository.py` + first-ever read-only SQLAlchemy models), ahead of and later relocated into this package. Clarified the header table's "out of scope" framing to distinguish seed *data* (still out of scope) from the Phase 3 design decision itself (in scope via §5.8). |
 | 1.3.1 | 2026-08-07 | Clarified §5.2's spec-band boundaries are an implementation decision, not locked to specific numbers — grounded in this repo's existing `CATEGORY_CAPACITY_KG`/`CATEGORY_PLATFORM_HEIGHT_M` ranges plus real-world conventions, sanity-checked via `generate_synthetic_data.py --strict`. Added a §6 Verification pointer to `ml-experiments/demo_scenarios.py`, a script-based live demo (condition/duration scenario pairs, raw vs. clamped output) for audiences who can't otherwise exercise `predict_price(...)` given it's intentionally in-process only — explicitly non-exhaustive, not a substitute for the unit tests or `shap_review.py`'s sweep coverage. |
+| 1.3.2 | 2026-08-07 | Phase 1d implemented and verified (all sanity/SHAP checks pass, 87 app tests pass, no per-category regression). Updated §5.6 with final metrics (MAE 10.68/R² 0.974 overall) and final SHAP importance numbers. Condensed §5.2/§5.3/§8's prose — full reasoning now lives only in the masterplan and in code comments (`pricing_tables.py`, `feature_schema.py`), this spec keeps only the contract an implementer needs (feature table, formulas, open items), per this doc's own "restates only what's needed" convention. No content removed, only de-duplicated — see masterplan for anything not fully spelled out here. |
