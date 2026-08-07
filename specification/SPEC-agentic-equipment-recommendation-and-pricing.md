@@ -497,6 +497,10 @@ Day 6 rehearsal: run **A + B** live; keep **C** for questions.
 
 ## 11.1 Knowledge graph (target capability)
 
+**As-built (HR-76):** Optional user-scoped KG after project-spec **indexing** (`final_doc_joiner` chunks). Normative child: [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md). Default `KG_APPLY_TRANSFORMS=false` (document nodes); full Ragas transforms only inside `KnowledgeGraphGenerator` when enabled. Live HTTP still owned by [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) (`user_id` required). Sequential reading map: [`README.md`](./README.md).
+
+**Target (this section):** broader offline catalog/historical-project KG, multi-hop for ranking/eval, optional online agent tools — not a substitute for Asset SQL / availability / `predict_price`.
+
 **Source:** *Building Natural Language and LLM Pipelines*, **Chapter 5 — Haystack Pipeline Development with Custom Components** (local EPUB: `Chapter 5_ Haystack Pipeline Development with Custom Components.epub`). Implementation reference in the book’s repo: `ch5/jupyter-notebooks/scripts/knowledge_graph_component.py` (`KnowledgeGraphGenerator`, `KnowledgeGraphSaver`) and `ch5/pyproject.toml` for the dependency set used with that chapter.
 
 ### Purpose in this feature
@@ -875,5 +879,6 @@ Chapter 7: **MCP** lets external agents discover deployed Haystack pipelines as 
 | 0.8.0 | 2026-08-05 | **Intake correction:** MVP is free-text/file + LLM decompose (not structured multi-need form); quantity expansion to unit-needs; **exactly one** `item` per unit-need (no top-N `items[]`); public API `POST .../from-project-spec`; child intake SPEC v0.2.0 |
 | 0.9.0 | 2026-08-06 | **PR review alignment:** pricing on recommend items is `daily_rate` + `total_price` (no fabricated `weekly_rate`); **FR-012/015** + **NFR-008** note threadpool offload; warm-up DI still follow-up |
 | 0.9.1 | 2026-08-07 | **As-built override on FR-040:** public `/from-project-spec` is indexing ingest per child indexing SPEC; recommend envelope deferred for reattach |
+| 0.9.2 | 2026-08-07 | §11.1 as-built pointer to SPEC-knowledge-graph (HR-76); sequential README map |
 
 When behaviour, API paths, tool names, or schedule gates change, bump this table and align OpenAPI / tests / execution plan in the same change set.

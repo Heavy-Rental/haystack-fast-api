@@ -73,11 +73,19 @@ Do **not** set `Content-Type: application/json` on multipart requests. Let Postm
 
 Use **Collection → Run collection** to execute all Tests tabs.
 
+## Required identity
+
+All requests must include **`user_id`** (JSON or form-data). Optional: **`user_name`**.
+
+Knowledge graph is **mandatory** on successful ingest. Artifacts land under `artifacts/kg/{user_id}/kg_{ingest_id}.json`. Full Ragas transforms only if `KG_APPLY_TRANSFORMS=true` (runs inside `KnowledgeGraphGenerator`). KG failure fails the request.
+
 ## Success body checklist
 
 ```json
 {
   "ingest_id": "ing_…",
+  "user_id": "user_demo",
+  "user_name": "Demo User",
   "data_kind": "unstructured | structured | mixed",
   "document_count": 1,
   "chunk_count": 1,
@@ -85,10 +93,13 @@ Use **Collection → Run collection** to execute all Tests tabs.
   "documents": [
     {
       "content_preview": "…",
-      "has_embedding": true
+      "has_embedding": true,
+      "meta": { "user_id": "user_demo", "ingest_id": "ing_…" }
     }
   ],
-  "warnings": ["Part 3 indexing complete: …"]
+  "kg_built": true,
+  "kg_transform_applied": false,
+  "warnings": ["Indexing complete …"]
 }
 ```
 

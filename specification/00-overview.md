@@ -7,8 +7,9 @@
 | **SPDD Ready** | Yes |
 | **Application** | `haystack-fast-api` |
 
-**Related specs:** [`01-domain.md`](./01-domain.md) · [`SPEC-project.md`](./SPEC-project.md) · [`SPEC-project-setup.md`](./SPEC-project-setup.md) · [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) · [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) · [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) · [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) · [`SPEC-recommendation-pipeline-testing-guide.md`](./SPEC-recommendation-pipeline-testing-guide.md) · [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md) · [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md)
+**Reading order (start here):** [`specification/README.md`](./README.md) — sequential paths matching runtime flow.
 
+**Related specs:** [`01-domain.md`](./01-domain.md) · [`SPEC-project.md`](./SPEC-project.md) · [`SPEC-project-setup.md`](./SPEC-project-setup.md) · [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) · [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) · [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) · [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) · [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) · [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md) · testing guides
 ## Vision
 
 Build software that addresses core economic and operational challenges of the heavy equipment rental industry—high utilization, accurate pricing, asset visibility, and sound capital decisions—grounded in real industry economics and case research.
@@ -40,9 +41,9 @@ The industry is capital-intensive. Success depends on:
 
 **MVP shape (product target):** free-text and/or project file (+ optional rental window) → LLM need decompose → quantity expansion to unit-needs → `Asset` SQL candidates → `Booking` / `BookingItem` availability → `predict_price()` → Haystack rank & rationale → **exactly one** `RecommendationItem` **per unit-need** (singular `item`).
 
-**As-built public route (2026-08-07):** `POST /api/v1/recommendations/from-project-spec` currently runs the **indexing** pipeline (classify structured/unstructured → convert → clean → split → embed → `InMemoryDocumentStore`) and returns **`IngestFromProjectSpecResponse`**. Normative live contract: [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md). FR-010 recommend remains **service-level** for tests and reattach.
+**As-built public route (2026-08-07+):** `POST /api/v1/recommendations/from-project-spec` requires **`user_id`**, runs **Packt dual-branch indexing** through `final_doc_joiner` → embed → **`InMemoryDocumentStore`**, then **always** builds a **user-scoped knowledge graph** (hard-fail on failure; see [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md)), and returns **`IngestFromProjectSpecResponse`**. Normative live contract: [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md). FR-010 recommend remains **service-level** for tests and reattach.
 
-**Target (post–6-day MVP, detail in feature SDD):** reattach recommend on unstructured path; richer converters; SuperComponents/Tools; optional LangGraph; offline knowledge graph enrichment after DocumentStore; async ML training trigger. Normative behaviour lives in feature SPECs—not here.
+**Target (later):** reattach recommend HTTP; Naive/hybrid RAG query; multi-agent fusion of store + KG; async ML training. Normative detail lives in feature SPECs—not here.
 
 ## Primary Stakeholders
 
@@ -59,21 +60,30 @@ Contractors, mechanics, yard staff, and capital teams remain industry stakeholde
 
 ## SDD Document Map
 
-Read in this order for new work:
+**Full sequential map (paths A–D + runtime diagram):** [`README.md`](./README.md).
 
-1. **This file** — vision, problem space, current product focus  
-2. [`01-domain.md`](./01-domain.md) — ubiquitous language, entities, invariants  
-3. [`SPEC-project.md`](./SPEC-project.md) — project identity, as-built structure  
-4. [`SPEC-project-setup.md`](./SPEC-project-setup.md) — stack, Postgres, uv, layering (normative environment)  
-5. Feature SPECs — behaviour, APIs, acceptance criteria  
+Short onboard order:
+
+1. [`README.md`](./README.md) — reading paths & live flow  
+2. **This file** — vision, as-built vs target  
+3. [`01-domain.md`](./01-domain.md) — ubiquitous language  
+4. [`SPEC-project.md`](./SPEC-project.md) · [`SPEC-project-setup.md`](./SPEC-project-setup.md)  
+5. **Live path:** [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) → [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md)  
 
 | Document layer | Owns |
 |----------------|------|
-| `00-overview` / `01-domain` | Vision, domain language, product focus at a glance |
-| `SPEC-project` / `SPEC-project-setup` | Repo identity, stack, layout, runbooks |
-| `SPEC-<feature>.md` | Normative requirements, contracts, acceptance |
+| `README` | Sequential reading order |
+| `00-overview` / `01-domain` | Vision, domain language |
+| `SPEC-project` / `SPEC-project-setup` | Repo identity, stack, env |
+| Indexing + knowledge-graph SPECs | **Live** project-spec HTTP flow |
+| Recommend / pricing SPECs | Deferred recommend + service FR-010 |
+| Parent agentic SPEC | Full product SDD |
 
-Do **not** duplicate FR tables, OpenAPI sketches, or day-by-day plans in foundation docs.
+Do **not** duplicate FR tables in foundation docs.
+
+---
+
+**Reading order:** [← Map](./README.md) · [Next: Domain →](./01-domain.md)
 
 ## Existing Research Assets
 

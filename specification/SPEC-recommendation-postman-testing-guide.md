@@ -351,5 +351,9 @@ Leave `NEED_DECOMPOSER=stub` for default local testing without keys.
 |---------|------|--------|
 | **1.0.0** | 2026-08-05 | Initial Postman-focused testing guide for recommendation API MVP |
 | **1.1.0** | 2026-08-07 | Marked **deferred**; live testing → `postman/README.md` / indexing SPEC |
+| **1.1.1** | 2026-08-07 | Sequential map; live requires `user_id` |
+
+**Reading order:** [Map](./README.md) · **Live Postman:** [`../postman/README.md`](../postman/README.md) (not this deferred guide)
+
 
 When the public API path, body shape, or expected status codes change, update **this guide** and the intake/pipeline SPECs in the **same change set**.

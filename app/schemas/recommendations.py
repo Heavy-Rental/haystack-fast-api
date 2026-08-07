@@ -17,6 +17,15 @@ class RecommendOptions(BaseModel):
 class RecommendFromProjectSpecRequest(BaseModel):
     """POST /api/v1/recommendations/from-project-spec JSON body."""
 
+    user_id: str = Field(
+        ...,
+        min_length=1,
+        description="Stable user identifier for tenanting documents and KG artifacts",
+    )
+    user_name: str | None = Field(
+        default=None,
+        description="Optional display name for audit / response echo",
+    )
     project_text: str = Field(
         ...,
         min_length=1,
@@ -30,11 +39,19 @@ class RecommendFromProjectSpecRequest(BaseModel):
     )
     options: RecommendOptions = Field(default_factory=RecommendOptions)
 
-    @field_validator("project_text", mode="before")
+    @field_validator("project_text", "user_id", mode="before")
     @classmethod
-    def strip_project_text(cls, value: object) -> object:
+    def strip_required_text(cls, value: object) -> object:
         if isinstance(value, str):
             return value.strip()
+        return value
+
+    @field_validator("user_name", mode="before")
+    @classmethod
+    def strip_optional_name(cls, value: object) -> object:
+        if isinstance(value, str):
+            text = value.strip()
+            return text or None
         return value
 
     @model_validator(mode="after")
@@ -44,6 +61,8 @@ class RecommendFromProjectSpecRequest(BaseModel):
                 raise ValueError("end_date must be on or after start_date")
         if not self.project_text:
             raise ValueError("project_text must not be empty")
+        if not self.user_id:
+            raise ValueError("user_id must not be empty")
         return self
 
 

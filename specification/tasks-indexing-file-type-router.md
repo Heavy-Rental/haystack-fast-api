@@ -71,4 +71,4 @@
 
 - [ ] T017 Optional reattach recommend after unstructured extract (restore `results_by_need` or separate route)
 - [ ] T018 Persistent DocumentStore / hybrid retrieval query path
-- [ ] T020 Knowledge graph after DocumentStore write (optional/offline; parent §11; `KG_ENABLED` / artifact dir)
+- [x] T020 Knowledge graph after post-join chunks (HR-76; see `SPEC-knowledge-graph.md` / `tasks-knowledge-graph.md`)
