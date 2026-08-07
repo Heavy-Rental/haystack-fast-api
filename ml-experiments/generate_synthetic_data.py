@@ -530,16 +530,41 @@ def run_sanity_checks(df: pd.DataFrame, plots_dir: Path, strict: bool) -> None:
     fig.savefig(plots_dir / "distance_effect_check.png")
     plt.close(fig)
 
+    # Ratio (price_per_day / baseDailyRate), not raw price_per_day -- same
+    # reason as distance_effect_check.png above: period_utilization/
+    # lead_time_days are secondary effects (FIRMNESS_SLOPE/
+    # LEAD_TIME_URGENCY_SLOPE, both deliberately small relative to
+    # category/capacity/duration -- see pricing_tables.py), so a raw-price
+    # scatter is dominated by those bigger drivers and the trend this plot
+    # exists to show gets buried in noise.
+    #
+    # Quantile bins (equal row count per bin), not equal-width -- both
+    # features are right-/left-skewed with a sparse tail (e.g. only ~20 of
+    # 5000 rows have lead_time_days >= 70), so equal-width bins leave the
+    # tail with 1-2 rows per bin -- not wrong data, just too few samples per
+    # bin to average out each row's individual noise term, which reads as
+    # meaningless scatter rather than the real trend. Quantile bins widen
+    # automatically in sparse regions to keep a stable sample size per bin.
     fig, ax = plt.subplots(figsize=(8, 5))
-    sns.scatterplot(data=df, x="period_utilization", y="price_per_day", hue="category", alpha=0.4, ax=ax)
-    ax.set_title("period_utilization vs price_per_day (expect upward trend)")
+    utilization_bins = pd.qcut(df["period_utilization"], 20, duplicates="drop")
+    by_utilization = (df["price_per_day"] / df["baseDailyRate"]).groupby(utilization_bins, observed=True).mean()
+    bin_midpoints = [interval.mid for interval in by_utilization.index]
+    ax.plot(bin_midpoints, by_utilization.values, marker=".", linestyle="none", alpha=0.8)
+    ax.set_xlabel("period_utilization")
+    ax.set_ylabel("price_per_day / baseDailyRate")
+    ax.set_title("period_utilization price effect (mean ratio by quantile bin, expect upward trend)")
     fig.tight_layout()
     fig.savefig(plots_dir / "period_utilization_effect_check.png")
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    sns.scatterplot(data=df, x="lead_time_days", y="price_per_day", hue="category", alpha=0.4, ax=ax)
-    ax.set_title("lead_time_days vs price_per_day (expect mild downward trend)")
+    lead_time_bins = pd.qcut(df["lead_time_days"], 20, duplicates="drop")
+    by_lead_time = (df["price_per_day"] / df["baseDailyRate"]).groupby(lead_time_bins, observed=True).mean()
+    bin_midpoints = [interval.mid for interval in by_lead_time.index]
+    ax.plot(bin_midpoints, by_lead_time.values, marker=".", linestyle="none", alpha=0.8)
+    ax.set_xlabel("lead_time_days")
+    ax.set_ylabel("price_per_day / baseDailyRate")
+    ax.set_title("lead_time_days price effect (mean ratio by quantile bin, expect mild downward trend)")
     fig.tight_layout()
     fig.savefig(plots_dir / "lead_time_effect_check.png")
     plt.close(fig)
