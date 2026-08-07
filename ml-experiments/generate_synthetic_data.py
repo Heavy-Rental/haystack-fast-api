@@ -21,6 +21,18 @@ References
   references) -- aerial ~72-80%, blended/general ~65-72%, earthmoving
   ~55-62%, generators up to 80%+ in peak periods (generators are not one of
   our 4 categories -- reference point only, not used).
+- Equipment-rental industry excavator weight classes (mini <3t, compact/midi
+  3-7t, standard 7-15t, large 15t+) -- a common categorization used across
+  major rental catalogs -- basis for pricing_tables.CAPACITY_BINS["excavator"]
+  (Phase 1d).
+- Counterbalance forklift capacity classes (roughly 1.5-2t / 2.5-3.5t /
+  3.5-5t within our fleet's 1-5t range) -- standard rental/warehouse forklift
+  capacity tiers -- basis for pricing_tables.CAPACITY_BINS["forklift"]
+  (Phase 1d).
+- Aerial-lift rental catalog height tiers -- scissor lifts commonly grouped
+  around ~19/26/32/40ft platform heights, boom lifts around ~40/60/80/100ft+
+  -- converted to meters to match Asset.platform_height's units -- basis for
+  pricing_tables.HEIGHT_BINS (Phase 1d).
 
 All figures below are defensible illustrative approximations derived from the
 above, not verbatim quotes -- see pricing_tables.py for the exact numbers and
@@ -37,6 +49,7 @@ import pandas as pd
 import seaborn as sns
 from faker import Faker
 
+import feature_schema as fs
 import pricing_tables as pt
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -188,6 +201,52 @@ def sample_booking_month(rng: np.random.Generator, n: int) -> np.ndarray:
     return rng.integers(1, 13, size=n)
 
 
+def sample_lead_time_days(rng: np.random.Generator, n: int) -> np.ndarray:
+    """Days between "today" (request time) and the booking's startDate
+    (Phase 1d). Right-skewed, same sampling approach as
+    duration_days/distance_km -- not derived from any real booking history."""
+    raw = rng.gamma(shape=pt.LEAD_TIME_GAMMA_SHAPE, scale=pt.LEAD_TIME_GAMMA_SCALE, size=n)
+    return np.clip(np.round(raw), pt.LEAD_TIME_MIN_DAYS, pt.LEAD_TIME_MAX_DAYS).astype(int)
+
+
+def compute_spec_bands(
+    categories: np.ndarray, capacity_kg: np.ndarray, platform_height_m: np.ndarray
+) -> np.ndarray:
+    """Category + spec-band label per row (Phase 1d), via the same
+    feature_schema.spec_band() the live production query will use later --
+    diagnostic/grouping column only, never fed to the model (see
+    feature_schema.py)."""
+    return np.array(
+        [
+            fs.spec_band(c, cap, height if not np.isnan(height) else None)
+            for c, cap, height in zip(categories, capacity_kg, platform_height_m)
+        ]
+    )
+
+
+def sample_period_utilization(
+    rng: np.random.Generator, categories: np.ndarray, lead_time_days: np.ndarray
+) -> np.ndarray:
+    """Live per-row utilization signal (Phase 1d), replacing the static
+    pricing_tables.CATEGORY_UTILIZATION as firmness_premium()'s input.
+
+    Modeled at the category level (not per spec-band) for the synthetic
+    generator: spec-band grouping is what the live production query (Phase
+    1e) uses to compute a real value against actual inventory; the model
+    itself never sees the spec_band label (see feature_schema.py), only the
+    resulting period_utilization number, so a category-level baseline is
+    sufficient to teach it the right price response. Baseline is
+    pricing_tables.CATEGORY_UTILIZATION, adjusted by lead_time_days (a longer
+    lead time means fewer bookings have accumulated against that far-off
+    window yet -- lower utilization; see pricing_tables.py) plus per-row
+    noise, clipped to [0, 1].
+    """
+    baseline = np.array([pt.CATEGORY_UTILIZATION[c] for c in categories])
+    adjustment = -pt.LEAD_TIME_UTILIZATION_SLOPE * (lead_time_days - pt.LEAD_TIME_UTILIZATION_PIVOT_DAYS)
+    noise = rng.normal(0, pt.PERIOD_UTILIZATION_NOISE_STD, size=len(categories))
+    return np.clip(baseline + adjustment + noise, 0.0, 1.0)
+
+
 def duration_discount_multiplier(duration_days: np.ndarray) -> np.ndarray:
     return pt.DISCOUNT_FLOOR + (1 - pt.DISCOUNT_FLOOR) * np.exp(
         -pt.DISCOUNT_RATE * (duration_days - 1)
@@ -202,16 +261,30 @@ def condition_multiplier(conditions: np.ndarray) -> np.ndarray:
     return np.array([pt.CONDITION_MULTIPLIER[c] for c in conditions])
 
 
-def firmness_premium(categories: np.ndarray) -> np.ndarray:
-    utilization = np.array([pt.CATEGORY_UTILIZATION[c] for c in categories])
-    return 1 + pt.FIRMNESS_SLOPE * (utilization - pt.FIRMNESS_PIVOT)
+def firmness_premium(period_utilization: np.ndarray) -> np.ndarray:
+    """Higher utilization -> firmer (higher) prices. As of Phase 1d, takes
+    the live per-row period_utilization directly rather than a static
+    per-category lookup -- same formula, live input."""
+    return 1 + pt.FIRMNESS_SLOPE * (period_utilization - pt.FIRMNESS_PIVOT)
 
 
 def distance_price_multiplier(distance_km: np.ndarray) -> np.ndarray:
     return 1 + pt.DISTANCE_PRICE_SLOPE * (distance_km - pt.DISTANCE_PIVOT_KM)
 
 
+def lead_time_urgency_multiplier(lead_time_days: np.ndarray) -> np.ndarray:
+    """Small, independent last-minute-urgency premium (Phase 1d) -- see
+    pricing_tables.LEAD_TIME_URGENCY_SLOPE for why this exists separately
+    from the (larger) period_utilization-mediated effect. Short notice ->
+    small premium; long notice -> small discount."""
+    return 1 - pt.LEAD_TIME_URGENCY_SLOPE * (lead_time_days - pt.LEAD_TIME_URGENCY_PIVOT_DAYS)
+
+
 def noise_std_frac(categories: np.ndarray) -> np.ndarray:
+    """Uses the static per-category CATEGORY_UTILIZATION (not the live
+    per-row period_utilization) -- this is about how much scatter a
+    category's fleet-wide long-run utilization level implies, a distinct use
+    from firmness_premium()'s live per-booking signal."""
     utilization = np.array([pt.CATEGORY_UTILIZATION[c] for c in categories])
     return pt.NOISE_SCALE * (pt.NOISE_PIVOT - utilization)
 
@@ -226,15 +299,20 @@ def compute_price_per_day(
     categories: np.ndarray,
     conditions: np.ndarray,
     distance_km: np.ndarray,
+    period_utilization: np.ndarray,
+    lead_time_days: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
     discount = duration_discount_multiplier(duration_days)
     season = seasonality_multiplier(categories, months)
     cond_mult = condition_multiplier(conditions)
-    firmness = firmness_premium(categories)
+    firmness = firmness_premium(period_utilization)
     distance_mult = distance_price_multiplier(distance_km)
+    urgency = lead_time_urgency_multiplier(lead_time_days)
     noise = rng.normal(0, noise_std_frac(categories))
 
-    raw_price = base_rates * discount * season * cond_mult * firmness * distance_mult * (1 + noise)
+    raw_price = (
+        base_rates * discount * season * cond_mult * firmness * distance_mult * urgency * (1 + noise)
+    )
     price_clamped = (raw_price < min_rates) | (raw_price > max_rates)
     price_per_day = np.round(np.clip(raw_price, min_rates, max_rates), 2)
     return price_per_day, price_clamped
@@ -257,6 +335,9 @@ def assemble_dataframe(
     booking_months,
     duration_days,
     distance_km,
+    spec_bands,
+    period_utilization,
+    lead_time_days,
     base_rates,
     min_rates,
     max_rates,
@@ -275,6 +356,9 @@ def assemble_dataframe(
             "booking_month": booking_months,
             "duration_days": duration_days,
             "distance_km": distance_km,
+            "spec_band": spec_bands,
+            "period_utilization": period_utilization,
+            "lead_time_days": lead_time_days,
             "baseDailyRate": base_rates,
             "minDailyRate": min_rates,
             "maxDailyRate": max_rates,
@@ -346,6 +430,27 @@ def run_sanity_checks(df: pd.DataFrame, plots_dir: Path, strict: bool) -> None:
         print(f"  [{status}] near(<=5km) ratio={near_ratio:.3f}, far(>=35km) ratio={far_ratio:.3f}")
     else:
         print("  [WARN] not enough rows in the near/far distance buckets to check")
+
+    print("\n[Check] period_utilization effect (mean price_per_day / baseDailyRate by utilization tercile):")
+    print(f"  range: [{df['period_utilization'].min():.3f}, {df['period_utilization'].max():.3f}]")
+    terciles = pd.qcut(df["period_utilization"], 3, labels=["low", "mid", "high"])
+    tercile_ratio = (df["price_per_day"] / df["baseDailyRate"]).groupby(terciles, observed=True).mean()
+    utilization_monotonic = tercile_ratio["low"] < tercile_ratio["mid"] < tercile_ratio["high"]
+    status = "OK" if utilization_monotonic else "WARN"
+    ok = ok and utilization_monotonic
+    print(f"  [{status}] {tercile_ratio.round(3).to_dict()} (expect low < mid < high)")
+
+    print("\n[Check] lead_time_days effect (mean price_per_day / baseDailyRate, near vs far lead time):")
+    near_lead = df["lead_time_days"] <= 5
+    far_lead = df["lead_time_days"] >= 40
+    if near_lead.any() and far_lead.any():
+        near_lead_ratio = (df.loc[near_lead, "price_per_day"] / df.loc[near_lead, "baseDailyRate"]).mean()
+        far_lead_ratio = (df.loc[far_lead, "price_per_day"] / df.loc[far_lead, "baseDailyRate"]).mean()
+        status = "OK" if near_lead_ratio > far_lead_ratio else "WARN"
+        ok = ok and status == "OK"
+        print(f"  [{status}] near(<=5d) ratio={near_lead_ratio:.3f}, far(>=40d) ratio={far_lead_ratio:.3f} (expect near > far)")
+    else:
+        print("  [WARN] not enough rows in the near/far lead-time buckets to check")
 
     print("\n[Check] Guardrail clamping:")
     clamp_rate_overall = df["price_clamped"].mean()
@@ -425,6 +530,20 @@ def run_sanity_checks(df: pd.DataFrame, plots_dir: Path, strict: bool) -> None:
     fig.savefig(plots_dir / "distance_effect_check.png")
     plt.close(fig)
 
+    fig, ax = plt.subplots(figsize=(8, 5))
+    sns.scatterplot(data=df, x="period_utilization", y="price_per_day", hue="category", alpha=0.4, ax=ax)
+    ax.set_title("period_utilization vs price_per_day (expect upward trend)")
+    fig.tight_layout()
+    fig.savefig(plots_dir / "period_utilization_effect_check.png")
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    sns.scatterplot(data=df, x="lead_time_days", y="price_per_day", hue="category", alpha=0.4, ax=ax)
+    ax.set_title("lead_time_days vs price_per_day (expect mild downward trend)")
+    fig.tight_layout()
+    fig.savefig(plots_dir / "lead_time_effect_check.png")
+    plt.close(fig)
+
     print(f"\nPlots written to {plots_dir}")
     print(f"\nOverall: {'[OK] all checks passed' if ok else '[WARN] one or more checks out of target range'}")
 
@@ -449,6 +568,9 @@ def main() -> None:
     duration_days = sample_duration_days(rng, args.rows)
     booking_months = sample_booking_month(rng, args.rows)
     distance_km = sample_distance_km(rng, args.rows)
+    lead_time_days = sample_lead_time_days(rng, args.rows)
+    spec_bands = compute_spec_bands(categories, capacity_kg, platform_height_m)
+    period_utilization = sample_period_utilization(rng, categories, lead_time_days)
     price_per_day, price_clamped = compute_price_per_day(
         rng,
         base_rates,
@@ -459,6 +581,8 @@ def main() -> None:
         categories,
         conditions,
         distance_km,
+        period_utilization,
+        lead_time_days,
     )
     asset_ids, booking_ids = generate_ids(args.rows, fake)
 
@@ -473,6 +597,9 @@ def main() -> None:
         booking_months,
         duration_days,
         distance_km,
+        spec_bands,
+        period_utilization,
+        lead_time_days,
         base_rates,
         min_rates,
         max_rates,
