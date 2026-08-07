@@ -1,0 +1,623 @@
+{
+  "info": {
+    "_postman_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+    "name": "Indexing Pipeline (from-project-spec)",
+    "description": "Postman collection for POST /api/v1/recommendations/from-project-spec after Parts 1–3 (classify → convert → clean → split → embed → write).\n\n**Import:** Collection + environment `Indexing-Pipeline-Local`.\n**Server:** `uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload` from `haystack-fast-api/`.\n**Files:** For multipart requests, attach fixtures from `postman/fixtures/` (see each request description).\n\n**Success shape:** `ingest_id`, `data_kind`, `document_count`, `chunk_count`, `documents_written`, `documents[].has_embedding`.\n**Not returned:** `recommendation_id` / `results_by_need` (recommend path deferred).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "ingestPath",
+      "value": "/api/v1/recommendations/from-project-spec"
+    }
+  ],
+  "item": [
+    {
+      "name": "00 Health",
+      "item": [
+        {
+          "name": "01 GET Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Body has status field', function () {",
+                  "    const j = pm.response.json();",
+                  "    pm.expect(j).to.have.property('status');",
+                  "    pm.expect(['ok', 'degraded']).to.include(j.status);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health",
+            "description": "Sanity check. `status` may be `degraded` if Postgres is down; indexing still works."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01 Happy path — JSON (unstructured)",
+      "item": [
+        {
+          "name": "02 POST JSON project_text (unstructured)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('ingest_id prefix', function () {",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "});",
+                  "pm.test('data_kind unstructured', function () {",
+                  "    pm.expect(j.data_kind).to.eql('unstructured');",
+                  "});",
+                  "pm.test('wrote embedded chunks', function () {",
+                  "    pm.expect(j.document_count).to.be.at.least(1);",
+                  "    pm.expect(j.chunk_count).to.be.at.least(1);",
+                  "    pm.expect(j.documents_written).to.be.at.least(1);",
+                  "    pm.expect(j.documents).to.be.an('array').that.is.not.empty;",
+                  "    pm.expect(j.documents[0].has_embedding).to.eql(true);",
+                  "    pm.expect(j.documents[0].content_preview.length).to.be.at.least(1);",
+                  "});",
+                  "pm.test('no legacy recommend envelope', function () {",
+                  "    pm.expect(j).to.not.have.property('recommendation_id');",
+                  "    pm.expect(j).to.not.have.property('results_by_need');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project_text\": \"Indoor elevated work ~8m for scissors lift\",\n  \"start_date\": \"2026-09-01\",\n  \"end_date\": \"2026-09-12\",\n  \"options\": {\n    \"include_pricing\": true\n  }\n}\n"
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "JSON free-text is treated as unstructured `text/plain`.\n\nExpect: `data_kind=unstructured`, `documents_written >= 1`, `has_embedding=true`."
+          },
+          "response": []
+        },
+        {
+          "name": "03 POST JSON project_text (no dates)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('unstructured ingest', function () {",
+                  "    pm.expect(j.data_kind).to.eql('unstructured');",
+                  "    pm.expect(j.documents_written).to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project_text\": \"Fork lift for warehouse loading\"\n}\n"
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Minimal JSON body (dates optional for Part 3)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 Happy path — multipart files",
+      "item": [
+        {
+          "name": "04 POST multipart .txt (unstructured)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('unstructured file', function () {",
+                  "    pm.expect(j.data_kind).to.eql('unstructured');",
+                  "    pm.expect(j.filenames.join(' ')).to.include('project.txt');",
+                  "    pm.expect(j.documents_written).to.be.at.least(1);",
+                  "    pm.expect(j.documents[0].has_embedding).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "description": "Select postman/fixtures/project.txt",
+                  "type": "file",
+                  "src": "fixtures/project.txt"
+                },
+                {
+                  "key": "start_date",
+                  "value": "2026-09-01",
+                  "type": "text"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2026-09-12",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "**Body → form-data** (do NOT set Content-Type manually).\n\n| Key | Type | Value |\n|-----|------|-------|\n| `file` | File | `postman/fixtures/project.txt` |\n| `start_date` | Text | `2026-09-01` (optional) |\n| `end_date` | Text | `2026-09-12` (optional) |\n\nIf the file field is empty after import, click **Select Files** and choose `postman/fixtures/project.txt`."
+          },
+          "response": []
+        },
+        {
+          "name": "05 POST multipart .md (unstructured)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('markdown unstructured', function () {",
+                  "    pm.expect(j.data_kind).to.eql('unstructured');",
+                  "    pm.expect(j.documents_written).to.be.at.least(1);",
+                  "    const preview = (j.documents[0].content_preview || '').toLowerCase();",
+                  "    pm.expect(preview.includes('scissors') || preview.includes('boom') || preview.includes('project')).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "description": "Select postman/fixtures/brief.md",
+                  "type": "file",
+                  "src": "fixtures/brief.md"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Attach `postman/fixtures/brief.md`."
+          },
+          "response": []
+        },
+        {
+          "name": "06 POST multipart .csv (structured)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('csv structured', function () {",
+                  "    pm.expect(j.data_kind).to.eql('structured');",
+                  "    pm.expect(j.structured_count).to.be.at.least(1);",
+                  "    pm.expect(j.structured_document_count).to.be.at.least(1);",
+                  "    pm.expect(j.documents_written).to.be.at.least(1);",
+                  "    pm.expect(j.documents[0].has_embedding).to.eql(true);",
+                  "    pm.expect(j.documents[0].content_preview).to.include('Boom');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "description": "Select postman/fixtures/needs.csv",
+                  "type": "file",
+                  "src": "fixtures/needs.csv"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Attach `postman/fixtures/needs.csv`.\n\nExpect: `data_kind=structured`."
+          },
+          "response": []
+        },
+        {
+          "name": "07 POST multipart .json (structured)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('json structured', function () {",
+                  "    pm.expect(j.data_kind).to.eql('structured');",
+                  "    pm.expect(j.documents_written).to.be.at.least(1);",
+                  "    pm.expect(j.documents[0].content_preview.toLowerCase()).to.include('excavator');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "description": "Select postman/fixtures/needs.json",
+                  "type": "file",
+                  "src": "fixtures/needs.json"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Attach `postman/fixtures/needs.json`."
+          },
+          "response": []
+        },
+        {
+          "name": "08 POST multipart file + project_text (mixed possible)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('both sources classified', function () {",
+                  "    pm.expect(j.structured_count + j.unstructured_count).to.be.at.least(2);",
+                  "    pm.expect(['structured', 'unstructured', 'mixed']).to.include(j.data_kind);",
+                  "    pm.expect(j.documents_written).to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "description": "Select postman/fixtures/needs.csv",
+                  "type": "file",
+                  "src": "fixtures/needs.csv"
+                },
+                {
+                  "key": "project_text",
+                  "value": "Also need one excavator for trench work.",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "CSV (structured) + free-text (unstructured) → often `data_kind=mixed`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03 Negative cases (400)",
+      "item": [
+        {
+          "name": "09 POST empty project_text (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test('shared error shape', function () {",
+                  "    const j = pm.response.json();",
+                  "    pm.expect(j.error).to.eql('bad_request');",
+                  "    pm.expect(j.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project_text\": \"   \"\n}\n"
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Whitespace-only text → 400."
+          },
+          "response": []
+        },
+        {
+          "name": "10 POST missing project_text (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('shared error shape', function () {",
+                  "    pm.expect(j.error).to.eql('bad_request');",
+                  "    pm.expect(j.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}\n"
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Empty JSON object → 400."
+          },
+          "response": []
+        },
+        {
+          "name": "11 POST bad date window (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('error mentions dates', function () {",
+                  "    pm.expect(j.error).to.eql('bad_request');",
+                  "    pm.expect(j.message.toLowerCase()).to.match(/end_date|start_date/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project_text\": \"Need an excavator\",\n  \"start_date\": \"2026-09-12\",\n  \"end_date\": \"2026-09-01\"\n}\n"
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "`end_date` before `start_date` → 400."
+          },
+          "response": []
+        },
+        {
+          "name": "12 POST unsupported file type (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('unsupported message', function () {",
+                  "    pm.expect(j.error).to.eql('bad_request');",
+                  "    pm.expect(j.message.toLowerCase()).to.match(/unsupported|unclassified/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "description": "Select postman/fixtures/unsupported.bin",
+                  "type": "file",
+                  "src": "fixtures/unsupported.bin"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Attach `postman/fixtures/unsupported.bin` → 400."
+          },
+          "response": []
+        },
+        {
+          "name": "13 POST empty file (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('shared error shape', function () {",
+                  "    pm.expect(j.error).to.eql('bad_request');",
+                  "    pm.expect(j.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "description": "Select postman/fixtures/empty.txt",
+                  "type": "file",
+                  "src": "fixtures/empty.txt"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Attach `postman/fixtures/empty.txt` (0 bytes) → 400."
+          },
+          "response": []
+        },
+        {
+          "name": "14 POST multipart with no fields (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('shared error shape', function () {",
+                  "    pm.expect(j.error).to.eql('bad_request');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "project_text",
+                  "value": "",
+                  "type": "text",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Empty multipart (no file, no text) → 400."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('Response time under 10s', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(10000);",
+          "});"
+        ]
+      }
+    }
+  ]
+}

@@ -3,20 +3,21 @@
 | Field | Value |
 |-------|--------|
 | **Document type** | Feature SDD (stage slice) |
-| **Status** | MVP contract revised (v0.2.0) — free-text/file intake; structured multi-need form **removed** as public UX |
+| **Status** | **Breaking (2026-08-07, updated 0.4.0):** Live `POST .../from-project-spec` runs the **indexing** pipeline (Parts 1–3: classify → convert → embed → write) and returns **`IngestFromProjectSpecResponse`**. Normative live contract: [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md). Recommend envelope (`results_by_need`) below is **deferred for reattach** (service-level FR-010 still exists). |
 | **Feature id** | `recommendation-intake` |
 | **Workspace** | `/workspaces/haystack-fast-api` |
 | **Application module** | `haystack-fast-api` |
 | **Python package** | `app` |
 | **Spec location** | `specification/SPEC-recommendation-intake.md` |
-| **As-built modules** | `app/api/recommendations.py`, `app/schemas/recommendations.py`, `app/services/recommendations.py`, `app/services/need_decomposer.py` |
-| **Tests** | `tests/test_recommendations_intake.py` |
+| **As-built modules (live HTTP)** | `app/api/recommendations.py`, `app/services/indexing.py`, `app/schemas/indexing.py`, `app/pipelines/indexing/*` |
+| **As-built modules (recommend reattach / service)** | `app/schemas/recommendations.py`, `app/services/recommendations.py`, `app/services/need_decomposer.py`, `app/pipelines/intake_front.py` |
+| **Tests** | `tests/test_recommendations_intake.py` (**HTTP ingest**); recommend service tests in `tests/test_recommend_pipeline_mvp.py` |
 | **Parent feature** | [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) |
 | **Depends on** | [`SPEC-project.md`](./SPEC-project.md), [`SPEC-project-setup.md`](./SPEC-project-setup.md), [`01-domain.md`](./01-domain.md) |
-| **Related** | [`SPEC-recommendation-intake-and-pipeline-front.md`](./SPEC-recommendation-intake-and-pipeline-front.md); [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md) (Postman); [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md); [`00-overview.md`](./00-overview.md) |
+| **Related** | [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) (**live route**); [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md); [`../postman/README.md`](../postman/README.md) (live Postman); [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md) (**deferred** recommend Postman); [`00-overview.md`](./00-overview.md) |
 | **Audience** | Engineers and agents implementing or consuming intake; portal / Spring integrators |
 
-**Read [`SPEC-project.md`](./SPEC-project.md) and [`SPEC-project-setup.md`](./SPEC-project-setup.md) first.** Domain language: [`01-domain.md`](./01-domain.md). Full recommendation pipeline (Asset SQL, availability, `predict_price()`, Haystack ranking) remains normative in the **parent** agentic SPEC.
+**Read [`SPEC-project.md`](./SPEC-project.md) and [`SPEC-project-setup.md`](./SPEC-project-setup.md) first.** Domain language: [`01-domain.md`](./01-domain.md).
 
 ---
 
@@ -24,71 +25,99 @@
 
 | Document | Owns |
 |----------|------|
-| **This SPEC** | Public intake API, free-text/file accept, validation, LLM need decomposition interface, **quantity expansion**, response envelope with **exactly one ranked item per unit-need**, layering, intake tests |
-| Parent agentic SPEC | End-to-end recommendation (candidates → availability → price → rank), catalog rules, demo scenarios, KG/agents, deployment |
+| [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) | **Live** public route behaviour and **ingest** response shape |
+| **This SPEC** | Request body shapes; validation notes; **deferred** recommend response (`results_by_need` / singular `item`) for reattach; historical intake narrative |
+| [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) | FR-010.1–8 **service-level** recommend graph |
+| Parent agentic SPEC | End-to-end product vision, catalog, target KG |
 | Dynamic pricing SPEC | Production `predict_price()` |
 | Foundation `00` / `01` | Vision and ubiquitous language |
 
-When intake and parent conflict on **public intake contract**, **this SPEC wins**; update both in the same change set.
+**Conflict rule:** For the **live** HTTP response of `POST .../from-project-spec`, the **indexing SPEC wins**. Sections in this file marked **deferred** describe the pre-reroute / reattach recommend contract and MUST NOT be treated as current as-built HTTP behaviour.
+
+---
+
+## Live as-built (HTTP) — pointer
+
+**Default path today:**
+
+```text
+POST /from-project-spec → IndexingIngestService
+  → classify → convert → clean → split → embed → write
+  → IngestFromProjectSpecResponse (ingest_id, data_kind, documents_written, …)
+```
+
+Full FRs, MIME map, and field tables: **[`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md)**.  
+Manual tests: **[`../postman/README.md`](../postman/README.md)**.
+
+Request shapes (JSON / multipart) in §6.1 **Request** still apply to the live route.  
+§6.1 **Success response** tables that show `recommendation_id` / `results_by_need` are **deferred** (reattach).
 
 ---
 
 ## 1. Purpose
 
-This specification defines the **Intake** stage of equipment recommendation in `haystack-fast-api`:
+### 1.1 Live (indexing)
 
-1. Accept **unstructured project input** from the portal: a **single free-text box** (`project_text`) and/or an **uploaded file** of unstructured text, plus optional **rental start/end dates**.
-2. **Extract text** from the file when provided (MVP: plain text / markdown; PDF/DOCX via converters when enabled).
-3. Run an **LLM need decomposer** that turns unstructured text into one or more **internal needs** (description, optional equipment hints, optional **quantity**).
-4. **Expand quantity**: if a decomposed need has `quantity = N` (*N* ≥ 1), produce **N unit-needs**. `RecommendationItem` has **no** `quantity` field—each unit is its own response row.
-5. Hand each unit-need to the recommendation pipeline (later stages) and return **`results_by_need`** where each entry has **exactly one** ranked `item` (or `null` if no match / stub).
+1. Accept project input: free-text and/or file (+ optional dates).
+2. Classify structured vs unstructured; convert; vectorize; write to DocumentStore.
+3. Return **ingest** metadata (`ingest_id`, `data_kind`, chunk/write counts, previews).
 
-**Corrected product intent:** MVP UI is **not** a repeatable structured “add another need” form. Structured needs exist only **after** LLM decomposition (internal).
+### 1.2 Deferred (recommend reattach)
+
+Historical / target intake for equipment recommendation:
+
+1. Accept **unstructured project input** from the portal.
+2. **Extract text** / convert files.
+3. **LLM need decomposer** → internal needs (optional quantity).
+4. **Expand quantity** → unit-needs; no quantity on `RecommendationItem`.
+5. Return **`results_by_need`** with singular **`item`** per unit-need.
+
+**Product intent (unchanged):** MVP UI is **not** a repeatable structured “add another need” form.
 
 ---
 
 ## 2. Outcomes
 
-When this specification is implemented and followed:
+### 2.1 Live
 
-- A client can submit free-text and/or a file (+ optional ISO dates) to a documented REST endpoint.
-- Empty text (and empty extract) fail with **`{"error","message"}`** and HTTP **400**.
-- Successful responses include `recommendation_id`, echoed dates, and **`results_by_need`**.
-- Each `results_by_need` entry has singular **`item`** (`RecommendationItem | null`)—**never** a multi-rank `items[]` list of alternatives.
-- Quantity *N* from decomposition yields **N** unit-need rows (unique `need_id`s), each with at most one item.
-- Routers stay thin; orchestration lives in services / pipelines.
+- Client can submit free-text and/or file (+ optional ISO dates).
+- Empty / unsupported / unclassifiable input → **400** shared error JSON.
+- Success → **`ingest_id`**, `data_kind`, `documents_written`, chunk previews with `has_embedding` (see indexing SPEC).
+- Routers stay thin; orchestration in services / pipelines.
+
+### 2.2 Deferred (recommend)
+
+- Success would include `recommendation_id`, echoed dates, **`results_by_need`** with singular **`item`**.
+- Quantity *N* → *N* unit-need rows. Not returned by the **default** HTTP path until reattach.
 
 ---
 
 ## 3. Scope
 
-### 3.1 In scope (MVP)
+### 3.1 In scope (live HTTP)
 
 | Area | Requirement |
 |------|-------------|
 | **Endpoint** | `POST /api/v1/recommendations/from-project-spec` |
-| **JSON body** | `project_text`, optional `start_date` / `end_date`, optional `options` |
-| **Multipart** | `file` (+ optional `project_text`, dates, options fields) |
-| **UI alignment** | Single free-text box **or** file upload (not multi-row structured form) |
-| **Decompose** | LLM (or injectable interface) → internal needs with optional quantity |
-| **Quantity expansion** | *N* → *N* unit-needs; no quantity on `RecommendationItem` |
-| **Response** | `results_by_need[].item` singular; exactly one ranked choice when matched |
-| **Validation** | Non-empty source text; date window; shared error JSON; unsupported media → 400 |
-| **Layering** | `api` → `services` → (future) `pipelines` |
-| **Tests** | Free-text happy path, empty, dates, quantity expansion, singular `item`, multipart text file |
+| **JSON / multipart request** | Same fields as before (`project_text`, `file`, dates, options) |
+| **Pipeline** | Indexing (see indexing SPEC) |
+| **Response** | `IngestFromProjectSpecResponse` |
+| **Tests** | `tests/test_recommendations_intake.py` (ingest) |
 
-### 3.2 Out of scope (this SPEC)
+### 3.2 Deferred (recommend reattach)
 
-- Asset SQL, Booking availability, `predict_price()`, production Bedrock ranking fill (parent SPEC).
+| Area | Notes |
+|------|--------|
+| Decompose + quantity expansion | Service-level `RecommendationService` / `intake_front` |
+| Response `results_by_need[].item` | Documented in §6 deferred tables |
+| FR-I-004 … FR-I-008, FR-I-014 | Apply when recommend is reattached |
+
+### 3.3 Out of scope (this SPEC)
+
+- Asset SQL, Booking availability, production Bedrock ranking fill (parent / pipeline SPEC).
 - Auth / JWT, payment, booking writes, add-to-cart.
-- Portal React implementation (contract is API + UX description only).
-- Returning top-*N* alternative equipment lists per need.
-
-### 3.3 Stub behaviour (as-built until ranking wired)
-
-- **Need decomposer:** injectable. Default `StubNeedDecomposer` treats the full source text as **one** need with `quantity = 1` (tests may inject multi-need / quantity &gt; 1). Production MUST use an LLM decomposer when ranking is live (parent).
-- **Per unit-need result:** `item: null` + warning that candidate selection / availability / pricing / ranking are not wired yet.
-- Removing the warning without providing a real ranked `item` is non-compliant once the pipeline is claimed complete.
+- Knowledge graph (parent §11; indexing tasks T020).
+- Portal React implementation.
 
 ---
 
@@ -96,45 +125,52 @@ When this specification is implemented and followed:
 
 | Actor | Goal |
 |-------|------|
-| **Customer / portal** | Paste project text or upload a file (+ optional dates) → recommendations |
-| **Intake / decomposer** | Turn unstructured text into unit-needs (after quantity expansion) |
-| **Recommendation pipeline** | For each unit-need, select **exactly one** equipment recommendation (or none) |
+| **Customer / portal** | Submit project text/file → **today:** ingest/index; **target:** recommendations |
+| **Indexing pipeline** | Classify, convert, vectorize, write (live) |
+| **Intake / decomposer** | Turn text into unit-needs (**deferred** on HTTP) |
+| **Recommendation pipeline** | One equipment choice per unit-need (**service-level / deferred HTTP**) |
 
 ### User stories
 
-1. **As a customer**, I paste a project description into one free-text box so that I do not have to fill a multi-row equipment form.
-2. **As a customer**, I upload a project file so that the same pipeline decomposes it into equipment needs.
-3. **As the system**, when the text implies two scissors lifts, I create **two** unit-needs and return **two** rows, each with **one** `RecommendationItem` (no quantity field on the item).
+1. **As a customer**, I paste project text so the system **indexes** it (live) and later can recommend equipment (deferred).
+2. **As a customer**, I upload a project file (txt/md/csv/…) so it is classified and vectorized.
+3. **As the system (deferred)**, when text implies two scissors lifts, I create two unit-need rows each with one `RecommendationItem`.
 4. **As a client**, when text is empty or dates are invalid, I receive **400** with a shared error shape.
 
 ---
 
 ## 5. Functional requirements
 
+### 5.1 Live (HTTP) — also see indexing SPEC FR-IX-*
+
 | ID | Requirement |
 |----|-------------|
-| **FR-I-001** | The service MUST accept `POST /api/v1/recommendations/from-project-spec` as JSON and/or `multipart/form-data` with unstructured **`project_text`** and/or **`file`**, plus optional `start_date` / `end_date` (ISO 8601 date). (Parent **FR-001**, **FR-002**) |
-| **FR-I-002** | At least one non-empty source of text is required after combining/extracting `project_text` and file content; otherwise **400**. |
-| **FR-I-003** | MVP file types: `text/plain`, `text/markdown` (and `text/*` plain extracts). PDF/DOCX SHOULD be supported via converters when enabled; unsupported types → **400**. |
-| **FR-I-004** | The service MUST run a **need decomposer** (LLM in production) that maps source text → one or more internal needs (`need_id`, `description`, optional `equipment_hints`, optional `quantity` ≥ 1). |
-| **FR-I-005** | **Quantity expansion:** for each internal need with `quantity = N`, expand into **N unit-needs** before ranking. **`RecommendationItem` MUST NOT include `quantity`.** (Parent **FR-006**) |
-| **FR-I-006** | Unit-need `need_id` scheme: if *N* = 1, use `base_need_id`; if *N* &gt; 1, use `{base_need_id}__u{i}` for *i* = 1..*N*. |
-| **FR-I-007** | Successful responses MUST use `results_by_need` with one entry per **unit-need**, order preserved. |
-| **FR-I-008** | Each entry MUST expose singular **`item`**: exactly **one** `RecommendationItem` when a match is selected, or **`null`** when no match / pipeline stub. MUST NOT return an array of ranked alternatives per need. (Parent **FR-007**) |
-| **FR-I-009** | Optional `options.include_pricing` (default `true`) MUST be accepted. |
+| **FR-I-001** | The service MUST accept `POST /api/v1/recommendations/from-project-spec` as JSON and/or `multipart/form-data` with **`project_text`** and/or **`file`**, plus optional `start_date` / `end_date`. |
+| **FR-I-009** | Optional `options.include_pricing` (default `true`) MUST be accepted (ignored for ranking until reattach). |
 | **FR-I-010** | If both dates are present, `end_date` MUST be on or after `start_date`; otherwise **400**. |
-| **FR-I-011** | Errors use `{"error","message"}`; validation and empty extract → **400**. |
-| **FR-I-012** | Routers stay thin; no SQL/Haystack graph in handlers. Async handlers MUST still **await** an offloaded call to the sync recommendation service (`run_in_threadpool` or equivalent) so pipeline/LLM I/O does not block the ASGI event loop (see pipeline **FR-P-012**). |
-| **FR-I-013** | Public structured `needs[]` / “add another need” form body is **not** the MVP contract (removed). |
-| **FR-I-014** | When a selected item includes pricing, payload fields follow pipeline **FR-P-011**: `daily_rate`, `total_price` (estimated total for the request duration), `currency`, `deposit_rate`, `model_version`, `explanation`. MUST NOT include fabricated `weekly_rate`. |
+| **FR-I-011** | Errors use `{"error","message"}`; validation and empty/unclassified sources → **400**. |
+| **FR-I-012** | Routers stay thin. Async handlers MUST **await** `run_in_threadpool` (or equivalent) for the sync service (currently **`IndexingIngestService`**). |
+| **FR-I-013** | Public structured `needs[]` / “add another need” form body is **not** the MVP contract. |
+| **FR-I-015** | **Live** successful responses MUST follow the indexing SPEC (`ingest_id`, …). MUST NOT require `results_by_need` on the default path. |
+
+### 5.2 Deferred (recommend reattach)
+
+| ID | Requirement | Status |
+|----|-------------|--------|
+| **FR-I-002** | Non-empty source after extract for recommend path | Deferred |
+| **FR-I-003** | File types for recommend extract (expanded types now via indexing MIME map) | Superseded for live by indexing §3; deferred for recommend-only rules |
+| **FR-I-004** | Need decomposer | Deferred on HTTP; available service-level |
+| **FR-I-005** | Quantity expansion | Deferred on HTTP |
+| **FR-I-006** | Unit-need id scheme | Deferred on HTTP |
+| **FR-I-007** | `results_by_need` response | **Deferred** — not live |
+| **FR-I-008** | Singular `item` | **Deferred** — not live |
+| **FR-I-014** | Pricing fields on selected item | Deferred on HTTP |
 
 ---
 
-## 6. API contract (normative)
+## 6. API contract
 
-### 6.1 Recommend from project specification
-
-`POST /api/v1/recommendations/from-project-spec`
+### 6.1 `POST /api/v1/recommendations/from-project-spec`
 
 #### JSON (`Content-Type: application/json`)
 
@@ -167,7 +203,11 @@ When both `file` and `project_text` are present, source text is **file text firs
 }
 ```
 
-#### Success response `200`
+#### Success response `200` — **live (as-built)**
+
+See [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) §5: `IngestFromProjectSpecResponse` (`ingest_id`, `data_kind`, `documents_written`, …).
+
+#### Success response `200` — **deferred (recommend reattach)**
 
 | Field | Type | Notes |
 |-------|------|--------|
@@ -301,7 +341,11 @@ for each decomposed need with base_id, description, hints, quantity N:
 
 ## 8. Manual testing (Postman / Swagger)
 
-This section is a **verification runbook** for exercising the live intake API. It does **not** replace automated acceptance tests in `tests/test_recommendations_intake.py` or the GIVEN/WHEN/THEN criteria in §9.
+> **Live HTTP (indexing):** use [`../postman/README.md`](../postman/README.md) and collection `postman/Indexing-Pipeline.postman_collection.json`. Expect `ingest_id` / `data_kind` / `documents_written`, **not** `recommendation_id` / `results_by_need`.
+>
+> **Below:** historical / **deferred recommend** Postman steps (valid again only after reattach). Also see [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md) (deferred banner).
+
+This section is a **verification runbook**. Automated live HTTP tests: `tests/test_recommendations_intake.py`. Recommend service tests: `tests/test_recommend_pipeline_mvp.py`.
 
 ### 8.1 Start the server
 
@@ -469,13 +513,19 @@ uv run pytest tests/ -v
 
 ## 9. Acceptance criteria
 
-1. **Given** non-empty `project_text` and valid dates, **when** `POST .../from-project-spec`, **then** `200`, `recommendation_id` starts with `rec_`, dates echoed, `results_by_need` present; each entry has key **`item`** (not `items`).
+### 9.1 Live HTTP (indexing)
+
+1. **Given** non-empty `project_text`, **when** `POST .../from-project-spec`, **then** `200`, `ingest_id` starts with `ing_`, `data_kind=unstructured`, `documents_written` ≥ 1, `results_by_need` absent.
 2. **Given** empty / whitespace `project_text` and no file, **when** posted, **then** `400` shared error shape.
 3. **Given** `end_date` before `start_date`, **when** posted, **then** `400`.
-4. **Given** a decomposer that returns one need with `quantity = 2`, **when** recommend runs, **then** `results_by_need` has **length 2**, ids follow `__u1` / `__u2`, and neither `item` object contains `quantity`.
-5. **Given** a decomposer that returns two needs with quantity 1, **when** recommend runs, **then** two independent `need_id`s, each with singular `item`.
-6. **Given** plain-text multipart file with content, **when** posted, **then** `200` and at least one unit-need result.
-7. **Given** pipeline stub, **when** recommend runs, **then** each `item` is `null` and warnings are non-empty.
+4. **Given** plain-text or csv multipart file with content, **when** posted, **then** `200` with matching `data_kind` and `documents_written` ≥ 1.
+5. Full AC table: indexing SPEC §7.
+
+### 9.2 Deferred / service-level recommend
+
+6. **Given** a decomposer that returns one need with `quantity = 2`, **when** `RecommendationService` runs, **then** `results_by_need` has **length 2**, ids follow `__u1` / `__u2`.
+7. **Given** multi-need decomposer, **when** service runs, **then** independent `need_id`s each with singular `item`.
+8. Covered by `tests/test_recommend_pipeline_mvp.py` / pipeline SPEC.
 
 ---
 
@@ -497,5 +547,6 @@ uv run pytest tests/ -v
 | **0.2.0** | 2026-08-05 | **Breaking:** free-text/file MVP; LLM decompose; quantity expansion; singular `item` per unit-need; remove public structured multi-need form |
 | **0.2.1** | 2026-08-05 | Added §8 Manual testing (Postman / Swagger) verification runbook |
 | **0.3.0** | 2026-08-06 | **PR review:** document `PricingPayload` (`daily_rate` + `total_price`, no `weekly_rate`); **FR-I-012** threadpool offload; **FR-I-014** pricing fields |
+| **0.4.0** | 2026-08-07 | **Spec reconcile:** live route = indexing Parts 1–3; recommend FRs/response/Postman marked **deferred**; conflict rule → indexing SPEC wins for HTTP |
 
-When the public intake contract changes, update **this file**, parent intake sections, and as-built code/tests in the same change set.
+When the **live** public contract changes, update **[`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md)** first, then this file’s live pointers and deferred sections, plus tests, in the same change set.

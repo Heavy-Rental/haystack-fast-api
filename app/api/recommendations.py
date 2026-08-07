@@ -1,4 +1,8 @@
-"""Recommendation intake endpoints (thin routers)."""
+"""Recommendation / project-spec intake endpoints (thin routers).
+
+Part 1: ``POST /from-project-spec`` runs the indexing FileTypeRouter pipeline
+(structured vs unstructured classification), not the FR-010 recommend graph.
+"""
 
 from datetime import date
 
@@ -7,21 +11,14 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import ValidationError
 
 from app.core.exceptions import BadRequestError
-from app.schemas.recommendations import (
-    RecommendFromProjectSpecRequest,
-    RecommendFromProjectSpecResponse,
-    RecommendOptions,
+from app.schemas.indexing import IngestFromProjectSpecResponse
+from app.schemas.recommendations import RecommendFromProjectSpecRequest
+from app.services.indexing import (
+    IndexingIngestService,
+    byte_stream_from_upload,
 )
-from app.services.recommendations import RecommendationService
 
 router = APIRouter(prefix="/api/v1/recommendations", tags=["recommendations"])
-
-_ALLOWED_TEXT_TYPES = {
-    "text/plain",
-    "text/markdown",
-    "text/x-markdown",
-    "application/octet-stream",
-}
 
 
 def _parse_optional_date(value: object) -> date | None:
@@ -36,32 +33,17 @@ def _parse_optional_date(value: object) -> date | None:
         raise BadRequestError(f"invalid date: {value}") from exc
 
 
-def _decode_upload(filename: str | None, content_type: str | None, raw: bytes) -> str:
-    ctype = (content_type or "application/octet-stream").split(";")[0].strip()
-    name = (filename or "").lower()
-    allowed_by_name = name.endswith((".txt", ".md", ".markdown"))
-    if ctype not in _ALLOWED_TEXT_TYPES and not allowed_by_name:
-        raise BadRequestError(
-            f"unsupported file type '{ctype or 'unknown'}'; "
-            "MVP accepts text/plain and text/markdown"
-        )
-    if not raw:
-        raise BadRequestError("uploaded file is empty")
-    try:
-        return raw.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise BadRequestError("file must be valid UTF-8 text") from exc
-
-
 @router.post(
     "/from-project-spec",
-    response_model=RecommendFromProjectSpecResponse,
-    summary="Recommend equipment from free-text or project file",
+    response_model=IngestFromProjectSpecResponse,
+    summary="Ingest project-spec: classify, convert, split, embed, and write",
     openapi_extra={
         "requestBody": {
             "content": {
                 "application/json": {
-                    "schema": {"$ref": "#/components/schemas/RecommendFromProjectSpecRequest"}
+                    "schema": {
+                        "$ref": "#/components/schemas/RecommendFromProjectSpecRequest"
+                    }
                 },
                 "multipart/form-data": {
                     "schema": {
@@ -79,13 +61,14 @@ def _decode_upload(filename: str | None, content_type: str | None, raw: bytes) -
         }
     },
 )
-async def recommend_from_project_spec(request: Request) -> RecommendFromProjectSpecResponse:
-    """Accept unstructured project_text and/or file (+ optional dates).
+async def recommend_from_project_spec(request: Request) -> IngestFromProjectSpecResponse:
+    """Accept project_text and/or file; run full indexing pipeline (Parts 1–3).
 
-    LLM (or stub) decomposes text into needs; quantity expands to unit-needs;
-    each unit-need returns exactly one ranked item (or null).
+    classify → convert → clean → split → embed → DocumentStore write.
+    Recommend path remains deferred / reattach later.
     """
     content_type = request.headers.get("content-type", "")
+    service = IndexingIngestService()
 
     if "application/json" in content_type:
         payload = await request.json()
@@ -97,45 +80,45 @@ async def recommend_from_project_spec(request: Request) -> RecommendFromProjectS
                 for err in exc.errors()
             )
             raise BadRequestError(messages or "Validation failed") from exc
-        service = RecommendationService()
-        # Offload sync pipeline/LLM work so the event loop is not blocked.
+
+        # Optional dates validated by schema; Part 1 does not use them for ranking.
         return await run_in_threadpool(
-            service.recommend_from_project_spec,
+            service.ingest_from_project_spec,
             project_text=body.project_text,
-            start_date=body.start_date,
-            end_date=body.end_date,
-            options=body.options,
+            file_sources=None,
         )
 
     if "multipart/form-data" in content_type:
         form = await request.form()
         project_text = form.get("project_text")
         project_text_str = (
-            str(project_text).strip() if project_text is not None and str(project_text).strip() else None
+            str(project_text).strip()
+            if project_text is not None and str(project_text).strip()
+            else None
         )
-        start_date = _parse_optional_date(form.get("start_date"))
-        end_date = _parse_optional_date(form.get("end_date"))
-        include_raw = form.get("include_pricing", "true")
-        include_pricing = str(include_raw).lower() not in {"false", "0", "no"}
+        # Accept/parse dates for API stability; unused in Part 1 classification.
+        _ = _parse_optional_date(form.get("start_date"))
+        _ = _parse_optional_date(form.get("end_date"))
 
-        file_text: str | None = None
+        file_sources = []
         upload = form.get("file")
         if upload is not None and hasattr(upload, "read"):
             raw = await upload.read()
             filename = getattr(upload, "filename", None)
             ctype = getattr(upload, "content_type", None)
             if filename or raw:
-                file_text = _decode_upload(filename, ctype, raw)
+                file_sources.append(
+                    byte_stream_from_upload(
+                        raw=raw if isinstance(raw, (bytes, bytearray)) else bytes(raw),
+                        filename=filename,
+                        content_type=ctype,
+                    )
+                )
 
-        service = RecommendationService()
-        # Offload sync pipeline/LLM work so the event loop is not blocked.
         return await run_in_threadpool(
-            service.recommend_from_project_spec,
+            service.ingest_from_project_spec,
             project_text=project_text_str,
-            file_text=file_text,
-            start_date=start_date,
-            end_date=end_date,
-            options=RecommendOptions(include_pricing=include_pricing),
+            file_sources=file_sources or None,
         )
 
     raise BadRequestError(
