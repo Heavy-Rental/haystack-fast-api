@@ -7,7 +7,7 @@
 | **SPDD Ready** | Yes |
 | **Application** | `haystack-fast-api` |
 
-**Related specs:** [`01-domain.md`](./01-domain.md) · [`SPEC-project.md`](./SPEC-project.md) · [`SPEC-project-setup.md`](./SPEC-project-setup.md) · [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) · [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) · [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) · [`SPEC-recommendation-pipeline-testing-guide.md`](./SPEC-recommendation-pipeline-testing-guide.md) · [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md) · [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md)
+**Related specs:** [`01-domain.md`](./01-domain.md) · [`SPEC-project.md`](./SPEC-project.md) · [`SPEC-project-setup.md`](./SPEC-project-setup.md) · [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) · [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) · [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) · [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) · [`SPEC-recommendation-pipeline-testing-guide.md`](./SPEC-recommendation-pipeline-testing-guide.md) · [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md) · [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md)
 
 ## Vision
 
@@ -38,9 +38,11 @@ The industry is capital-intensive. Success depends on:
 | **Pricing companion** | [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md) — productionizes `predict_price()` for the recommendation path |
 | **Approved catalog** | Boom Lift, Scissors Lift, Fork Lift, Excavator |
 
-**MVP shape (summary only):** free-text and/or project file (+ optional rental window) → LLM need decompose → quantity expansion to unit-needs → `Asset` SQL candidates → `Booking` / `BookingItem` availability → `predict_price()` → Haystack rank & rationale → **exactly one** `RecommendationItem` **per unit-need** (singular `item`).
+**MVP shape (product target):** free-text and/or project file (+ optional rental window) → LLM need decompose → quantity expansion to unit-needs → `Asset` SQL candidates → `Booking` / `BookingItem` availability → `predict_price()` → Haystack rank & rationale → **exactly one** `RecommendationItem` **per unit-need** (singular `item`).
 
-**Target (post–6-day MVP, detail in feature SDD):** richer file converters, SuperComponents/Tools, optional LangGraph orchestration, offline knowledge graph enrichment, async ML training trigger. Normative behaviour, API contract, and acceptance criteria live **only** in the feature SPECs—not here.
+**As-built public route (2026-08-07):** `POST /api/v1/recommendations/from-project-spec` currently runs the **indexing** pipeline (classify structured/unstructured → convert → clean → split → embed → `InMemoryDocumentStore`) and returns **`IngestFromProjectSpecResponse`**. Normative live contract: [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md). FR-010 recommend remains **service-level** for tests and reattach.
+
+**Target (post–6-day MVP, detail in feature SDD):** reattach recommend on unstructured path; richer converters; SuperComponents/Tools; optional LangGraph; offline knowledge graph enrichment after DocumentStore; async ML training trigger. Normative behaviour lives in feature SPECs—not here.
 
 ## Primary Stakeholders
 

@@ -247,7 +247,9 @@ Each custom component MUST ship with: unit tests (standalone `run`), empty-input
 
 ### 5.5 API & errors
 
-- **FR-040**: Public recommendation endpoint is `POST /api/v1/recommendations/from-project-spec` (JSON and/or multipart); locked in OpenAPI and [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md).
+- **FR-040**: Public project-spec endpoint is `POST /api/v1/recommendations/from-project-spec` (JSON and/or multipart).
+  - **Target / product intent:** recommend envelope (`recommendation_id`, `results_by_need`, singular `item`) per this SPEC and child intake tables.
+  - **As-built override (2026-08-07):** the route currently runs the **indexing** pipeline and returns `IngestFromProjectSpecResponse`. Normative live contract: [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md). Recommend response remains **target / reattach**; FR-010 service path remains under [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md).
 - **FR-041**: Optional pricing-only endpoint remains allowed if pricing team does not already expose an equivalent.
 - **FR-042**: Errors use shared shape `{"error": "<code>", "message": "<human-readable>"}`.
 - **FR-043**: Validation → `400`; missing → `404`; training conflict (target) → `409`; unhandled → `500`.
@@ -872,5 +874,6 @@ Chapter 7: **MCP** lets external agents discover deployed Haystack pipelines as 
 | 0.7.0 | 2026-08-05 | Incorporated Chapter 7 (Deploying Haystack-Based Applications): Method 1 FastAPI primary (lifespan/`warm_up`, Pydantic, DI); Docker multi-stage; CI/CD; security; optional Method 2 Hayhooks serialization + MCP; deployment NFRs and AC 14–15; section renumber 15–18 |
 | 0.8.0 | 2026-08-05 | **Intake correction:** MVP is free-text/file + LLM decompose (not structured multi-need form); quantity expansion to unit-needs; **exactly one** `item` per unit-need (no top-N `items[]`); public API `POST .../from-project-spec`; child intake SPEC v0.2.0 |
 | 0.9.0 | 2026-08-06 | **PR review alignment:** pricing on recommend items is `daily_rate` + `total_price` (no fabricated `weekly_rate`); **FR-012/015** + **NFR-008** note threadpool offload; warm-up DI still follow-up |
+| 0.9.1 | 2026-08-07 | **As-built override on FR-040:** public `/from-project-spec` is indexing ingest per child indexing SPEC; recommend envelope deferred for reattach |
 
 When behaviour, API paths, tool names, or schedule gates change, bump this table and align OpenAPI / tests / execution plan in the same change set.
