@@ -8,12 +8,16 @@ at app/services/pricing/model.py, clamped against the real per-asset
 Asset.minDailyRate/maxDailyRate read from the database.
 
 This prototype exists so the in-development agent prototype can fetch
-experimental ML pricing before Phase 2 lands. It reuses the Phase 1b
-model.pkl and feature_schema.py unchanged, but since it has no database
-access, its guardrail bounds come from pricing_tables.CATEGORY_BASE_RATE
-(static, per-category) instead of a real asset's min/maxDailyRate. Phase 2
-supersedes this entirely -- see docs/dynamic-pricing-masterplan.md's "Locked
-decisions" for why the bound source differs.
+experimental ML pricing before Phase 2 lands. It reuses the Phase 1b/1d
+model.pkl and feature_schema.py, but since it has no database access, its
+guardrail bounds come from pricing_tables.CATEGORY_BASE_RATE (static,
+per-category) instead of a real asset's min/maxDailyRate. Phase 2 supersedes
+this entirely -- see docs/dynamic-pricing-masterplan.md's "Locked decisions"
+for why the bound source differs.
+
+period_utilization/lead_time_days (Phase 1d) are optional kwargs with
+fallback defaults here -- Phase 1e wires a real live-query value through
+separately; see predict_price()'s own docstring.
 """
 
 from dataclasses import dataclass
@@ -52,12 +56,25 @@ def predict_price(
     capacity: float,
     distance_km: float,
     platform_height: float | None,
+    period_utilization: float | None = None,
+    lead_time_days: float = 0.0,
 ) -> PricePrediction:
     """Predict price_per_day and clamp it to the category's guardrail bounds.
 
     platform_height should be None for forklift/excavator, matching how the
     model was trained (native NaN, not a sentinel -- see feature_schema.py).
+
+    period_utilization/lead_time_days (Phase 1d) are optional, not required,
+    with fallback defaults -- so this prototype's existing callers (e.g.
+    pricing_client.py) keep working unmodified after Phase 1d merges, ahead
+    of Phase 1e wiring real live-query values through. period_utilization
+    defaults to the static per-category pricing_tables.CATEGORY_UTILIZATION
+    when not supplied; lead_time_days defaults to 0.0 (no lead-time signal
+    available).
     """
+    if period_utilization is None:
+        period_utilization = pt.CATEGORY_UTILIZATION[category]
+
     row = pd.DataFrame([{
         "category": category,
         "condition": condition,
@@ -65,6 +82,8 @@ def predict_price(
         "capacity": capacity,
         "distance_km": distance_km,
         "platform_height": float("nan") if platform_height is None else platform_height,
+        "period_utilization": period_utilization,
+        "lead_time_days": lead_time_days,
     }])
     features = fs.build_features(row)
     raw_price = float(_model.predict(features)[0])
@@ -93,8 +112,26 @@ if __name__ == "__main__":
             capacity=(300 if is_aerial else 2000),
             distance_km=15,
             platform_height=10 if is_aerial else None,
+            period_utilization=0.7,
+            lead_time_days=14,
         )
         print(
             f"{category:<14} {'GOOD':<12} {result.raw_price:>8.2f} "
             f"{result.clamped_price:>8.2f} {str(result.was_clamped):>9}"
         )
+
+    # One call relying on the period_utilization/lead_time_days fallback
+    # defaults, to exercise the pre-Phase-1e call path pricing_client.py
+    # still uses.
+    fallback_result = predict_price(
+        category="excavator",
+        condition="GOOD",
+        duration_days=7,
+        capacity=5000,
+        distance_km=15,
+        platform_height=None,
+    )
+    print(
+        f"\n{'excavator':<14} {'GOOD':<12} {fallback_result.raw_price:>8.2f} "
+        f"{fallback_result.clamped_price:>8.2f} {str(fallback_result.was_clamped):>9}  (defaults)"
+    )
