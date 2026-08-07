@@ -1,25 +1,11 @@
-"""MVP Intake: POST /api/v1/recommendations/from-project-spec."""
+"""HTTP intake: POST /api/v1/recommendations/from-project-spec (Part 1 indexing)."""
 
 from fastapi.testclient import TestClient
-
-from app.schemas.recommendations import DecomposedNeed
-from app.services.recommendations import RecommendationService
 
 ENDPOINT = "/api/v1/recommendations/from-project-spec"
 
 
-class _FixedDecomposer:
-    """Test double that returns a fixed internal need list."""
-
-    def __init__(self, needs: list[DecomposedNeed]) -> None:
-        self._needs = needs
-
-    def decompose(self, source_text: str) -> list[DecomposedNeed]:
-        assert source_text  # source must be non-empty when we get here
-        return list(self._needs)
-
-
-def test_from_project_spec_happy_path_free_text(client: TestClient) -> None:
+def test_from_project_spec_json_unstructured(client: TestClient) -> None:
     response = client.post(
         ENDPOINT,
         json={
@@ -31,19 +17,19 @@ def test_from_project_spec_happy_path_free_text(client: TestClient) -> None:
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["recommendation_id"].startswith("rec_")
-    assert body["start_date"] == "2026-09-01"
-    assert body["end_date"] == "2026-09-12"
-    assert len(body["results_by_need"]) == 1
-    row = body["results_by_need"][0]
-    assert row["need_id"] == "need_1"
-    assert "item" in row
-    assert "items" not in row
-    # Full FR-010 path: seed fleet match → singular RecommendationItem
-    assert row["item"] is not None
-    assert row["item"]["equipment_type"] == "Scissors Lift"
-    assert row["item"]["rank"] == 1
-    assert row["item"]["rationale"]
+    assert body["ingest_id"].startswith("ing_")
+    assert body["data_kind"] == "unstructured"
+    assert body["unstructured_count"] == 1
+    assert body["structured_count"] == 0
+    assert body["document_count"] == 1
+    assert body["unstructured_document_count"] == 1
+    assert body["chunk_count"] >= 1
+    assert body["documents_written"] >= 1
+    assert body["documents"]
+    assert "scissors" in body["documents"][0]["content_preview"].lower()
+    assert body["documents"][0]["has_embedding"] is True
+    assert "results_by_need" not in body
+    assert body["warnings"]
 
 
 def test_empty_project_text_returns_400(client: TestClient) -> None:
@@ -83,77 +69,11 @@ def test_optional_dates_omitted(client: TestClient) -> None:
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["start_date"] is None
-    assert body["end_date"] is None
-    assert len(body["results_by_need"]) == 1
-    assert "item" in body["results_by_need"][0]
+    assert body["data_kind"] == "unstructured"
+    assert body["ingest_id"].startswith("ing_")
 
 
-def test_quantity_expansion_two_unit_needs() -> None:
-    """quantity=2 → two unit-need rows; RecommendationItem has no quantity."""
-    service = RecommendationService(
-        decomposer=_FixedDecomposer(
-            [
-                DecomposedNeed(
-                    need_id="need_1",
-                    description="Scissors lift indoor",
-                    equipment_hints=["scissors lift"],
-                    quantity=2,
-                )
-            ]
-        )
-    )
-    result = service.recommend_from_project_spec(
-        project_text="two scissors lifts for indoor work"
-    )
-    assert len(result.results_by_need) == 2
-    assert result.results_by_need[0].need_id == "need_1__u1"
-    assert result.results_by_need[1].need_id == "need_1__u2"
-    for row in result.results_by_need:
-        assert row.item is not None
-        assert "quantity" not in row.item.model_dump()
-
-
-def test_multi_need_from_decomposer_independent_rows() -> None:
-    service = RecommendationService(
-        decomposer=_FixedDecomposer(
-            [
-                DecomposedNeed(
-                    need_id="need_1",
-                    description="Scissors lift",
-                    quantity=1,
-                ),
-                DecomposedNeed(
-                    need_id="need_2",
-                    description="Excavator for trench",
-                    equipment_hints=["excavator"],
-                    quantity=1,
-                ),
-            ]
-        )
-    )
-    result = service.recommend_from_project_spec(project_text="scissors and excavator")
-    assert len(result.results_by_need) == 2
-    assert [r.need_id for r in result.results_by_need] == ["need_1", "need_2"]
-    for row in result.results_by_need:
-        assert row.item is not None
-        dumped = row.model_dump()
-        assert "item" in dumped
-        assert "items" not in dumped
-
-
-def test_singular_item_shape_in_json(client: TestClient) -> None:
-    response = client.post(
-        ENDPOINT,
-        json={"project_text": "Boom lift for facade work"},
-    )
-    assert response.status_code == 200
-    row = response.json()["results_by_need"][0]
-    assert set(row.keys()) >= {"need_id", "item", "warnings"}
-    assert "items" not in row
-
-
-def test_multipart_text_file(client: TestClient) -> None:
+def test_multipart_text_file_unstructured(client: TestClient) -> None:
     response = client.post(
         ENDPOINT,
         data={
@@ -166,9 +86,78 @@ def test_multipart_text_file(client: TestClient) -> None:
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["recommendation_id"].startswith("rec_")
-    assert len(body["results_by_need"]) >= 1
-    assert "item" in body["results_by_need"][0]
+    assert body["ingest_id"].startswith("ing_")
+    assert body["data_kind"] == "unstructured"
+    assert body["unstructured_count"] == 1
+    assert body["document_count"] == 1
+    assert body["documents_written"] >= 1
+    assert "forklift" in body["documents"][0]["content_preview"].lower()
+    assert body["documents"][0]["has_embedding"] is True
+    assert "project.txt" in body["filenames"]
+
+
+def test_multipart_csv_structured(client: TestClient) -> None:
+    response = client.post(
+        ENDPOINT,
+        files={
+            "file": ("needs.csv", b"type,qty\nScissors Lift,2\n", "text/csv"),
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data_kind"] == "structured"
+    assert body["structured_count"] == 1
+    assert body["document_count"] == 1
+    assert body["structured_document_count"] == 1
+    assert body["documents_written"] >= 1
+    joined = " ".join(d["content_preview"] for d in body["documents"])
+    assert "Scissors" in joined
+    assert all(d["has_embedding"] for d in body["documents"])
+    assert "text/csv" in body["mime_types_seen"] or body["mime_types_seen"]
+
+
+def test_multipart_json_file_structured(client: TestClient) -> None:
+    response = client.post(
+        ENDPOINT,
+        files={
+            "file": ("needs.json", b'{"equipment":"excavator"}', "application/json"),
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data_kind"] == "structured"
+    assert body["document_count"] >= 1
+    assert body["documents_written"] >= 1
+    joined = " ".join(d["content_preview"] for d in body["documents"]).lower()
+    assert "excavator" in joined
+
+
+def test_multipart_markdown_converts(client: TestClient) -> None:
+    response = client.post(
+        ENDPOINT,
+        files={
+            "file": ("brief.md", b"# Project\n\nNeed boom lift at facade", "text/markdown"),
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data_kind"] == "unstructured"
+    assert body["document_count"] == 1
+    preview = body["documents"][0]["content_preview"].lower()
+    assert "boom" in preview or "project" in preview
+
+
+def test_multipart_unsupported_type_400(client: TestClient) -> None:
+    response = client.post(
+        ENDPOINT,
+        files={
+            "file": ("malware.exe", b"MZ\x90", "application/octet-stream"),
+        },
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"] == "bad_request"
+    assert "unsupported" in body["message"].lower() or "unclassified" in body["message"].lower()
 
 
 def test_multipart_empty_returns_400(client: TestClient) -> None:
@@ -177,14 +166,16 @@ def test_multipart_empty_returns_400(client: TestClient) -> None:
         data={},
         files={},
     )
-    # No file and no project_text
     assert response.status_code == 400
     body = response.json()
     assert body["error"] == "bad_request"
 
 
-def test_recommendation_item_schema_has_no_quantity() -> None:
-    from app.schemas.recommendations import RecommendationItem
-
-    fields = RecommendationItem.model_fields
-    assert "quantity" not in fields
+def test_multipart_empty_file_returns_400(client: TestClient) -> None:
+    response = client.post(
+        ENDPOINT,
+        files={"file": ("empty.txt", b"", "text/plain")},
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"] == "bad_request"

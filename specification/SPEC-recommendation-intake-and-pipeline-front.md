@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|--------|
 | **Document type** | Feature SDD (stage slice) |
-| **Status** | As-built MVP — full FR-010.1–8 path (seed fleet + experimental/fallback pricing + template rank); real Spring SQL models deferred |
+| **Status** | **Historical HR-65 stage** — FR-010.1–8 service path shipped. **Public route superseded (2026-08-07)** by indexing pipeline: [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md). Do not treat runtime snapshot below as live HTTP without reading the supersession note. |
 | **Feature id** | `recommendation-intake-pipeline-front` |
 | **Tracking** | HR-65 |
 | **Branch** | `HR-65-implement-intake-stage-for-recommender-system` |
@@ -17,12 +17,23 @@
 | **Parent feature** | [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) |
 | **Companion intake API detail** | [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) |
 | **Depends on** | [`SPEC-project.md`](./SPEC-project.md), [`SPEC-project-setup.md`](./SPEC-project-setup.md), [`01-domain.md`](./01-domain.md) |
-| **Related** | [`00-overview.md`](./00-overview.md); [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) (full FR-010.1–8 as-built); [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md) |
+| **Related** | [`00-overview.md`](./00-overview.md); [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) (**live route**); [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) (FR-010.1–8 service); [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md) |
 | **Audience** | Engineers and agents implementing or verifying this stage |
 
 **Read [`SPEC-project.md`](./SPEC-project.md) and [`SPEC-project-setup.md`](./SPEC-project-setup.md) first.** Domain language: [`01-domain.md`](./01-domain.md).
 
-This document is a **normative feature specification** under Specification Driven Development (SDD). When behaviour described here and the codebase diverge, update them in the **same change set**.
+This document is a **historical stage SDD** (HR-65). When behaviour described here and the codebase diverge on the **public route**, prefer [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md).
+
+---
+
+## Supersession (2026-08-07)
+
+| Topic | Current authority |
+|-------|-------------------|
+| Live `POST .../from-project-spec` | [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) |
+| FR-010.1–8 service graph | [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) |
+| Deferred recommend HTTP envelope | [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) |
+| Live Postman | [`../postman/README.md`](../postman/README.md) |
 
 ---
 
@@ -30,13 +41,14 @@ This document is a **normative feature specification** under Specification Drive
 
 | Document | Owns |
 |----------|------|
-| **This SPEC** | HR-65 stage: public intake path + **FR-010 steps 1–3** (resolve text, decompose, expand quantity) as Haystack pipeline structure; stage acceptance criteria; as-built module map; verification (automated + manual) |
-| [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) | Detailed public API field tables, error shape nuance, Postman/Swagger runbook (§8) |
-| Parent agentic SPEC | End-to-end recommender, **FR-010.4–8**, catalog hard filter at rank time, pricing integration, KG, deployment, demo scenarios A/B/C |
+| **This SPEC** | HR-65 stage narrative: original public intake + **FR-010 steps 1–3** design; LLM integration notes; historical delivery map |
+| [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) | **Live** public route |
+| [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) | Request shapes + deferred recommend response |
+| Parent agentic SPEC | End-to-end recommender, **FR-010.4–8**, KG, deployment |
 | Dynamic pricing SPEC | Production `predict_price()` |
 | Foundation `00` / `01` | Vision and ubiquitous language |
 
-**Conflict rule:** For public intake HTTP contract details, prefer [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) if tables diverge; for **pipeline structure of steps 1–3** and stage boundaries vs 4–8, **this SPEC wins**. Align both in the same change set when either changes.
+**Conflict rule:** Live HTTP → indexing SPEC. FR-010.1–3 component structure → this SPEC + pipeline SPEC. Deferred recommend API tables → intake SPEC.
 
 ---
 
@@ -95,14 +107,16 @@ This section is the **branch delivery map**: what HR-65 lands relative to `devel
 | `tests/test_recommendations_intake.py` | HTTP happy path, empty/missing body, bad dates, multipart file, singular `item`, quantity expansion & multi-need via injected decomposer, no quantity on item schema |
 | `tests/test_pipeline_intake_front.py` | Standalone components + full intake-front graph (resolve order, expand ids, empty source) |
 
-### Runtime behaviour snapshot (default live path)
+### Runtime behaviour snapshot
 
-| Behaviour | Default live | Notes |
-|-----------|--------------|--------|
-| `POST .../from-project-spec` JSON | Works | Stub decomposer → typically one unit-need |
-| Multipart `.txt` / `.md` | Works | Requires `python-multipart` |
-| `item` populated with equipment/price | **No** | FR-010.4–8 stub |
-| Multi-need from natural language alone | **No** | Stub = whole text as one need; pytest injects multi-need |
+> **Historical HR-65 snapshot** (recommend path). **Current live HTTP** is indexing ingest — see supersession table above.
+
+| Behaviour | HR-65 era | Current live (2026-08-07+) |
+|-----------|-----------|----------------------------|
+| `POST .../from-project-spec` | Recommend envelope (`results_by_need`) | **Ingest** (`ingest_id`, `data_kind`, `documents_written`) |
+| Multipart files | `.txt` / `.md` MVP | Broader MIME map (csv/json/pdf/docx/…) via indexing |
+| Ranked `item` on HTTP | Stub / later seed fleet | **Not on default route** (service-level only) |
+| Multi-need from NL alone | Stub = one need | N/A on HTTP until reattach |
 
 ---
 

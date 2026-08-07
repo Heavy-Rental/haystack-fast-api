@@ -3,16 +3,18 @@
 | Field | Value |
 |-------|--------|
 | **Document type** | SDD verification guide (Postman-focused) |
-| **Status** | As-built (HR-65 recommendation MVP) |
+| **Status** | **Deferred (2026-08-07)** — describes pre-reroute **recommend** HTTP expectations (`rec_` / `results_by_need`). Live route is **indexing ingest**. |
 | **Feature id** | `recommendation-postman-testing` |
 | **Spec location** | `specification/SPEC-recommendation-postman-testing-guide.md` |
 | **Endpoint** | `POST /api/v1/recommendations/from-project-spec` |
-| **Full testing guide** | [`SPEC-recommendation-pipeline-testing-guide.md`](./SPEC-recommendation-pipeline-testing-guide.md) |
-| **API contract** | [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) |
-| **Pipeline SDD** | [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) |
-| **Audience** | Engineers and QA verifying the recommend API via Postman |
+| **Live Postman (use this)** | [`../postman/README.md`](../postman/README.md) — `Indexing-Pipeline.postman_collection.json` |
+| **Live API contract** | [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) |
+| **Deferred recommend contract** | [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) |
+| **Pipeline SDD (service)** | [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) |
+| **Audience** | Engineers reattaching recommend HTTP; historical QA notes |
 
-This guide covers **Postman only**. For pytest, curl, and DigitalOcean LLM setup, use the [full pipeline testing guide](./SPEC-recommendation-pipeline-testing-guide.md).
+> **Stop:** For current as-built HTTP testing, import **`postman/Indexing-Pipeline.postman_collection.json`** and expect `ingest_id` / `data_kind` / `documents_written`.  
+> Sections below remain valid **only after recommend is reattached** to this route (or a new recommend route).
 
 ---
 
@@ -348,5 +350,6 @@ Leave `NEED_DECOMPOSER=stub` for default local testing without keys.
 | Version | Date | Notes |
 |---------|------|--------|
 | **1.0.0** | 2026-08-05 | Initial Postman-focused testing guide for recommendation API MVP |
+| **1.1.0** | 2026-08-07 | Marked **deferred**; live testing → `postman/README.md` / indexing SPEC |
 
 When the public API path, body shape, or expected status codes change, update **this guide** and the intake/pipeline SPECs in the **same change set**.

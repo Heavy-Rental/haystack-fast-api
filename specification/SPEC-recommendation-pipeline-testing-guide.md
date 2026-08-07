@@ -3,16 +3,17 @@
 | Field | Value |
 |-------|--------|
 | **Document type** | SDD verification / testing guide |
-| **Status** | As-built (matches HR-65 pipeline MVP) |
+| **Status** | Split (2026-08-07): FR-010 **service** tests still as-built; **HTTP** section points to indexing ingest |
 | **Feature id** | `recommendation-pipeline-testing` |
 | **Spec location** | `specification/SPEC-recommendation-pipeline-testing-guide.md` |
-| **Normative behaviour** | [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) |
-| **API contract / Postman fields** | [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) |
+| **Normative behaviour (service)** | [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) |
+| **Normative behaviour (live HTTP)** | [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) |
 | **Parent** | [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) |
-| **Postman-only guide** | [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md) |
-| **Audience** | Engineers verifying the recommendation intake + pipeline |
+| **Live Postman** | [`../postman/README.md`](../postman/README.md) |
+| **Deferred recommend Postman** | [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md) |
+| **Audience** | Engineers verifying recommend service + live ingest HTTP |
 
-This guide is the **how to test** companion for the as-built recommendation pipeline. For **Postman step-by-step only**, see [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md). When behaviour changes, update the normative SPECs and this guide in the **same change set**.
+This guide is the **how to test** companion. **Live HTTP** expects `ingest_id` / indexing fields, **not** `recommendation_id` / `results_by_need`. Service-level recommend tests still use `RecommendationService` directly.
 
 ---
 
@@ -31,8 +32,15 @@ uv sync --all-groups
 | Postgres | Not required for seed-fleet happy path; `/health` may show `degraded` if DB is down |
 | Default decomposer | `NEED_DECOMPOSER=stub` (no LLM key) |
 | Pricing model | Optional `ml-experiments/artifacts/model.pkl`; fallback pricing still works |
-| Async offload | Route uses `run_in_threadpool` for the sync service call — transparent to TestClient/Postman |
-| Pricing fields | Expect `daily_rate` + `total_price`; no fabricated `weekly_rate` |
+| Async offload | Live route offloads `IndexingIngestService` via `run_in_threadpool` |
+| Pricing fields | On **service-level** recommend path: `daily_rate` + `total_price`; no fabricated `weekly_rate`. Not on live HTTP ingest response. |
+
+### Live HTTP vs service recommend
+
+| Layer | How to test | Expect |
+|-------|-------------|--------|
+| **HTTP** `POST .../from-project-spec` | `tests/test_recommendations_intake.py`, `postman/` | `ingest_id`, `data_kind`, `documents_written`, `has_embedding` |
+| **Service** FR-010 | `tests/test_recommend_pipeline_mvp.py`, `tests/test_pipeline_intake_front.py` | `recommendation_id`, `results_by_need`, singular `item` |
 
 ---
 
@@ -63,7 +71,7 @@ uv run pytest tests/ -v
 |-----------|--------|
 | `tests/test_pipeline_intake_front.py` | Source text resolve, quantity expansion, stub decompose, intake_front graph |
 | `tests/test_recommend_pipeline_mvp.py` | Seed asset match, booking overlap, pricing payload, top-1 rank, e2e scissors item, qty=2, Scenario C no-match |
-| `tests/test_recommendations_intake.py` | Public POST JSON/multipart, 400 validation, singular `item` |
+| `tests/test_recommendations_intake.py` | Public POST JSON/multipart **ingest** (indexing), 400 validation |
 | `tests/test_llm_need_decomposer.py` | JSON parse, mocked chat completions, factory stub/llm |
 
 **Expect:** all tests pass.
@@ -82,11 +90,11 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 | Base | `http://localhost:8000` |
 | Health | `GET http://localhost:8000/health` |
 | OpenAPI / Swagger | `http://localhost:8000/docs` |
-| Recommend | `POST http://localhost:8000/api/v1/recommendations/from-project-spec` |
+| Project-spec (live **ingest**) | `POST http://localhost:8000/api/v1/recommendations/from-project-spec` |
 
 ---
 
-## 3. Happy path — free-text (curl)
+## 3. Happy path — free-text (curl) — **live indexing**
 
 ```bash
 curl -s -X POST http://localhost:8000/api/v1/recommendations/from-project-spec \
@@ -99,24 +107,25 @@ curl -s -X POST http://localhost:8000/api/v1/recommendations/from-project-spec \
   }' | python -m json.tool
 ```
 
-### Expected result
+### Expected result (live HTTP)
 
 | Check | Expect |
 |-------|--------|
 | HTTP status | **200** |
-| `recommendation_id` | Starts with `rec_` |
-| `results_by_need[0].item` | **Not null** |
-| `item.equipment_type` | `"Scissors Lift"` |
-| `item.rank` | `1` |
-| `item.asset_id` | Present (e.g. `AST-SL-…`) |
-| `item.rationale` | Non-empty (template; schema-gap text) |
-| `item.pricing` | `daily_rate` (number), `total_price` (number = daily × duration for request), `currency: "SGD"`, `deposit_rate: 0.3`; **no** `weekly_rate` |
-| `item.availability` | `"available"` |
-| Response shape | Singular **`item`**, not `items[]` |
+| `ingest_id` | Starts with `ing_` |
+| `data_kind` | `"unstructured"` |
+| `documents_written` | ≥ 1 |
+| `chunk_count` | ≥ 1 |
+| `documents[0].has_embedding` | `true` |
+| Response shape | **No** `recommendation_id` / `results_by_need` |
+
+> **Service-level recommend** (not default HTTP): call `RecommendationService` in pytest — expect `rec_` / `results_by_need` / ranked `item` (see `test_recommend_pipeline_mvp.py`).
 
 ---
 
-## 4. Happy path — Postman
+## 4. Happy path — Postman (**live indexing**)
+
+Import [`../postman/README.md`](../postman/README.md) collection. Or:
 
 | Field | Value |
 |-------|--------|
@@ -124,6 +133,7 @@ curl -s -X POST http://localhost:8000/api/v1/recommendations/from-project-spec \
 | URL | `http://localhost:8000/api/v1/recommendations/from-project-spec` |
 | Headers | `Content-Type: application/json` |
 | Body | **raw → JSON** (same body as §3) |
+| Expect | `ingest_id`, `data_kind=unstructured`, `documents_written` ≥ 1 |
 
 ### Suggested collection
 
@@ -257,9 +267,12 @@ NEED_DECOMPOSER=stub
 
 | Spec | Role |
 |------|------|
-| [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) | Normative FR-010.1–8 pipeline SDD |
-| [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) | API fields + Postman §8 |
-| [`SPEC-recommendation-intake-and-pipeline-front.md`](./SPEC-recommendation-intake-and-pipeline-front.md) | Stage notes + LLM integration §13 |
+| [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) | **Live** HTTP ingest contract |
+| [`../postman/README.md`](../postman/README.md) | Live Postman collection |
+| [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) | Normative FR-010.1–8 **service** SDD |
+| [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) | Request shapes + deferred recommend response |
+| [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md) | Deferred recommend Postman |
+| [`SPEC-recommendation-intake-and-pipeline-front.md`](./SPEC-recommendation-intake-and-pipeline-front.md) | Historical HR-65 + LLM notes |
 | [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) | Parent product SDD |
 
 ---
@@ -269,5 +282,6 @@ NEED_DECOMPOSER=stub
 | Version | Date | Notes |
 |---------|------|--------|
 | **1.0.0** | 2026-08-05 | Initial testing guide for recommendation pipeline MVP (pytest, curl, Postman, Swagger, negatives, DigitalOcean LLM, expectations) |
+| **1.1.0** | 2026-08-07 | **Spec reconcile:** live HTTP = indexing expectations; service vs HTTP table; Postman/curl updated |
 
 When test commands, endpoints, or expected results change, update **this guide** and the related normative SPECs in the **same change set**.

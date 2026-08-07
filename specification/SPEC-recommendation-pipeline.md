@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|--------|
 | **Document type** | Feature SDD (pipeline stage) |
-| **Status** | As-built MVP — full FR-010.1–8 orchestration; seed fleet/bookings; experimental or fallback pricing; template rank/rationale |
+| **Status** | As-built MVP — full FR-010.1–8 **service-level** orchestration; seed fleet/bookings; experimental or fallback pricing; template rank/rationale. **Not** the default HTTP path for `/from-project-spec` (see indexing SPEC). |
 | **Feature id** | `recommendation-pipeline-mvp` |
 | **Tracking** | HR-65 (pipeline structure completion) |
 | **Workspace** | `/workspaces/haystack-fast-api` |
@@ -11,12 +11,12 @@
 | **Python package** | `app` |
 | **Spec location** | `specification/SPEC-recommendation-pipeline.md` |
 | **Parent feature** | [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) |
-| **Related stage SPECs** | [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md), [`SPEC-recommendation-intake-and-pipeline-front.md`](./SPEC-recommendation-intake-and-pipeline-front.md) |
+| **Related stage SPECs** | [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) (**live HTTP**); [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md); [`SPEC-recommendation-intake-and-pipeline-front.md`](./SPEC-recommendation-intake-and-pipeline-front.md) |
 | **Depends on** | [`SPEC-project.md`](./SPEC-project.md), [`SPEC-project-setup.md`](./SPEC-project-setup.md), [`01-domain.md`](./01-domain.md) |
 | **Pricing** | [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md) (production service later); prototype `ml-experiments/predict_price.py` |
 | **As-built modules** | See [§6 File map](#6-as-built-file-map) |
-| **Tests** | `tests/test_pipeline_intake_front.py`, `tests/test_recommend_pipeline_mvp.py`, `tests/test_recommendations_intake.py`, `tests/test_llm_need_decomposer.py` |
-| **Testing guide** | [`SPEC-recommendation-pipeline-testing-guide.md`](./SPEC-recommendation-pipeline-testing-guide.md) · Postman: [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md) |
+| **Tests** | `tests/test_pipeline_intake_front.py`, `tests/test_recommend_pipeline_mvp.py` (service e2e), `tests/test_llm_need_decomposer.py`; HTTP ingest: `tests/test_recommendations_intake.py` (indexing, not this graph) |
+| **Testing guide** | [`SPEC-recommendation-pipeline-testing-guide.md`](./SPEC-recommendation-pipeline-testing-guide.md) · Live Postman: [`../postman/README.md`](../postman/README.md) · Deferred recommend Postman: [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md) |
 | **Audience** | Engineers and agents implementing or verifying the recommendation pipeline |
 
 **Read project + setup SPECs first.** Domain language: [`01-domain.md`](./01-domain.md). Parent SPEC owns end-to-end product vision, demo scenarios A/B/C, KG/agent targets, and deployment.
@@ -29,13 +29,16 @@ This document is a **normative feature specification** under Specification Drive
 
 | Document | Owns |
 |----------|------|
-| **This SPEC** | As-built **FR-010.1–8** pipeline structure: components, seed data rules, pricing adapter, rank/assemble, stage acceptance & verification |
+| **This SPEC** | As-built **FR-010.1–8** pipeline structure: components, seed data rules, pricing adapter, rank/assemble, stage acceptance & verification (**service-level**) |
+| [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) | **Live** public route (indexing ingest) |
 | Parent agentic SPEC | Full product SDD, FRs FR-001+, target SuperComponents/Tools/KG, Day 1–6 schedule |
-| Intake SPEC | Public HTTP field tables, Postman §8 detail |
-| Intake + pipeline front SPEC | Historical stage notes, LLM integration guide, branch delivery map |
+| Intake SPEC | Request shapes; **deferred** recommend response for reattach |
+| Intake + pipeline front SPEC | Historical HR-65 stage notes, LLM integration guide |
 | Dynamic pricing SPEC | Production `app/services/pricing/` (not yet required for this MVP) |
 
-**Conflict rule:** Pipeline step behaviour and component contracts for FR-010 → **this SPEC**. Public path/body details → intake SPEC. Broader product policy (catalog of four types, deposit 30%, SGD) → parent + this SPEC restatement.
+**Conflict rule:** Pipeline step behaviour and component contracts for FR-010 → **this SPEC**. **Live** HTTP response for `/from-project-spec` → **indexing SPEC**. Broader product policy (catalog of four types, deposit 30%, SGD) → parent + this SPEC restatement.
+
+**As-built note (2026-08-07):** `app/api/recommendations.py` calls `IndexingIngestService`, not `RecommendationService`. FR-010 remains callable via `RecommendationService.recommend_from_project_spec` in tests and for future reattach.
 
 ---
 
@@ -134,7 +137,7 @@ When this specification is followed and as-built code remains compliant:
 | **FR-P-009** | Routers MUST remain thin; no SQL/rank logic in handlers. |
 | **FR-P-010** | Per unit-need processing MUST be independent (multi-need / quantity expansion). |
 | **FR-P-011** | When `include_pricing` is true and a match is selected, `item.pricing` MUST expose: `daily_rate` (predicted for the **requested duration window** — duration is a model input), `total_price` (= `daily_rate × duration_days` for that window), `currency`, `deposit_rate`, `model_version`, `explanation`. MUST NOT expose a fabricated `weekly_rate` (e.g. `daily × 7`). A different date window requires a fresh `predict_price()` call — clients MUST NOT re-scale `daily_rate` by multiplying/dividing days. |
-| **FR-P-012** | Async recommend handlers (`async def`) MUST NOT run the full sync `RecommendationService.recommend_from_project_spec` path on the event loop. Offload via `fastapi.concurrency.run_in_threadpool` (or equivalent) for **both** JSON and multipart success paths so stub pipeline work and `NEED_DECOMPOSER=llm` sync HTTP do not stall concurrent requests on the worker. |
+| **FR-P-012** | Async HTTP handlers (`async def`) MUST NOT run the full sync service path on the event loop. Offload via `fastapi.concurrency.run_in_threadpool` (or equivalent) for **both** JSON and multipart success paths. **Live route:** offload `IndexingIngestService`. **When recommend is reattached:** offload `RecommendationService` (and LLM HTTP) the same way. |
 
 ---
 
@@ -142,17 +145,30 @@ When this specification is followed and as-built code remains compliant:
 
 ### 5.1 Architecture
 
+#### A. Live HTTP path (indexing — normative for the route)
+
 ```text
 POST /api/v1/recommendations/from-project-spec
         │
         ▼
-async router (app/api/recommendations.py)   # thin: parse body, await offload
+async router (app/api/recommendations.py)
         │
         ▼
-run_in_threadpool(...)                      # FR-P-012 — keep event loop free
+run_in_threadpool(IndexingIngestService.ingest_from_project_spec)
         │
         ▼
-RecommendationService                       # sync domain orchestration
+indexing Pipeline: classify → convert → clean → split → embed → write
+        │
+        ▼
+IngestFromProjectSpecResponse
+```
+
+Detail: [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md).
+
+#### B. Recommend service path (FR-010 — not default HTTP)
+
+```text
+RecommendationService.recommend_from_project_spec(...)   # service / tests / future reattach
         │
         ├─► intake_front Pipeline (Haystack)
         │     resolve → decompose → expand
@@ -246,11 +262,13 @@ RecommendationService                       # sync domain orchestration
 | `app/services/need_decomposer.py` | Protocol + stub |
 | `app/services/llm_need_decomposer.py` | Optional LLM decompose |
 | `app/services/need_decomposer_factory.py` | stub \| llm factory |
-| `app/api/recommendations.py` | Thin HTTP |
-| `app/schemas/recommendations.py` | I/O models |
-| `tests/test_recommend_pipeline_mvp.py` | Steps 4–8 + e2e |
+| `app/api/recommendations.py` | Thin HTTP → **indexing** service (live) |
+| `app/services/indexing.py` | Live ingest orchestration |
+| `app/schemas/indexing.py` | Live ingest response |
+| `app/schemas/recommendations.py` | Recommend I/O models (service / deferred HTTP) |
+| `tests/test_recommend_pipeline_mvp.py` | Steps 4–8 + **service** e2e |
 | `tests/test_pipeline_intake_front.py` | Steps 1–3 |
-| `tests/test_recommendations_intake.py` | HTTP e2e |
+| `tests/test_recommendations_intake.py` | **HTTP ingest** e2e (indexing) |
 | `tests/test_llm_need_decomposer.py` | LLM parse/mock |
 
 ---
@@ -360,5 +378,6 @@ See testing guide §8 and intake-and-pipeline-front SPEC §13.
 |---------|------|--------|
 | **1.0.0** | 2026-08-05 | Initial SDD for as-built full FR-010.1–8 MVP pipeline (seed fleet, availability, pricing adapter, rank/assemble, verification) |
 | **1.1.0** | 2026-08-06 | **PR review:** pricing payload `total_price` (not fabricated `weekly_rate`); duration-scoped `daily_rate` (**FR-P-011**); async route offloads sync service via `run_in_threadpool` (**FR-P-012**); open Q #5 warm-up DI follow-up |
+| **1.2.0** | 2026-08-07 | **Spec reconcile:** dual architecture (live HTTP indexing vs service FR-010); conflict rule; FR-P-012 wording; file map + tests clarified |
 
-When pipeline component contracts, seed data semantics, or assemble rules change, update **this SPEC** and as-built code/tests in the **same change set**.
+When pipeline component contracts, seed data semantics, or assemble rules change, update **this SPEC** and as-built code/tests in the **same change set**. Live HTTP contract changes go to the indexing SPEC first.
