@@ -3,13 +3,17 @@
 | Field | Value |
 |-------|--------|
 | **Document type** | Feature SDD (Spec-kit Specify artifact) |
-| **Status** | **As-built Parts 1–3** — classify → convert → clean → split → embed → write |
+| **Status** | **As-built** — Packt dual-branch index → store; `user_id` required; **mandatory** HR-76 KG after `final_doc_joiner` |
 | **Feature id** | `indexing-file-type-router` |
+| **Tracking** | HR-74 · HR-76 (identity + KG hook) |
 | **Spec location** | `specification/SPEC-indexing-file-type-router.md` |
+| **Reading map** | [`README.md`](./README.md) Path B step 5 |
 | **Tasks** | [`tasks-indexing-file-type-router.md`](./tasks-indexing-file-type-router.md) |
+| **Next in flow** | [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) |
 | **Postman (live HTTP)** | [`../postman/README.md`](../postman/README.md) |
-| **Parent** | [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) (FR-019d, indexing pipeline; §11 KG target) |
-| **Supersedes for route** | `intake_front` / FR-010 recommend as the **default HTTP** graph for `POST .../from-project-spec` |
+| **Env** | [`.env.example`](../.env.example) |
+| **Parent** | [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) |
+| **Supersedes for route** | `intake_front` / FR-010 recommend as default HTTP graph |
 
 **Spec-kit phases:** Specify (this file) → Plan → Tasks → Implement → Converge.
 
@@ -21,15 +25,16 @@ When behaviour here and the codebase diverge, update them in the **same change s
 
 | Document | Owns |
 |----------|------|
-| **This SPEC** | **Live** behaviour of `POST /api/v1/recommendations/from-project-spec`: indexing pipeline, MIME map, ingest response (`IngestFromProjectSpecResponse`) |
-| [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) | FR-010.1–8 **service-level** recommend graph (`RecommendationService`, seed fleet) — **not** the default public route |
-| [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) | Request shapes; **deferred** recommend response envelope for reattach |
-| Parent agentic SPEC | Product vision, catalog policy, **target** KG / hybrid retrieval |
-| [`../postman/README.md`](../postman/README.md) | Live HTTP Postman collection for **ingest** |
+| **This SPEC** | Live HTTP index graph, MIME map, `user_id`, full ingest response table |
+| [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) | Mandatory KG after `final_doc_joiner` (hard-fail) |
+| [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) | FR-010 **service-level** (not default route) |
+| [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) | Deferred recommend envelope |
+| Parent agentic SPEC | Product vision / catalog |
+| [`../postman/README.md`](../postman/README.md) | Live Postman |
 
-**Conflict rule (normative):** As of **2026-08-07**, the public route is owned by this **indexing** SPEC. Recommend FR-010 remains in code for unit tests and **reattach**, but is **not** the default HTTP path. Where older SPECs describe `recommendation_id` / `results_by_need` on this route without a deferred label, **this SPEC wins**.
+**Conflict rule:** Live route → **this SPEC**. Optional KG rules → knowledge-graph SPEC. Recommend envelope without “deferred” label loses to this SPEC.
 
-**As-built deviation from parent FR-040 recommend envelope:** parent still describes target recommend API; **current as-built** returns ingest classification + vectorize metadata only (see §5).
+**As-built vs parent FR-040:** live response is **ingest + optional kg_***, not ranked `results_by_need`.
 
 ---
 
@@ -53,12 +58,9 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 6. Default process-local `InMemoryDocumentStore`; CI-safe default embedder (`MockDocumentEmbedder`).
 7. Response fields `chunk_count`, `documents_written`, and `has_embedding` on previews.
 
-**Out of scope (still):**
+**HR-76 (shipped):** required `user_id`; **mandatory** user-scoped KG after post-join chunks ([`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md)).
 
-- Persistent vector DB / multi-instance store  
-- Hybrid retrieval **query** path  
-- Knowledge graph build (parent §11 **target**; feasible **after** store write — see tasks T020)  
-- LLM need decompose + FR-010.4–8 ranking on **this** route (reattach = T017)
+**Out of scope (still):** persistent multi-instance DocumentStore; Naive/hybrid RAG **query** HTTP; recommend reattach on this route (T017); `LinkContentFetcher` (T030).
 
 ---
 
@@ -68,11 +70,10 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 - Pipeline classifies each source as structured, unstructured, or unclassified.
 - Classified sources are **converted** to Haystack `Document`s by MIME type.
 - Converted documents are **cleaned, split, embedded, and written** to a DocumentStore.
-- Successful responses return an **ingest** envelope (`data_kind`, convert counts, `chunk_count`, `documents_written`, chunk previews with `has_embedding`).
-- Unclassified, empty input, conversion with zero documents, or zero written chunks → HTTP **400** shared error JSON.
-- JSON-only `project_text` is treated as unstructured `text/plain`.
-- FastAPI handlers stay thin; type policy, conversion, and vectorize live in pipelines/services.
-- Optional `start_date` / `end_date` are accepted for API stability; **unused for ranking** until recommend is reattached.
+- Request requires **`user_id`** (optional `user_name`); echoed on response; stamped on chunk meta.
+- Successful responses return ingest fields plus **`kg_*`** (`kg_built=true` on success).
+- Missing `user_id`, unclassified type, empty source, zero written chunks, or KG failure → **400**.
+- Dates accepted; unused for ranking until reattach.
 
 ---
 
@@ -84,7 +85,7 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 | **Structured** | `.csv`, `.json`, `.xlsx` | `text/csv`, `application/json`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
 | **Unclassified** | other / unknown | → **400** |
 
-**Routing note:** Decision routing is **classify** (kind) + **convert** (per-MIME). After convert, clean → split → embed → write is a **shared** path for both kinds.
+**Routing note:** Explicit `FileTypeRouter`. Unstructured: sanitizer → cleaner → word split. CSV: CSV cleaner → row-wise split. Meet at **`final_doc_joiner`** → embed → write. JSON/XLSX use unstructured clean/split path but count as **structured** for `data_kind`.
 
 ---
 
@@ -105,13 +106,15 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 | **FR-IX-011** | After classification, structured and unstructured sources MUST be converted to Haystack `Document`s via MIME-specific converters. |
 | **FR-IX-012** | Converter map: plain/json text → `TextFileToDocument`; markdown → `MarkdownToDocument`; html → `HTMLToDocument`; pdf → `PyPDFToDocument`; docx → `DOCXToDocument`; csv → `CSVToDocument`; xlsx → `XLSXToDocument`. |
 | **FR-IX-013** | Zero documents after successful classification (hard conversion failure) → **400**. Soft per-file conversion issues MAY appear in `warnings`. |
-| **FR-IX-014** | After convert, the pipeline MUST run clean → split → embed → write. |
+| **FR-IX-014** | After convert, unstructured vs CSV preprocess separately, then **join** → embed → write. |
 | **FR-IX-015** | Default embedder MUST be CI-safe (`MockDocumentEmbedder` or equivalent). Optional `openai` mode via `INDEXING_EMBEDDER`. |
 | **FR-IX-016** | Successful ingest MUST report `documents_written` ≥ 1 (and matching `chunk_count` for the default path). Zero written chunks → **400**. |
 | **FR-IX-017** | Successful responses MUST use `IngestFromProjectSpecResponse` (`ingest_id`, …). MUST NOT return `recommendation_id` / `results_by_need` on the default path until reattach is specified. |
 | **FR-IX-018** | Indexing graph MUST expose an explicit **FileTypeRouter** (or equivalent) with **parallel** unstructured vs CSV preprocess branches, then join before embed/write (Packt Ch. 4 pattern). |
 | **FR-IX-019** | CSV branch MUST use CSV-oriented clean/split (e.g. `CSVDocumentCleaner` + row-wise `CSVDocumentSplitter`), not only the unstructured word splitter. |
 | **FR-IX-020** | Unstructured branch MUST run sanitizer (or equivalent quality gate) → `DocumentCleaner` → word `DocumentSplitter` before the final joiner. |
+| **FR-IX-021** | Request MUST include `user_id`; MAY include `user_name`. Chunks SHOULD carry these in metadata. |
+| **FR-IX-022** | After **`final_doc_joiner`** chunks exist and index write succeeds, MUST build a user-scoped KG (hard-fail on failure); full Ragas transforms run only inside `KnowledgeGraphGenerator` when `KG_APPLY_TRANSFORMS=true` (see [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md)). |
 
 ---
 
@@ -119,29 +122,33 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 
 ### Request
 
-- JSON: `project_text` (required non-empty for JSON-only), optional `start_date` / `end_date` / `options` (dates validated when both set: `end_date` ≥ `start_date`).
-- Multipart: `file` and/or `project_text`, optional dates / `include_pricing` (accepted; pricing unused until reattach).
+| Field | Required | Notes |
+|-------|----------|--------|
+| `user_id` | **yes** | Tenant for meta + KG path |
+| `user_name` | no | Echo / audit |
+| `project_text` and/or `file` | one non-empty source | JSON-only needs non-empty text |
+| `start_date` / `end_date` | no | Window valid if both set |
+| `options` / `include_pricing` | no | Accepted; unused until reattach |
 
 ### Success response `200` — `IngestFromProjectSpecResponse`
 
 | Field | Type | Notes |
 |-------|------|--------|
 | `ingest_id` | string | `ing_` + hex |
-| `data_kind` | `"structured"` \| `"unstructured"` \| `"mixed"` | From classified sources |
-| `mime_types_seen` | string[] | Distinct MIME types matched |
-| `filenames` | string[] | From ByteStream meta / synthetic name |
-| `structured_count` | int | Classified structured **sources** |
-| `unstructured_count` | int | Classified unstructured **sources** |
-| `document_count` | int | Documents after convert (pre-split) |
-| `structured_document_count` | int | |
-| `unstructured_document_count` | int | |
-| `chunk_count` | int | Chunks after split/embed |
-| `documents_written` | int | Chunks written to DocumentStore |
-| `documents` | object[] | Chunk previews: `content_preview`, `content_length`, `meta`, `data_kind`, `has_embedding` |
-| `warnings` | string[] | e.g. in-memory store note |
+| `user_id` / `user_name` | string / null | Echo |
+| `data_kind` | structured \| unstructured \| mixed | |
+| `mime_types_seen` / `filenames` | string[] | |
+| `structured_count` / `unstructured_count` | int | Sources |
+| `document_count` (+ structured/unstructured_document_count) | int | Pre-split logical units |
+| `chunk_count` / `documents_written` | int | After split/write |
+| `documents` | object[] | Previews + meta (`user_id`, `ingest_id`, …) |
+| `kg_built` | bool | Always `true` on successful 200 |
+| `kg_node_count` / `kg_relationship_count` | int \| null | |
+| `kg_artifact_path` | string \| null | Under `KG_ARTIFACT_DIR/{user_id}/` |
+| `kg_transform_applied` | bool | Full Ragas on generator |
+| `warnings` | string[] | |
 
-**Breaking change (vs pre-2026-08-07 recommend MVP):** this route no longer returns `recommendation_id` / `results_by_need` / ranked `item`. Recommend pipeline remains under `app/services/recommendations.py` for reattach or a future separate route.
-
+**Breaking:** no default `results_by_need`; **`user_id` required**.
 ---
 
 ## 6. Design
@@ -151,61 +158,35 @@ Aligned with Packt Ch. 4 indexing flowchart
 **FileTypeRouter → dual preprocess branches → joiner → embed → write**.
 
 ```text
-  POST /from-project-spec
+  POST /from-project-spec (user_id required)
        │
        ▼
-  package ByteStream(s)
+  file_type_router → dual-branch convert/clean/split
        │
        ▼
-  IndexingIngestService
-       │
-       ▼
-  Pipeline (Packt-style)
-       file_type_router
-            ├─ unstructured MIME → converters → unstructured_joiner
-            │       → sanitizer → text_cleaner → text_splitter ─┐
-            ├─ text/csv → csv_converter → csv_cleaner             │
-            │            → csv_splitter (row-wise) ───────────────┤
-            └─ json/xlsx → converters → unstructured path ───────┤
-                                                                  ▼
-                                                         final_doc_joiner
-                                                                  │
-                                                           doc_embedder
-                                                                  │
-                                                              writer
-                                                                  │
-                                                     InMemoryDocumentStore
+  final_doc_joiner
+       ├─► doc_embedder → writer → InMemoryDocumentStore
+       └─► post-join chunks → KG (mandatory; see knowledge-graph SPEC)
        │
        ▼
   IngestFromProjectSpecResponse
 ```
 
-Optional later: `LinkContentFetcher` → HTML converter (book web branch; T030).
-
 ### Modules
 
 | Path | Role |
 |------|------|
-| `app/pipelines/indexing/mime_map.py` | Extension ↔ MIME constants |
-| `app/pipelines/indexing/data_kind_classifier.py` | Collapse MIME buckets → kinds |
-| `app/pipelines/indexing/document_converter.py` | MIME → Haystack converters → Documents |
-| `app/pipelines/indexing/document_store.py` | Shared `InMemoryDocumentStore` |
-| `app/pipelines/indexing/embedder_factory.py` | mock / openai document embedder |
-| `app/pipelines/indexing/pipeline.py` | `build_indexing_pipeline` / `run_indexing_pipeline` |
-| `app/services/indexing.py` | Orchestration + errors |
-| `app/api/recommendations.py` | Thin HTTP; ByteStream packaging |
+| `app/pipelines/indexing/*` | Dual-branch index graph, store, embedder |
+| `app/pipelines/kg/*` | Mandatory KG (HR-76) |
+| `app/services/indexing.py` | Index + mandatory KG (hard-fail) |
+| `app/api/recommendations.py` | Thin HTTP |
 | `app/schemas/indexing.py` | Response DTO |
-| `app/config.py` | `INDEXING_*` settings |
-| `postman/` | Live HTTP collection + fixtures |
+| `app/config.py` | `INDEXING_*`, `KG_*` |
+| `postman/` | Live collection |
 
-### Future (not as-built)
+### Tests
 
-```text
-  … → write → InMemoryDocumentStore
-                    │
-                    ▼  (optional / offline — T020)
-              load docs → knowledge graph → KG_ARTIFACT_DIR/*.json
-```
+`tests/test_indexing_*.py`, `tests/test_knowledge_graph.py`, `tests/test_recommendations_intake.py`.
 
 ---
 
@@ -219,7 +200,8 @@ Optional later: `LinkContentFetcher` → HTML converter (book web branch; T030).
 6. **Given** the route handler, **when** Parts 1–3 ship, **then** it does not call `run_intake_front` as primary path.
 7. **Given** `.docx` / `.xlsx` with valid content, **when** convert runs, **then** at least one Document is produced.
 8. **Given** successful convert, **when** Part 3 pipeline runs, **then** `documents_written ≥ 1`, chunk previews have `has_embedding=true`, and the DocumentStore count increases.
-9. **Given** a successful POST, **when** body is inspected, **then** `ingest_id` is present and `results_by_need` is absent.
+9. **Given** a successful POST, **when** body is inspected, **then** `ingest_id` and `user_id` present; `results_by_need` absent.
+10. **Given** no `user_id`, **when** POST, **then** **400**.
 
 ---
 
@@ -227,8 +209,14 @@ Optional later: `LinkContentFetcher` → HTML converter (book web branch; T030).
 
 | Version | Date | Notes |
 |---------|------|--------|
-| **0.1.0** | 2026-08-07 | Part 1: FileTypeRouter classification; reroute `/from-project-spec` off recommend pipeline |
-| **0.2.0** | 2026-08-07 | Part 2: MIME converters; response adds document previews/counts |
-| **0.3.0** | 2026-08-07 | Part 3: clean → split → embed → write; `chunk_count` / `documents_written` |
-| **0.3.1** | 2026-08-07 | Spec reconcile: authority/conflict rule; Part labels; links to postman + deferred KG/recommend; FR-IX-017 |
-| **0.4.0** | 2026-08-07 | Packt Ch.4 dual-branch graph (router, CSV branch, sanitizer, final joiner); FR-IX-018–020 |
+| **0.1.0** | 2026-08-07 | Part 1 FileTypeRouter + route reroute |
+| **0.2.0** | 2026-08-07 | Part 2 converters |
+| **0.3.0** | 2026-08-07 | Part 3 embed/write |
+| **0.3.1** | 2026-08-07 | Spec reconcile vs recommend SPECs |
+| **0.4.0** | 2026-08-07 | Packt dual-branch FR-IX-018–020 |
+| **0.5.0** | 2026-08-07 | HR-76 user_id + KG hook FR-IX-021–022 |
+| **0.6.0** | 2026-08-07 | Sequential reading map; full API tables; KG not “future-only” |
+
+---
+
+**Reading order:** [← Setup](./SPEC-project-setup.md) · [Map](./README.md) · [Next: Knowledge graph →](./SPEC-knowledge-graph.md)

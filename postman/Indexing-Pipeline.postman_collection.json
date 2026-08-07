@@ -96,7 +96,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"project_text\": \"Indoor elevated work ~8m for scissors lift\",\n  \"start_date\": \"2026-09-01\",\n  \"end_date\": \"2026-09-12\",\n  \"options\": {\n    \"include_pricing\": true\n  }\n}\n"
+              "raw": "{\n  \"user_id\": \"user_demo\",\n  \"user_name\": \"Demo User\",\n  \"project_text\": \"Indoor elevated work ~8m for scissors lift\",\n  \"start_date\": \"2026-09-01\",\n  \"end_date\": \"2026-09-12\",\n  \"options\": {\n    \"include_pricing\": true\n  }\n}\n"
             },
             "url": "{{baseUrl}}{{ingestPath}}",
             "description": "JSON free-text is treated as unstructured `text/plain`.\n\nExpect: `data_kind=unstructured`, `documents_written >= 1`, `has_embedding=true`."
@@ -133,7 +133,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"project_text\": \"Fork lift for warehouse loading\"\n}\n"
+              "raw": "{\n  \"user_id\": \"user_demo\",\n  \"project_text\": \"Fork lift for warehouse loading\"\n}\n"
             },
             "url": "{{baseUrl}}{{ingestPath}}",
             "description": "Minimal JSON body (dates optional for Part 3)."
@@ -400,7 +400,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"project_text\": \"   \"\n}\n"
+              "raw": "{\n  \"user_id\": \"user_demo\",\n  \"project_text\": \"   \"\n}\n"
             },
             "url": "{{baseUrl}}{{ingestPath}}",
             "description": "Whitespace-only text → 400."
@@ -474,7 +474,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"project_text\": \"Need an excavator\",\n  \"start_date\": \"2026-09-12\",\n  \"end_date\": \"2026-09-01\"\n}\n"
+              "raw": "{\n  \"user_id\": \"user_demo\",\n  \"project_text\": \"Need an excavator\",\n  \"start_date\": \"2026-09-12\",\n  \"end_date\": \"2026-09-01\"\n}\n"
             },
             "url": "{{baseUrl}}{{ingestPath}}",
             "description": "`end_date` before `start_date` → 400."

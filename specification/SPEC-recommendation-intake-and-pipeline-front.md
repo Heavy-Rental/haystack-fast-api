@@ -30,7 +30,9 @@ This document is a **historical stage SDD** (HR-65). When behaviour described he
 
 | Topic | Current authority |
 |-------|-------------------|
-| Live `POST .../from-project-spec` | [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) |
+| Sequential reading map | [`README.md`](./README.md) |
+| Live `POST .../from-project-spec` | [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) (`user_id` required) |
+| Optional KG after joiner | [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) |
 | FR-010.1–8 service graph | [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) |
 | Deferred recommend HTTP envelope | [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) |
 | Live Postman | [`../postman/README.md`](../postman/README.md) |

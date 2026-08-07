@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|--------|
 | **Document type** | Feature SDD (stage slice) |
-| **Status** | **Breaking (2026-08-07, updated 0.4.0):** Live `POST .../from-project-spec` runs the **indexing** pipeline (Parts 1–3: classify → convert → embed → write) and returns **`IngestFromProjectSpecResponse`**. Normative live contract: [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md). Recommend envelope (`results_by_need`) below is **deferred for reattach** (service-level FR-010 still exists). |
+| **Status** | **Breaking (0.5.0):** Live route = **indexing + mandatory KG** ([`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md), [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md)); requires **`user_id`**. Recommend `results_by_need` below is **deferred**. Sequential map: [`README.md`](./README.md). |
 | **Feature id** | `recommendation-intake` |
 | **Workspace** | `/workspaces/haystack-fast-api` |
 | **Application module** | `haystack-fast-api` |
@@ -41,16 +41,17 @@
 **Default path today:**
 
 ```text
-POST /from-project-spec → IndexingIngestService
-  → classify → convert → clean → split → embed → write
-  → IngestFromProjectSpecResponse (ingest_id, data_kind, documents_written, …)
+POST /from-project-spec (user_id required)
+  → IndexingIngestService
+  → dual-branch index → final_doc_joiner → embed → write
+  → mandatory KG after post-join chunks
+  → IngestFromProjectSpecResponse (user_*, ingest_id, data_kind, documents_written, kg_*)
 ```
 
-Full FRs, MIME map, and field tables: **[`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md)**.  
-Manual tests: **[`../postman/README.md`](../postman/README.md)**.
+**Normative live contract:** [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) · KG: [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) · Map: [`README.md`](./README.md).  
+Manual tests: [`../postman/README.md`](../postman/README.md) (**include `user_id`**).
 
-Request shapes (JSON / multipart) in §6.1 **Request** still apply to the live route.  
-§6.1 **Success response** tables that show `recommendation_id` / `results_by_need` are **deferred** (reattach).
+§6.1 tables that show `recommendation_id` / `results_by_need` are **deferred** (reattach only).
 
 ---
 
@@ -145,7 +146,7 @@ Historical / target intake for equipment recommendation:
 
 | ID | Requirement |
 |----|-------------|
-| **FR-I-001** | The service MUST accept `POST /api/v1/recommendations/from-project-spec` as JSON and/or `multipart/form-data` with **`project_text`** and/or **`file`**, plus optional `start_date` / `end_date`. |
+| **FR-I-001** | The service MUST accept `POST /api/v1/recommendations/from-project-spec` as JSON and/or `multipart/form-data` with **`user_id`**, **`project_text`** and/or **`file`**, plus optional `user_name`, `start_date` / `end_date`. |
 | **FR-I-009** | Optional `options.include_pricing` (default `true`) MUST be accepted (ignored for ranking until reattach). |
 | **FR-I-010** | If both dates are present, `end_date` MUST be on or after `start_date`; otherwise **400**. |
 | **FR-I-011** | Errors use `{"error","message"}`; validation and empty/unclassified sources → **400**. |
@@ -547,6 +548,11 @@ uv run pytest tests/ -v
 | **0.2.0** | 2026-08-05 | **Breaking:** free-text/file MVP; LLM decompose; quantity expansion; singular `item` per unit-need; remove public structured multi-need form |
 | **0.2.1** | 2026-08-05 | Added §8 Manual testing (Postman / Swagger) verification runbook |
 | **0.3.0** | 2026-08-06 | **PR review:** document `PricingPayload` (`daily_rate` + `total_price`, no `weekly_rate`); **FR-I-012** threadpool offload; **FR-I-014** pricing fields |
-| **0.4.0** | 2026-08-07 | **Spec reconcile:** live route = indexing Parts 1–3; recommend FRs/response/Postman marked **deferred**; conflict rule → indexing SPEC wins for HTTP |
+| **0.4.0** | 2026-08-07 | Spec reconcile: live = indexing; recommend deferred |
+| **0.5.0** | 2026-08-07 | Sequential map; live requires `user_id`; mandatory KG fields |
 
-When the **live** public contract changes, update **[`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md)** first, then this file’s live pointers and deferred sections, plus tests, in the same change set.
+When the **live** public contract changes, update **indexing + knowledge-graph SPECs** first, then this file’s pointers.
+
+---
+
+**Reading order:** [← Knowledge graph](./SPEC-knowledge-graph.md) · [Map](./README.md) · [Next: Pipeline (deferred path) →](./SPEC-recommendation-pipeline.md)

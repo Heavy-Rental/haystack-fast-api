@@ -100,6 +100,8 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 curl -s -X POST http://localhost:8000/api/v1/recommendations/from-project-spec \
   -H 'Content-Type: application/json' \
   -d '{
+    "user_id": "user_demo",
+    "user_name": "Demo User",
     "project_text": "Indoor elevated work ~8m for scissors lift",
     "start_date": "2026-09-01",
     "end_date": "2026-09-12",
@@ -112,11 +114,13 @@ curl -s -X POST http://localhost:8000/api/v1/recommendations/from-project-spec \
 | Check | Expect |
 |-------|--------|
 | HTTP status | **200** |
+| `user_id` | Echo `user_demo` |
 | `ingest_id` | Starts with `ing_` |
 | `data_kind` | `"unstructured"` |
 | `documents_written` | ≥ 1 |
 | `chunk_count` | ≥ 1 |
 | `documents[0].has_embedding` | `true` |
+| `kg_built` | `true` on successful ingest (KG is mandatory) |
 | Response shape | **No** `recommendation_id` / `results_by_need` |
 
 > **Service-level recommend** (not default HTTP): call `RecommendationService` in pytest — expect `rec_` / `results_by_need` / ranked `item` (see `test_recommend_pipeline_mvp.py`).
@@ -282,6 +286,9 @@ NEED_DECOMPOSER=stub
 | Version | Date | Notes |
 |---------|------|--------|
 | **1.0.0** | 2026-08-05 | Initial testing guide for recommendation pipeline MVP (pytest, curl, Postman, Swagger, negatives, DigitalOcean LLM, expectations) |
-| **1.1.0** | 2026-08-07 | **Spec reconcile:** live HTTP = indexing expectations; service vs HTTP table; Postman/curl updated |
+| **1.1.0** | 2026-08-07 | Spec reconcile: live HTTP = indexing |
+| **1.2.0** | 2026-08-07 | Live curl requires `user_id`; kg_built note; sequential map |
 
-When test commands, endpoints, or expected results change, update **this guide** and the related normative SPECs in the **same change set**.
+**Reading order:** [Map](./README.md) · live contract [Indexing](./SPEC-indexing-file-type-router.md) · [Postman live](../postman/README.md)
+
+When test commands or expected results change, update this guide and normative SPECs together.

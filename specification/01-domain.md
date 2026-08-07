@@ -139,6 +139,7 @@ Industry breadth above is research context; **responses MUST stay within this ca
 #### Knowledge graph (target)
 
 - Offline / batch structure over catalog and historical project text (e.g. Ragas `KnowledgeGraph`) for multi-hop suitability, richer rationales, and evaluation aids.
+- **As-built (HR-76):** **mandatory** **user-scoped** KG artifact from a project-spec upload (`user_id` + `ingest_id`), built after indexing chunks — see [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md).
 - **Does not replace** Asset SQL filtering, Booking availability, or `predict_price()` on the online path unless a later SDD promotes graph traversal to a live tool.
 
 ---
@@ -225,7 +226,10 @@ Ownership boundaries
 | Spec | Role relative to this domain model |
 |------|-------------------------------------|
 | [`00-overview.md`](./00-overview.md) | Vision, problem space, product focus |
-| [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) | Normative recommendation behaviour, pipeline, API, acceptance |
+| [`README.md`](./README.md) | Sequential reading order (live index → KG → deferred recommend) |
+| [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) | Live project-spec ingest / indexing |
+| [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) | Optional user-scoped KG after chunk join |
+| [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) | Parent product SDD |
 | [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md) | `predict_price()`, features, guardrails, retrain |
 | [`SPEC-project.md`](./SPEC-project.md) / [`SPEC-project-setup.md`](./SPEC-project-setup.md) | As-built service and environment |
 
