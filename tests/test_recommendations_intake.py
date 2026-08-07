@@ -34,7 +34,10 @@ def test_from_project_spec_json_unstructured(client: TestClient) -> None:
     assert body["documents"][0]["has_embedding"] is True
     assert body["documents"][0]["meta"].get("user_id") == "user_demo"
     assert "results_by_need" not in body
-    assert body["kg_built"] is False
+    assert body["kg_built"] is True
+    assert body["kg_node_count"] and body["kg_node_count"] >= 1
+    assert body["kg_artifact_path"]
+    assert body["kg_transform_applied"] is False
     assert body["warnings"]
 
 

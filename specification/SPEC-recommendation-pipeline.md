@@ -152,7 +152,7 @@ When this specification is followed and as-built code remains compliant:
 POST /from-project-spec (user_id required)
   → IndexingIngestService
   → dual-branch index → final_doc_joiner → embed → write
-  → optional KG (KG_ENABLED) after post-join chunks
+  → mandatory KG after post-join chunks
   → IngestFromProjectSpecResponse
 ```
 
@@ -372,7 +372,7 @@ See testing guide §8 and intake-and-pipeline-front SPEC §13.
 | **1.0.0** | 2026-08-05 | Initial SDD for as-built full FR-010.1–8 MVP pipeline (seed fleet, availability, pricing adapter, rank/assemble, verification) |
 | **1.1.0** | 2026-08-06 | **PR review:** pricing payload `total_price` (not fabricated `weekly_rate`); duration-scoped `daily_rate` (**FR-P-011**); async route offloads sync service via `run_in_threadpool` (**FR-P-012**); open Q #5 warm-up DI follow-up |
 | **1.2.0** | 2026-08-07 | Spec reconcile: live HTTP indexing vs service FR-010 |
-| **1.2.1** | 2026-08-07 | Sequential README; live path notes user_id + optional KG |
+| **1.2.1** | 2026-08-07 | Sequential README; live path notes user_id + mandatory KG |
 
 When pipeline contracts change, update this SPEC + tests. Live HTTP → indexing/KG SPECs first.
 

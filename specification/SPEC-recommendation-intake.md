@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|--------|
 | **Document type** | Feature SDD (stage slice) |
-| **Status** | **Breaking (0.5.0):** Live route = **indexing + optional KG** ([`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md), [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md)); requires **`user_id`**. Recommend `results_by_need` below is **deferred**. Sequential map: [`README.md`](./README.md). |
+| **Status** | **Breaking (0.5.0):** Live route = **indexing + mandatory KG** ([`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md), [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md)); requires **`user_id`**. Recommend `results_by_need` below is **deferred**. Sequential map: [`README.md`](./README.md). |
 | **Feature id** | `recommendation-intake` |
 | **Workspace** | `/workspaces/haystack-fast-api` |
 | **Application module** | `haystack-fast-api` |
@@ -44,7 +44,7 @@
 POST /from-project-spec (user_id required)
   → IndexingIngestService
   → dual-branch index → final_doc_joiner → embed → write
-  → optional KG (KG_ENABLED) after post-join chunks
+  → mandatory KG after post-join chunks
   → IngestFromProjectSpecResponse (user_*, ingest_id, data_kind, documents_written, kg_*)
 ```
 
@@ -549,7 +549,7 @@ uv run pytest tests/ -v
 | **0.2.1** | 2026-08-05 | Added §8 Manual testing (Postman / Swagger) verification runbook |
 | **0.3.0** | 2026-08-06 | **PR review:** document `PricingPayload` (`daily_rate` + `total_price`, no `weekly_rate`); **FR-I-012** threadpool offload; **FR-I-014** pricing fields |
 | **0.4.0** | 2026-08-07 | Spec reconcile: live = indexing; recommend deferred |
-| **0.5.0** | 2026-08-07 | Sequential map; live requires `user_id`; optional KG fields |
+| **0.5.0** | 2026-08-07 | Sequential map; live requires `user_id`; mandatory KG fields |
 
 When the **live** public contract changes, update **indexing + knowledge-graph SPECs** first, then this file’s pointers.
 

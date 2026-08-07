@@ -1,4 +1,4 @@
-"""Project-spec intake: indexing + optional user-scoped KG (HR-76)."""
+"""Project-spec intake: indexing + mandatory user-scoped KG (HR-76)."""
 
 from datetime import date
 
@@ -39,7 +39,7 @@ def _require_user_id(value: object) -> str:
 @router.post(
     "/from-project-spec",
     response_model=IngestFromProjectSpecResponse,
-    summary="Ingest project-spec: index chunks and optional knowledge graph",
+    summary="Ingest project-spec: index chunks and knowledge graph",
     openapi_extra={
         "requestBody": {
             "content": {
@@ -68,9 +68,10 @@ def _require_user_id(value: object) -> str:
     },
 )
 async def recommend_from_project_spec(request: Request) -> IngestFromProjectSpecResponse:
-    """Index project-spec; optionally build KG from post-final_doc_joiner chunks.
+    """Index project-spec; always build KG from post-final_doc_joiner chunks.
 
-    Full Ragas transforms run only inside KnowledgeGraphGenerator when enabled.
+    Full Ragas transforms run only inside KnowledgeGraphGenerator when
+    KG_APPLY_TRANSFORMS is true. KG failure fails the request.
     """
     content_type = request.headers.get("content-type", "")
     service = IndexingIngestService()

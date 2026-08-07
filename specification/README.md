@@ -24,7 +24,7 @@ POST /api/v1/recommendations/from-project-spec
 │              ▼                           ▼                  │
 │       doc_embedder → writer      6 · KNOWLEDGE GRAPH        │
 │       InMemoryDocumentStore      (SPEC-knowledge-graph)     │
-│                                  optional if KG_ENABLED     │
+│                                  mandatory after joiner     │
 │                                  transforms only on         │
 │                                  KnowledgeGraphGenerator    │
 └─────────────────────────────────────────────────────────────┘
@@ -56,7 +56,7 @@ Recommend FR-010 (service) → pricing  → results_by_need
 | Step | Document | Runtime step |
 |------|----------|--------------|
 | **5** | [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) | Live HTTP: index dual-branch → DocumentStore; **`user_id` required** |
-| **6** | [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) | After `final_doc_joiner`: optional user-scoped KG; Ragas transforms **only** on generator |
+| **6** | [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) | After `final_doc_joiner`: **mandatory** user-scoped KG (hard-fail); Ragas transforms **only** on generator |
 | **7** | [`.env.example`](../.env.example) | `INDEXING_*`, `KG_*` |
 | **8** | [`../postman/README.md`](../postman/README.md) | Manual live HTTP (include `user_id`) |
 
@@ -92,7 +92,7 @@ Read only when working on FR-010 rank/price or reattaching recommend HTTP.
 | Concern | Wins |
 |---------|------|
 | Live `POST .../from-project-spec` fields & index graph | **Indexing SPEC** |
-| Optional KG after joiner / transforms location | **Knowledge-graph SPEC** |
+| Mandatory KG after joiner / transforms location | **Knowledge-graph SPEC** |
 | FR-010 components / seed fleet | **Recommendation-pipeline SPEC** (service) |
 | Deferred recommend JSON envelope | **Recommendation-intake SPEC** (labeled deferred) |
 
@@ -103,7 +103,7 @@ Read only when working on FR-010 rank/price or reattaching recommend HTTP.
 1. This README (flow)  
 2. `00-overview` (as-built blurb)  
 3. `SPEC-indexing-file-type-router` (live API)  
-4. `SPEC-knowledge-graph` (optional KG)  
+4. `SPEC-knowledge-graph` (mandatory KG)  
 5. `.env.example` + `postman/README`  
 
 Then domain / project-setup / parent as needed.

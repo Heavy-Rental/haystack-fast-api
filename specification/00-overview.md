@@ -41,7 +41,7 @@ The industry is capital-intensive. Success depends on:
 
 **MVP shape (product target):** free-text and/or project file (+ optional rental window) → LLM need decompose → quantity expansion to unit-needs → `Asset` SQL candidates → `Booking` / `BookingItem` availability → `predict_price()` → Haystack rank & rationale → **exactly one** `RecommendationItem` **per unit-need** (singular `item`).
 
-**As-built public route (2026-08-07+):** `POST /api/v1/recommendations/from-project-spec` requires **`user_id`**, runs **Packt dual-branch indexing** through `final_doc_joiner` → embed → **`InMemoryDocumentStore`**, optionally builds a **user-scoped knowledge graph** (`KG_ENABLED`; see [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md)), and returns **`IngestFromProjectSpecResponse`**. Normative live contract: [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md). FR-010 recommend remains **service-level** for tests and reattach.
+**As-built public route (2026-08-07+):** `POST /api/v1/recommendations/from-project-spec` requires **`user_id`**, runs **Packt dual-branch indexing** through `final_doc_joiner` → embed → **`InMemoryDocumentStore`**, then **always** builds a **user-scoped knowledge graph** (hard-fail on failure; see [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md)), and returns **`IngestFromProjectSpecResponse`**. Normative live contract: [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md). FR-010 recommend remains **service-level** for tests and reattach.
 
 **Target (later):** reattach recommend HTTP; Naive/hybrid RAG query; multi-agent fusion of store + KG; async ML training. Normative detail lives in feature SPECs—not here.
 

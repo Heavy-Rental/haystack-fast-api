@@ -77,7 +77,7 @@ Use **Collection → Run collection** to execute all Tests tabs.
 
 All requests must include **`user_id`** (JSON or form-data). Optional: **`user_name`**.
 
-Knowledge graph (optional): set `KG_ENABLED=true` on the server; artifacts land under `artifacts/kg/{user_id}/kg_{ingest_id}.json`. Full Ragas transforms only if `KG_APPLY_TRANSFORMS=true` (runs inside `KnowledgeGraphGenerator`).
+Knowledge graph is **mandatory** on successful ingest. Artifacts land under `artifacts/kg/{user_id}/kg_{ingest_id}.json`. Full Ragas transforms only if `KG_APPLY_TRANSFORMS=true` (runs inside `KnowledgeGraphGenerator`). KG failure fails the request.
 
 ## Success body checklist
 
@@ -97,7 +97,7 @@ Knowledge graph (optional): set `KG_ENABLED=true` on the server; artifacts land 
       "meta": { "user_id": "user_demo", "ingest_id": "ing_…" }
     }
   ],
-  "kg_built": false,
+  "kg_built": true,
   "kg_transform_applied": false,
   "warnings": ["Indexing complete …"]
 }

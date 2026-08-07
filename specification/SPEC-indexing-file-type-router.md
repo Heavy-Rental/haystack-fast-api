@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|--------|
 | **Document type** | Feature SDD (Spec-kit Specify artifact) |
-| **Status** | **As-built** — Packt dual-branch index → store; `user_id` required; optional HR-76 KG after `final_doc_joiner` |
+| **Status** | **As-built** — Packt dual-branch index → store; `user_id` required; **mandatory** HR-76 KG after `final_doc_joiner` |
 | **Feature id** | `indexing-file-type-router` |
 | **Tracking** | HR-74 · HR-76 (identity + KG hook) |
 | **Spec location** | `specification/SPEC-indexing-file-type-router.md` |
@@ -26,7 +26,7 @@ When behaviour here and the codebase diverge, update them in the **same change s
 | Document | Owns |
 |----------|------|
 | **This SPEC** | Live HTTP index graph, MIME map, `user_id`, full ingest response table |
-| [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) | Optional KG after `final_doc_joiner` |
+| [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) | Mandatory KG after `final_doc_joiner` (hard-fail) |
 | [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) | FR-010 **service-level** (not default route) |
 | [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) | Deferred recommend envelope |
 | Parent agentic SPEC | Product vision / catalog |
@@ -58,7 +58,7 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 6. Default process-local `InMemoryDocumentStore`; CI-safe default embedder (`MockDocumentEmbedder`).
 7. Response fields `chunk_count`, `documents_written`, and `has_embedding` on previews.
 
-**HR-76 (shipped):** required `user_id`; optional user-scoped KG after post-join chunks ([`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md)).
+**HR-76 (shipped):** required `user_id`; **mandatory** user-scoped KG after post-join chunks ([`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md)).
 
 **Out of scope (still):** persistent multi-instance DocumentStore; Naive/hybrid RAG **query** HTTP; recommend reattach on this route (T017); `LinkContentFetcher` (T030).
 
@@ -71,8 +71,8 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 - Classified sources are **converted** to Haystack `Document`s by MIME type.
 - Converted documents are **cleaned, split, embedded, and written** to a DocumentStore.
 - Request requires **`user_id`** (optional `user_name`); echoed on response; stamped on chunk meta.
-- Successful responses return ingest fields plus optional **`kg_*`** when `KG_ENABLED=true`.
-- Missing `user_id`, unclassified type, empty source, or zero written chunks → **400**.
+- Successful responses return ingest fields plus **`kg_*`** (`kg_built=true` on success).
+- Missing `user_id`, unclassified type, empty source, zero written chunks, or KG failure → **400**.
 - Dates accepted; unused for ranking until reattach.
 
 ---
@@ -114,7 +114,7 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 | **FR-IX-019** | CSV branch MUST use CSV-oriented clean/split (e.g. `CSVDocumentCleaner` + row-wise `CSVDocumentSplitter`), not only the unstructured word splitter. |
 | **FR-IX-020** | Unstructured branch MUST run sanitizer (or equivalent quality gate) → `DocumentCleaner` → word `DocumentSplitter` before the final joiner. |
 | **FR-IX-021** | Request MUST include `user_id`; MAY include `user_name`. Chunks SHOULD carry these in metadata. |
-| **FR-IX-022** | When `KG_ENABLED=true`, after **`final_doc_joiner`** chunks exist, MAY build a user-scoped KG; full Ragas transforms run only inside `KnowledgeGraphGenerator` (see [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md)). |
+| **FR-IX-022** | After **`final_doc_joiner`** chunks exist and index write succeeds, MUST build a user-scoped KG (hard-fail on failure); full Ragas transforms run only inside `KnowledgeGraphGenerator` when `KG_APPLY_TRANSFORMS=true` (see [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md)). |
 
 ---
 
@@ -142,7 +142,7 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 | `document_count` (+ structured/unstructured_document_count) | int | Pre-split logical units |
 | `chunk_count` / `documents_written` | int | After split/write |
 | `documents` | object[] | Previews + meta (`user_id`, `ingest_id`, …) |
-| `kg_built` | bool | Default false |
+| `kg_built` | bool | Always `true` on successful 200 |
 | `kg_node_count` / `kg_relationship_count` | int \| null | |
 | `kg_artifact_path` | string \| null | Under `KG_ARTIFACT_DIR/{user_id}/` |
 | `kg_transform_applied` | bool | Full Ragas on generator |
@@ -166,7 +166,7 @@ Aligned with Packt Ch. 4 indexing flowchart
        ▼
   final_doc_joiner
        ├─► doc_embedder → writer → InMemoryDocumentStore
-       └─► (KG_ENABLED) post-join chunks → KG (see knowledge-graph SPEC)
+       └─► post-join chunks → KG (mandatory; see knowledge-graph SPEC)
        │
        ▼
   IngestFromProjectSpecResponse
@@ -177,8 +177,8 @@ Aligned with Packt Ch. 4 indexing flowchart
 | Path | Role |
 |------|------|
 | `app/pipelines/indexing/*` | Dual-branch index graph, store, embedder |
-| `app/pipelines/kg/*` | Optional KG (HR-76) |
-| `app/services/indexing.py` | Index + optional KG hook |
+| `app/pipelines/kg/*` | Mandatory KG (HR-76) |
+| `app/services/indexing.py` | Index + mandatory KG (hard-fail) |
 | `app/api/recommendations.py` | Thin HTTP |
 | `app/schemas/indexing.py` | Response DTO |
 | `app/config.py` | `INDEXING_*`, `KG_*` |

@@ -217,7 +217,7 @@ Notes:
 | Indexing embedder | `INDEXING_EMBEDDER` | `mock` \| `openai` \| `sentence-transformers` |
 | Indexing split | `INDEXING_SPLIT_LENGTH`, `INDEXING_SPLIT_OVERLAP` | Chunking |
 | Indexing models | `INDEXING_OPENAI_EMBEDDING_MODEL`, `INDEXING_ST_MODEL`, `INDEXING_EMBEDDING_DIM` | Embed config |
-| Knowledge graph | `KG_ENABLED`, `KG_ARTIFACT_DIR`, `KG_APPLY_TRANSFORMS`, `KG_STRICT` | Optional post-join KG (HR-76) |
+| Knowledge graph | `KG_ARTIFACT_DIR`, `KG_APPLY_TRANSFORMS` | Mandatory post-join KG (HR-76); transforms optional |
 
 Full commented defaults: [`.env.example`](../.env.example). Feature detail: [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md), [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md). Sequential map: [`README.md`](./README.md).
 

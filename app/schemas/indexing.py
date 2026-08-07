@@ -22,7 +22,7 @@ class IngestDocumentPreview(BaseModel):
 
 
 class IngestFromProjectSpecResponse(BaseModel):
-    """Successful ingest response for /from-project-spec (index + optional KG)."""
+    """Successful ingest response for /from-project-spec (index + mandatory KG)."""
 
     ingest_id: str = Field(..., description="ing_ + hex identifier")
     user_id: str = Field(..., description="Echo of request user_id")
@@ -60,7 +60,7 @@ class IngestFromProjectSpecResponse(BaseModel):
     )
     kg_built: bool = Field(
         default=False,
-        description="True when a knowledge graph artifact was written",
+        description="True when a knowledge graph artifact was written (always true on success)",
     )
     kg_node_count: int | None = Field(default=None)
     kg_relationship_count: int | None = Field(default=None)

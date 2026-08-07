@@ -1,17 +1,19 @@
-"""HR-76: knowledge graph after final_doc_joiner; transforms on generator only."""
+"""HR-76: mandatory knowledge graph after final_doc_joiner; transforms on generator only."""
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from haystack.dataclasses import Document
 from haystack.document_stores.in_memory import InMemoryDocumentStore
 
 from app.config import get_settings
+from app.core.exceptions import BadRequestError
 from app.pipelines.indexing.embedder_factory import build_document_embedder
 from app.pipelines.indexing.pipeline import build_indexing_pipeline
 from app.pipelines.kg.bridge import DocumentToLangChainConverter
 from app.pipelines.kg.generator import KnowledgeGraphGenerator
-from app.pipelines.kg.runner import run_knowledge_graph
+from app.pipelines.kg.runner import KnowledgeGraphResult, run_knowledge_graph
 from app.pipelines.kg.saver import KnowledgeGraphSaver, safe_user_path_segment
 from app.services.indexing import IndexingIngestService
 
@@ -67,11 +69,10 @@ def test_run_knowledge_graph_user_scoped(tmp_path: Path) -> None:
     assert "alice" in result.kg_artifact_path
 
 
-def test_service_kg_enabled_builds_artifact(
+def test_service_always_builds_kg_artifact(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     get_settings.cache_clear()
-    monkeypatch.setenv("KG_ENABLED", "true")
     monkeypatch.setenv("KG_ARTIFACT_DIR", str(tmp_path))
     monkeypatch.setenv("KG_APPLY_TRANSFORMS", "false")
     get_settings.cache_clear()
@@ -104,7 +105,6 @@ def test_two_users_distinct_kg_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     get_settings.cache_clear()
-    monkeypatch.setenv("KG_ENABLED", "true")
     monkeypatch.setenv("KG_ARTIFACT_DIR", str(tmp_path))
     get_settings.cache_clear()
 
@@ -122,5 +122,40 @@ def test_two_users_distinct_kg_paths(
     assert r1.kg_artifact_path != r2.kg_artifact_path
     assert "user_a" in (r1.kg_artifact_path or "")
     assert "user_b" in (r2.kg_artifact_path or "")
+
+    get_settings.cache_clear()
+
+
+def test_service_kg_failure_hard_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    get_settings.cache_clear()
+    monkeypatch.setenv("KG_ARTIFACT_DIR", str(tmp_path))
+    get_settings.cache_clear()
+
+    failed = KnowledgeGraphResult(
+        kg_built=False,
+        kg_node_count=0,
+        kg_relationship_count=0,
+        kg_artifact_path=None,
+        kg_transform_applied=False,
+        warnings=["simulated kg failure"],
+    )
+
+    service = IndexingIngestService(
+        pipeline=build_indexing_pipeline(
+            document_store=InMemoryDocumentStore(),
+            embedder=build_document_embedder(mode="mock", dimension=4),
+        )
+    )
+    with patch(
+        "app.pipelines.kg.runner.run_knowledge_graph",
+        return_value=failed,
+    ):
+        with pytest.raises(BadRequestError, match="simulated kg failure"):
+            service.ingest_from_project_spec(
+                user_id="u_fail",
+                project_text="Need excavator",
+            )
 
     get_settings.cache_clear()

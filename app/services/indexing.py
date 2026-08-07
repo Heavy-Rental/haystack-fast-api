@@ -154,7 +154,7 @@ def _build_default_pipeline() -> Pipeline:
 
 
 class IndexingIngestService:
-    """Index project-spec sources; optionally build KG after final_doc_joiner chunks."""
+    """Index project-spec sources; always build KG after final_doc_joiner chunks."""
 
     def __init__(self, *, pipeline: Pipeline | None = None) -> None:
         self._pipeline = pipeline or _build_default_pipeline()
@@ -265,43 +265,36 @@ class IndexingIngestService:
         previews = [_document_preview(d) for d in (embedded_docs or joiner_docs)]
         warnings = [PART3_WARNING, *conversion_warnings]
 
-        kg_built = False
-        kg_node_count: int | None = None
-        kg_relationship_count: int | None = None
-        kg_artifact_path: str | None = None
-        kg_transform_applied = False
-
         settings = get_settings()
-        if settings.kg_enabled:
-            try:
-                from app.pipelines.kg.runner import run_knowledge_graph
+        from app.pipelines.kg.runner import run_knowledge_graph
 
-                # Post-final_doc_joiner chunks; full Ragas transforms only in generator.
-                kg_result = run_knowledge_graph(
-                    joiner_docs or embedded_docs,
-                    user_id=uid,
-                    ingest_id=ingest_id,
-                    artifact_dir=settings.kg_artifact_dir,
-                    apply_transforms=bool(settings.kg_apply_transforms),
-                )
-                kg_built = kg_result.kg_built
-                kg_node_count = kg_result.kg_node_count
-                kg_relationship_count = kg_result.kg_relationship_count
-                kg_artifact_path = kg_result.kg_artifact_path
-                kg_transform_applied = kg_result.kg_transform_applied
-                warnings.extend(kg_result.warnings)
-                if not kg_built and settings.kg_strict:
-                    raise BadRequestError(
-                        "; ".join(kg_result.warnings) or "knowledge graph build failed"
-                    )
-            except BadRequestError:
-                raise
-            except Exception as exc:  # noqa: BLE001
-                msg = f"knowledge graph step failed: {exc}"
-                logger.warning(msg)
-                warnings.append(msg)
-                if settings.kg_strict:
-                    raise BadRequestError(msg) from exc
+        # Mandatory KG: post-final_doc_joiner chunks; full Ragas transforms only in generator.
+        try:
+            kg_result = run_knowledge_graph(
+                joiner_docs or embedded_docs,
+                user_id=uid,
+                ingest_id=ingest_id,
+                artifact_dir=settings.kg_artifact_dir,
+                apply_transforms=bool(settings.kg_apply_transforms),
+            )
+        except BadRequestError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            msg = f"knowledge graph step failed: {exc}"
+            logger.warning(msg)
+            raise BadRequestError(msg) from exc
+
+        if not kg_result.kg_built:
+            raise BadRequestError(
+                "; ".join(kg_result.warnings) or "knowledge graph build failed"
+            )
+
+        kg_built = kg_result.kg_built
+        kg_node_count = kg_result.kg_node_count
+        kg_relationship_count = kg_result.kg_relationship_count
+        kg_artifact_path = kg_result.kg_artifact_path
+        kg_transform_applied = kg_result.kg_transform_applied
+        warnings.extend(kg_result.warnings)
 
         logger.info(
             "indexing_ingest ingest_id=%s user_id=%s data_kind=%s chunks=%s "

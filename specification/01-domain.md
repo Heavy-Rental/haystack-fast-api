@@ -139,7 +139,7 @@ Industry breadth above is research context; **responses MUST stay within this ca
 #### Knowledge graph (target)
 
 - Offline / batch structure over catalog and historical project text (e.g. Ragas `KnowledgeGraph`) for multi-hop suitability, richer rationales, and evaluation aids.
-- **As-built (HR-76):** optional **user-scoped** KG artifact from a project-spec upload (`user_id` + `ingest_id`), built after indexing chunks — see [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md).
+- **As-built (HR-76):** **mandatory** **user-scoped** KG artifact from a project-spec upload (`user_id` + `ingest_id`), built after indexing chunks — see [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md).
 - **Does not replace** Asset SQL filtering, Booking availability, or `predict_price()` on the online path unless a later SDD promotes graph traversal to a live tool.
 
 ---

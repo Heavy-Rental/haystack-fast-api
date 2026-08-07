@@ -120,7 +120,7 @@ curl -s -X POST http://localhost:8000/api/v1/recommendations/from-project-spec \
 | `documents_written` | ≥ 1 |
 | `chunk_count` | ≥ 1 |
 | `documents[0].has_embedding` | `true` |
-| `kg_built` | `false` unless `KG_ENABLED=true` |
+| `kg_built` | `true` on successful ingest (KG is mandatory) |
 | Response shape | **No** `recommendation_id` / `results_by_need` |
 
 > **Service-level recommend** (not default HTTP): call `RecommendationService` in pytest — expect `rec_` / `results_by_need` / ranked `item` (see `test_recommend_pipeline_mvp.py`).

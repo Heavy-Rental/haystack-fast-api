@@ -10,3 +10,4 @@
 - [x] T006 Full Ragas transforms only inside generator when flagged
 - [x] T007 Hook after indexing (post-join chunks)
 - [x] T008 Tests + Postman user fields
+- [x] T009 Mandatory KG + hard-fail; remove `KG_ENABLED` / `KG_STRICT`
