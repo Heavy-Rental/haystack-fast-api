@@ -15,8 +15,13 @@ def _isolate_kg_artifact_dir(
 ) -> None:
     """Keep mandatory KG writes out of the repo artifacts/ tree during tests."""
     monkeypatch.setenv("KG_ARTIFACT_DIR", str(tmp_path / "kg"))
+    monkeypatch.setenv("PROJECT_AGENT_MODE", "stub")
     get_settings.cache_clear()
+    from app.services.project_knowledge_session import reset_project_knowledge_registry
+
+    reset_project_knowledge_registry()
     yield
+    reset_project_knowledge_registry()
     get_settings.cache_clear()
 
 

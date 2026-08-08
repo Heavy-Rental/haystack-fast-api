@@ -1,4 +1,4 @@
-"""Project-spec intake: indexing + mandatory user-scoped KG (HR-76)."""
+"""Project-spec intake + Stage-1 multi-agent project-knowledge Q&A."""
 
 from datetime import date
 
@@ -8,11 +8,16 @@ from pydantic import ValidationError
 
 from app.core.exceptions import BadRequestError
 from app.schemas.indexing import IngestFromProjectSpecResponse
+from app.schemas.project_knowledge import (
+    ProjectKnowledgeQueryRequest,
+    ProjectKnowledgeQueryResponse,
+)
 from app.schemas.recommendations import RecommendFromProjectSpecRequest
 from app.services.indexing import (
     IndexingIngestService,
     byte_stream_from_upload,
 )
+from app.services.project_knowledge_qa import ProjectKnowledgeQAService
 
 router = APIRouter(prefix="/api/v1/recommendations", tags=["recommendations"])
 
@@ -140,4 +145,30 @@ async def recommend_from_project_spec(request: Request) -> IngestFromProjectSpec
 
     raise BadRequestError(
         "Content-Type must be application/json or multipart/form-data"
+    )
+
+
+@router.post(
+    "/project-knowledge/query",
+    response_model=ProjectKnowledgeQueryResponse,
+    summary="Multi-agent Q&A over project DocumentStore + KG-1",
+)
+async def query_project_knowledge(
+    body: ProjectKnowledgeQueryRequest,
+) -> ProjectKnowledgeQueryResponse:
+    """LangGraph research → graph → synthesis over Stage-1 project sources only.
+
+    Requires a prior successful ``/from-project-spec`` ingest for the same
+    ``user_id`` + ``ingest_id`` (process-local session). Optional
+    ``kg_artifact_path`` can reload KG-1 after restart; vector store is empty
+    until re-ingest.
+    """
+    service = ProjectKnowledgeQAService()
+    return await run_in_threadpool(
+        service.ask,
+        user_id=body.user_id,
+        ingest_id=body.ingest_id,
+        query=body.query,
+        top_k=body.top_k,
+        kg_artifact_path=body.kg_artifact_path,
     )

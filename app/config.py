@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     kg_artifact_dir: str = Field(default="artifacts/kg", alias="KG_ARTIFACT_DIR")
     kg_apply_transforms: bool = Field(default=False, alias="KG_APPLY_TRANSFORMS")
 
+    # Stage-1 multi-agent project-knowledge Q&A (LangGraph + Haystack tools)
+    # stub = deterministic synthesis from tool hits (CI-safe); llm = OpenAI-compatible
+    project_agent_mode: str = Field(default="stub", alias="PROJECT_AGENT_MODE")
+    project_agent_top_k: int = Field(default=5, alias="PROJECT_AGENT_TOP_K")
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:
