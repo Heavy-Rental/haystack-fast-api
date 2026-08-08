@@ -1,4 +1,9 @@
-"""Project-spec indexing + optional post-join knowledge graph (HR-76)."""
+"""Project-spec indexing + mandatory post-join knowledge graph (HR-76).
+
+After a successful index write + KG-1 build, registers a
+``ProjectKnowledgeSession`` so Stage-1 multi-agent tools can address both
+the ingest-scoped ``InMemoryDocumentStore`` and the project knowledge graph.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +15,7 @@ from typing import Any
 
 from haystack import Pipeline
 from haystack.dataclasses import ByteStream, Document
+from haystack.document_stores.in_memory import InMemoryDocumentStore
 
 from app.config import get_settings
 from app.core.exceptions import BadRequestError
@@ -17,7 +23,10 @@ from app.pipelines.indexing.embedder_factory import build_document_embedder
 from app.pipelines.indexing.mime_map import MIME_TEXT_PLAIN, guess_mime_from_filename
 from app.pipelines.indexing.pipeline import build_indexing_pipeline, run_indexing_pipeline
 from app.schemas.indexing import IngestDocumentPreview, IngestFromProjectSpecResponse
-
+from app.services.project_knowledge_session import (
+    ProjectKnowledgeSession,
+    get_project_knowledge_registry,
+)
 logger = logging.getLogger(__name__)
 
 PART3_WARNING = (
@@ -133,7 +142,7 @@ def _document_preview(doc: Document) -> IngestDocumentPreview:
     )
 
 
-def _build_default_pipeline() -> Pipeline:
+def _build_pipeline_for_store(document_store: InMemoryDocumentStore) -> Pipeline:
     settings = get_settings()
     mode = str(settings.indexing_embedder or "mock").strip().lower()
     if mode not in {"mock", "openai", "sentence-transformers", "st", "minilm"}:
@@ -147,17 +156,35 @@ def _build_default_pipeline() -> Pipeline:
         sentence_transformers_model=settings.indexing_st_model,
     )
     return build_indexing_pipeline(
+        document_store=document_store,
         embedder=embedder,
         split_length=int(settings.indexing_split_length),
         split_overlap=int(settings.indexing_split_overlap),
     )
 
 
+def _document_store_from_pipeline(pipeline: Pipeline) -> InMemoryDocumentStore | None:
+    """Best-effort extract of the writer-backed store (test pipelines)."""
+    try:
+        writer = pipeline.get_component("writer")
+    except Exception:  # noqa: BLE001
+        return None
+    store = getattr(writer, "document_store", None)
+    return store if isinstance(store, InMemoryDocumentStore) else None
+
+
 class IndexingIngestService:
     """Index project-spec sources; always build KG after final_doc_joiner chunks."""
 
-    def __init__(self, *, pipeline: Pipeline | None = None) -> None:
-        self._pipeline = pipeline or _build_default_pipeline()
+    def __init__(
+        self,
+        *,
+        pipeline: Pipeline | None = None,
+        document_store: InMemoryDocumentStore | None = None,
+    ) -> None:
+        # Prefer an explicit pipeline (tests). Otherwise build per-ingest store.
+        self._pipeline = pipeline
+        self._document_store = document_store
 
     def ingest_from_project_spec(
         self,
@@ -172,6 +199,20 @@ class IndexingIngestService:
             raise BadRequestError("user_id is required")
         uname = user_name.strip() if isinstance(user_name, str) and user_name.strip() else None
         ingest_id = f"ing_{uuid.uuid4().hex}"
+
+        # Per-ingest DocumentStore for multi-user isolation (Stage 1 multi-agent).
+        # When tests inject a pipeline, reuse its writer store so registry matches writes.
+        if self._document_store is not None:
+            session_store = self._document_store
+            pipeline = self._pipeline or _build_pipeline_for_store(session_store)
+        elif self._pipeline is not None:
+            pipeline = self._pipeline
+            session_store = (
+                _document_store_from_pipeline(pipeline) or InMemoryDocumentStore()
+            )
+        else:
+            session_store = InMemoryDocumentStore()
+            pipeline = _build_pipeline_for_store(session_store)
 
         sources: list[ByteStream | str | Path] = []
         if file_sources:
@@ -199,7 +240,7 @@ class IndexingIngestService:
                 "project_text or file must provide at least one non-empty source"
             )
 
-        out = run_indexing_pipeline(self._pipeline, sources=sources)
+        out = run_indexing_pipeline(pipeline, sources=sources)
 
         unclassified_count = int(out.get("unclassified_count") or 0)
         structured_count = int(out.get("structured_count") or 0)
@@ -295,6 +336,27 @@ class IndexingIngestService:
         kg_artifact_path = kg_result.kg_artifact_path
         kg_transform_applied = kg_result.kg_transform_applied
         warnings.extend(kg_result.warnings)
+
+        # Register dual knowledge sources for Stage-1 multi-agent tools.
+        get_project_knowledge_registry().put(
+            ProjectKnowledgeSession(
+                user_id=uid,
+                ingest_id=ingest_id,
+                document_store=session_store,
+                knowledge_graph=kg_result.knowledge_graph,
+                kg_artifact_path=kg_artifact_path,
+                meta={
+                    "user_name": uname,
+                    "data_kind": data_kind,
+                    "chunk_count": chunk_count,
+                    "documents_written": documents_written,
+                    "filenames": list(out.get("filenames") or []),
+                    "kg_node_count": kg_node_count,
+                    "kg_relationship_count": kg_relationship_count,
+                    "kg_transform_applied": kg_transform_applied,
+                },
+            )
+        )
 
         logger.info(
             "indexing_ingest ingest_id=%s user_id=%s data_kind=%s chunks=%s "

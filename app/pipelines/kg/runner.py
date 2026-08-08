@@ -20,6 +20,7 @@ class KnowledgeGraphResult:
     kg_artifact_path: str | None
     kg_transform_applied: bool
     warnings: list[str]
+    knowledge_graph: Any | None = None
 
 
 def run_knowledge_graph(
@@ -39,6 +40,7 @@ def run_knowledge_graph(
             kg_artifact_path=None,
             kg_transform_applied=False,
             warnings=["no documents available for knowledge graph"],
+            knowledge_graph=None,
         )
 
     bridge = DocumentToLangChainConverter()
@@ -60,6 +62,7 @@ def run_knowledge_graph(
             kg_artifact_path=None,
             kg_transform_applied=transform_applied,
             warnings=warnings or ["knowledge graph produced no nodes"],
+            knowledge_graph=None,
         )
 
     saver = KnowledgeGraphSaver(artifact_dir=artifact_dir)
@@ -79,4 +82,5 @@ def run_knowledge_graph(
         kg_artifact_path=str(save_out.get("artifact_path") or ""),
         kg_transform_applied=transform_applied,
         warnings=warnings,
+        knowledge_graph=kg,
     )

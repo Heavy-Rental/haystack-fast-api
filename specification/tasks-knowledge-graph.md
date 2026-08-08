@@ -1,6 +1,6 @@
 # Tasks: Knowledge Graph (HR-76)
 
-**Input:** [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md)
+**Input:** [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) Part A (HR-76 assembly; multi-agent Stage 1 is Part B / [`tasks-kg-multi-agent-stage1.md`](./tasks-kg-multi-agent-stage1.md))
 
 - [x] T001 SPEC + tasks
 - [x] T002 Config `KG_*`

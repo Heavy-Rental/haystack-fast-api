@@ -41,9 +41,9 @@ The industry is capital-intensive. Success depends on:
 
 **MVP shape (product target):** free-text and/or project file (+ optional rental window) → LLM need decompose → quantity expansion to unit-needs → `Asset` SQL candidates → `Booking` / `BookingItem` availability → `predict_price()` → Haystack rank & rationale → **exactly one** `RecommendationItem` **per unit-need** (singular `item`).
 
-**As-built public route (2026-08-07+):** `POST /api/v1/recommendations/from-project-spec` requires **`user_id`**, runs **Packt dual-branch indexing** through `final_doc_joiner` → embed → **`InMemoryDocumentStore`**, then **always** builds a **user-scoped knowledge graph** (hard-fail on failure; see [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md)), and returns **`IngestFromProjectSpecResponse`**. Normative live contract: [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md). FR-010 recommend remains **service-level** for tests and reattach.
+**As-built public route (2026-08-07+):** `POST /api/v1/recommendations/from-project-spec` requires **`user_id`**, runs **Packt dual-branch indexing** through `final_doc_joiner` → embed → **`InMemoryDocumentStore`**, then **always** builds a **user-scoped knowledge graph** (hard-fail on failure; see [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) Part A), registers a project knowledge session, and returns **`IngestFromProjectSpecResponse`**. Stage-1 multi-agent Q&A: `POST /api/v1/recommendations/project-knowledge/query` over project store + KG-1 ([`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) Part B). Normative live ingest contract: [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md). FR-010 recommend remains **service-level** for tests and reattach.
 
-**Target (later):** reattach recommend HTTP; Naive/hybrid RAG query; multi-agent fusion of store + KG; async ML training. Normative detail lives in feature SPECs—not here.
+**Target (later):** reattach recommend HTTP; equipment KG-2 + stockpile tools; Naive/hybrid RAG over manuals; async ML training. Normative detail lives in feature SPECs—not here.
 
 ## Primary Stakeholders
 
@@ -68,14 +68,14 @@ Short onboard order:
 2. **This file** — vision, as-built vs target  
 3. [`01-domain.md`](./01-domain.md) — ubiquitous language  
 4. [`SPEC-project.md`](./SPEC-project.md) · [`SPEC-project-setup.md`](./SPEC-project-setup.md)  
-5. **Live path:** [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) → [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md)  
+5. **Live path:** [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) → [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) (assembly + Stage-1 agents)  
 
 | Document layer | Owns |
 |----------------|------|
 | `README` | Sequential reading order |
 | `00-overview` / `01-domain` | Vision, domain language |
 | `SPEC-project` / `SPEC-project-setup` | Repo identity, stack, env |
-| Indexing + knowledge-graph SPECs | **Live** project-spec HTTP flow |
+| Indexing + knowledge-graph SPECs | **Live** project-spec HTTP flow (ingest + optional multi-agent Q&A) |
 | Recommend / pricing SPECs | Deferred recommend + service FR-010 |
 | Parent agentic SPEC | Full product SDD |
 

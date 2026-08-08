@@ -24,17 +24,25 @@ POST /api/v1/recommendations/from-project-spec
 │              ▼                           ▼                  │
 │       doc_embedder → writer      6 · KNOWLEDGE GRAPH        │
 │       InMemoryDocumentStore      (SPEC-knowledge-graph)     │
-│                                  mandatory after joiner     │
-│                                  transforms only on         │
-│                                  KnowledgeGraphGenerator    │
+│                                  Part A: mandatory KG after │
+│                                  joiner + JSON artifact     │
+│                                  Part B: session registry   │
+│                                  for multi-agent tools      │
 └─────────────────────────────────────────────────────────────┘
   │
   ▼
 IngestFromProjectSpecResponse
   (ingest_id, user_*, data_kind, documents_written, kg_*)
 
+  │  optional Stage-1 Q&A
+  ▼
+POST /api/v1/recommendations/project-knowledge/query
+  LangGraph: research → graph → synthesis
+  tools: project_vector_search + project_kg_query
+
         ─ ─ ─ ─ deferred (not default HTTP) ─ ─ ─ ─
 Recommend FR-010 (service) → pricing  → results_by_need
+KG-2 equipment stockpile (Stage 2)
 ```
 
 ---
@@ -56,11 +64,11 @@ Recommend FR-010 (service) → pricing  → results_by_need
 | Step | Document | Runtime step |
 |------|----------|--------------|
 | **5** | [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) | Live HTTP: index dual-branch → DocumentStore; **`user_id` required** |
-| **6** | [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) | After `final_doc_joiner`: **mandatory** user-scoped KG (hard-fail); Ragas transforms **only** on generator |
-| **7** | [`.env.example`](../.env.example) | `INDEXING_*`, `KG_*` |
-| **8** | [`../postman/README.md`](../postman/README.md) | Manual live HTTP (include `user_id`) |
+| **6** | [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) | **Part A:** mandatory user-scoped KG after `final_doc_joiner` (hard-fail). **Part B:** Stage-1 multi-agent Q&A. **§10 Testing:** pytest / curl / Postman |
+| **7** | [`.env.example`](../.env.example) | `INDEXING_*`, `KG_*`, `PROJECT_AGENT_*` |
+| **8** | [`../postman/README.md`](../postman/README.md) | Manual live HTTP (include `user_id`; optional project-knowledge query) |
 
-**Tasks:** [`tasks-indexing-file-type-router.md`](./tasks-indexing-file-type-router.md) · [`tasks-knowledge-graph.md`](./tasks-knowledge-graph.md)
+**Tasks:** [`tasks-indexing-file-type-router.md`](./tasks-indexing-file-type-router.md) · [`tasks-knowledge-graph.md`](./tasks-knowledge-graph.md) · [`tasks-kg-multi-agent-stage1.md`](./tasks-kg-multi-agent-stage1.md)
 
 ---
 
@@ -92,7 +100,7 @@ Read only when working on FR-010 rank/price or reattaching recommend HTTP.
 | Concern | Wins |
 |---------|------|
 | Live `POST .../from-project-spec` fields & index graph | **Indexing SPEC** |
-| Mandatory KG after joiner / transforms location | **Knowledge-graph SPEC** |
+| Mandatory KG after joiner / transforms / multi-agent Stage 1 | **Knowledge-graph SPEC** (Parts A–B) |
 | FR-010 components / seed fleet | **Recommendation-pipeline SPEC** (service) |
 | Deferred recommend JSON envelope | **Recommendation-intake SPEC** (labeled deferred) |
 
@@ -103,7 +111,7 @@ Read only when working on FR-010 rank/price or reattaching recommend HTTP.
 1. This README (flow)  
 2. `00-overview` (as-built blurb)  
 3. `SPEC-indexing-file-type-router` (live API)  
-4. `SPEC-knowledge-graph` (mandatory KG)  
+4. `SPEC-knowledge-graph` (mandatory KG + Stage-1 multi-agent)  
 5. `.env.example` + `postman/README`  
 
 Then domain / project-setup / parent as needed.

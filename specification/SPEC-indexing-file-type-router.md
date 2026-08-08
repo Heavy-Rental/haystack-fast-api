@@ -188,6 +188,8 @@ Aligned with Packt Ch. 4 indexing flowchart
 
 `tests/test_indexing_*.py`, `tests/test_knowledge_graph.py`, `tests/test_recommendations_intake.py`.
 
+For **mandatory KG hard-fail** and **Stage-1 multi-agent Q&A** verification (pytest, curl, Postman 15→16), see [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) **§10 Testing**.
+
 ---
 
 ## 7. Acceptance criteria
@@ -219,4 +221,4 @@ Aligned with Packt Ch. 4 indexing flowchart
 
 ---
 
-**Reading order:** [← Setup](./SPEC-project-setup.md) · [Map](./README.md) · [Next: Knowledge graph →](./SPEC-knowledge-graph.md)
+**Reading order:** [← Setup](./SPEC-project-setup.md) · [Map](./README.md) · [Next: Knowledge graph (assembly + multi-agent) →](./SPEC-knowledge-graph.md)

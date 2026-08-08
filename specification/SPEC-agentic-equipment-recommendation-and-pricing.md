@@ -497,9 +497,9 @@ Day 6 rehearsal: run **A + B** live; keep **C** for questions.
 
 ## 11.1 Knowledge graph (target capability)
 
-**As-built (HR-76):** Optional user-scoped KG after project-spec **indexing** (`final_doc_joiner` chunks). Normative child: [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md). Default `KG_APPLY_TRANSFORMS=false` (document nodes); full Ragas transforms only inside `KnowledgeGraphGenerator` when enabled. Live HTTP still owned by [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) (`user_id` required). Sequential reading map: [`README.md`](./README.md).
+**As-built (HR-76 + Stage 1 multi-agent):** **Mandatory** user-scoped KG-1 after project-spec **indexing** (`final_doc_joiner` chunks); JSON artifact + in-memory session; LangGraph Q&A over project DocumentStore + KG-1. Normative child: [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) (Parts A–B). Default `KG_APPLY_TRANSFORMS=false` (document nodes); full Ragas transforms only inside `KnowledgeGraphGenerator` when enabled. Live ingest HTTP still owned by [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) (`user_id` required); Q&A route on the knowledge-graph SPEC. Sequential reading map: [`README.md`](./README.md).
 
-**Target (this section):** broader offline catalog/historical-project KG, multi-hop for ranking/eval, optional online agent tools — not a substitute for Asset SQL / availability / `predict_price`.
+**Target (this section):** broader offline catalog/historical-project **KG-2**, multi-hop for ranking/eval, equipment tools — not a substitute for Asset SQL / availability / `predict_price` on the recommend path.
 
 **Source:** *Building Natural Language and LLM Pipelines*, **Chapter 5 — Haystack Pipeline Development with Custom Components** (local EPUB: `Chapter 5_ Haystack Pipeline Development with Custom Components.epub`). Implementation reference in the book’s repo: `ch5/jupyter-notebooks/scripts/knowledge_graph_component.py` (`KnowledgeGraphGenerator`, `KnowledgeGraphSaver`) and `ch5/pyproject.toml` for the dependency set used with that chapter.
 

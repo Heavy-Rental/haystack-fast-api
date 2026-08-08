@@ -39,7 +39,8 @@ uv sync --all-groups
 
 | Layer | How to test | Expect |
 |-------|-------------|--------|
-| **HTTP** `POST .../from-project-spec` | `tests/test_recommendations_intake.py`, `postman/` | `ingest_id`, `data_kind`, `documents_written`, `has_embedding` |
+| **HTTP** `POST .../from-project-spec` | `tests/test_recommendations_intake.py`, `postman/` | `ingest_id`, `data_kind`, `documents_written`, `has_embedding`, `kg_*` |
+| **HTTP** multi-agent Q&A `POST .../project-knowledge/query` | [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) **§10**; `tests/test_project_knowledge_*.py`; Postman folder **04** | `answer`, dual `sources_used` / `tool_traces` |
 | **Service** FR-010 | `tests/test_recommend_pipeline_mvp.py`, `tests/test_pipeline_intake_front.py` | `recommendation_id`, `results_by_need`, singular `item` |
 
 ---
@@ -61,6 +62,9 @@ uv run pytest tests/test_recommendations_intake.py -v
 # LLM decomposer (mocked HTTP; no DigitalOcean required)
 uv run pytest tests/test_llm_need_decomposer.py -v
 
+# Knowledge graph assembly + Stage-1 multi-agent (see SPEC-knowledge-graph §10)
+uv run pytest tests/test_knowledge_graph.py tests/test_project_knowledge_*.py -v
+
 # Full suite
 uv run pytest tests/ -v
 ```
@@ -73,6 +77,7 @@ uv run pytest tests/ -v
 | `tests/test_recommend_pipeline_mvp.py` | Seed asset match, booking overlap, pricing payload, top-1 rank, e2e scissors item, qty=2, Scenario C no-match |
 | `tests/test_recommendations_intake.py` | Public POST JSON/multipart **ingest** (indexing), 400 validation |
 | `tests/test_llm_need_decomposer.py` | JSON parse, mocked chat completions, factory stub/llm |
+| `tests/test_knowledge_graph.py` + `tests/test_project_knowledge_*.py` | Mandatory KG-1 + multi-agent Q&A — **normative steps in** [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) **§10** |
 
 **Expect:** all tests pass.
 
@@ -272,7 +277,8 @@ NEED_DECOMPOSER=stub
 | Spec | Role |
 |------|------|
 | [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) | **Live** HTTP ingest contract |
-| [`../postman/README.md`](../postman/README.md) | Live Postman collection |
+| [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) | KG assembly + Stage-1 multi-agent; **§10 Testing** |
+| [`../postman/README.md`](../postman/README.md) | Live Postman collection (ingest + folder 04 multi-agent) |
 | [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) | Normative FR-010.1–8 **service** SDD |
 | [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) | Request shapes + deferred recommend response |
 | [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md) | Deferred recommend Postman |
@@ -288,7 +294,8 @@ NEED_DECOMPOSER=stub
 | **1.0.0** | 2026-08-05 | Initial testing guide for recommendation pipeline MVP (pytest, curl, Postman, Swagger, negatives, DigitalOcean LLM, expectations) |
 | **1.1.0** | 2026-08-07 | Spec reconcile: live HTTP = indexing |
 | **1.2.0** | 2026-08-07 | Live curl requires `user_id`; kg_built note; sequential map |
+| **1.3.0** | 2026-08-08 | Pointers to knowledge-graph §10 multi-agent testing + Postman folder 04 |
 
-**Reading order:** [Map](./README.md) · live contract [Indexing](./SPEC-indexing-file-type-router.md) · [Postman live](../postman/README.md)
+**Reading order:** [Map](./README.md) · live contract [Indexing](./SPEC-indexing-file-type-router.md) · [Knowledge graph testing §10](./SPEC-knowledge-graph.md) · [Postman live](../postman/README.md)
 
 When test commands or expected results change, update this guide and normative SPECs together.
