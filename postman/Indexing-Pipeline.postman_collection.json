@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
-    "name": "Indexing Pipeline (from-project-spec)",
-    "description": "Postman collection for POST /api/v1/recommendations/from-project-spec after Parts 1–3 (classify → convert → clean → split → embed → write).\n\n**Import:** Collection + environment `Indexing-Pipeline-Local`.\n**Server:** `uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload` from `haystack-fast-api/`.\n**Files:** For multipart requests, attach fixtures from `postman/fixtures/` (see each request description).\n\n**Success shape:** `ingest_id`, `data_kind`, `document_count`, `chunk_count`, `documents_written`, `documents[].has_embedding`.\n**Not returned:** `recommendation_id` / `results_by_need` (recommend path deferred).",
+    "name": "Indexing + Project Knowledge (Stage 1)",
+    "description": "Postman collection for:\n1) POST /api/v1/recommendations/from-project-spec \u2014 indexing + mandatory KG-1\n2) POST /api/v1/recommendations/project-knowledge/query \u2014 Stage-1 multi-agent Q&A\n\n**Import:** Collection + environment `Indexing-Pipeline-Local`.\n**Server:** `uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload` from `haystack-fast-api/`.\n**Files:** For multipart requests, attach fixtures from `postman/fixtures/`.\n\n**Multi-agent:** Run request **15** (ingest) then **16** (query) so `ingestId` is saved.\nSessions are process-local; use the same server for both calls.\nDefault `PROJECT_AGENT_MODE=stub` (no LLM key required).\n\n**Ingest success shape:** `ingest_id`, `data_kind`, `chunk_count`, `documents_written`, `kg_*`.\n**Q&A success shape:** `answer`, `sources_used`, `tool_traces`, `research_hits`, `graph_hits`.\n**Not returned on ingest:** `recommendation_id` / `results_by_need`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -13,6 +13,22 @@
     {
       "key": "ingestPath",
       "value": "/api/v1/recommendations/from-project-spec"
+    },
+    {
+      "key": "projectKnowledgePath",
+      "value": "/api/v1/recommendations/project-knowledge/query"
+    },
+    {
+      "key": "userId",
+      "value": "user_demo"
+    },
+    {
+      "key": "ingestId",
+      "value": ""
+    },
+    {
+      "key": "agentQuery",
+      "value": "What excavator capacity and soil conditions are required?"
     }
   ],
   "item": [
@@ -50,7 +66,7 @@
       ]
     },
     {
-      "name": "01 Happy path — JSON (unstructured)",
+      "name": "01 Happy path \u2014 JSON (unstructured)",
       "item": [
         {
           "name": "02 POST JSON project_text (unstructured)",
@@ -81,6 +97,25 @@
                   "pm.test('no legacy recommend envelope', function () {",
                   "    pm.expect(j).to.not.have.property('recommendation_id');",
                   "    pm.expect(j).to.not.have.property('results_by_need');",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const j = pm.response.json();",
+                  "    if (j.ingest_id) {",
+                  "        pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "        pm.environment.set('ingestId', j.ingest_id);",
+                  "    }",
+                  "    if (j.user_id) {",
+                  "        pm.collectionVariables.set('userId', j.user_id);",
+                  "        pm.environment.set('userId', j.user_id);",
+                  "    }",
+                  "}",
+                  "pm.test('kg_built true', function () {",
+                  "    pm.expect(j.kg_built).to.eql(true);",
+                  "    pm.expect(j.kg_node_count).to.be.at.least(1);",
+                  "    pm.expect(j.kg_artifact_path).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('user_id present', function () {",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
                   "});"
                 ]
               }
@@ -118,6 +153,25 @@
                   "pm.test('unstructured ingest', function () {",
                   "    pm.expect(j.data_kind).to.eql('unstructured');",
                   "    pm.expect(j.documents_written).to.be.at.least(1);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const j = pm.response.json();",
+                  "    if (j.ingest_id) {",
+                  "        pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "        pm.environment.set('ingestId', j.ingest_id);",
+                  "    }",
+                  "    if (j.user_id) {",
+                  "        pm.collectionVariables.set('userId', j.user_id);",
+                  "        pm.environment.set('userId', j.user_id);",
+                  "    }",
+                  "}",
+                  "pm.test('kg_built true', function () {",
+                  "    pm.expect(j.kg_built).to.eql(true);",
+                  "    pm.expect(j.kg_node_count).to.be.at.least(1);",
+                  "    pm.expect(j.kg_artifact_path).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('user_id present', function () {",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
                   "});"
                 ]
               }
@@ -143,7 +197,7 @@
       ]
     },
     {
-      "name": "02 Happy path — multipart files",
+      "name": "02 Happy path \u2014 multipart files",
       "item": [
         {
           "name": "04 POST multipart .txt (unstructured)",
@@ -174,6 +228,17 @@
               "mode": "formdata",
               "formdata": [
                 {
+                  "key": "user_id",
+                  "value": "{{userId}}",
+                  "type": "text",
+                  "description": "Required identity for ingest + KG session"
+                },
+                {
+                  "key": "user_name",
+                  "value": "Demo User",
+                  "type": "text"
+                },
+                {
                   "key": "file",
                   "description": "Select postman/fixtures/project.txt",
                   "type": "file",
@@ -192,7 +257,7 @@
               ]
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "**Body → form-data** (do NOT set Content-Type manually).\n\n| Key | Type | Value |\n|-----|------|-------|\n| `file` | File | `postman/fixtures/project.txt` |\n| `start_date` | Text | `2026-09-01` (optional) |\n| `end_date` | Text | `2026-09-12` (optional) |\n\nIf the file field is empty after import, click **Select Files** and choose `postman/fixtures/project.txt`."
+            "description": "**Body \u2192 form-data** (do NOT set Content-Type manually).\n\n| Key | Type | Value |\n|-----|------|-------|\n| `file` | File | `postman/fixtures/project.txt` |\n| `start_date` | Text | `2026-09-01` (optional) |\n| `end_date` | Text | `2026-09-12` (optional) |\n\nIf the file field is empty after import, click **Select Files** and choose `postman/fixtures/project.txt`."
           },
           "response": []
         },
@@ -224,6 +289,17 @@
             "body": {
               "mode": "formdata",
               "formdata": [
+                {
+                  "key": "user_id",
+                  "value": "{{userId}}",
+                  "type": "text",
+                  "description": "Required identity for ingest + KG session"
+                },
+                {
+                  "key": "user_name",
+                  "value": "Demo User",
+                  "type": "text"
+                },
                 {
                   "key": "file",
                   "description": "Select postman/fixtures/brief.md",
@@ -268,6 +344,17 @@
               "mode": "formdata",
               "formdata": [
                 {
+                  "key": "user_id",
+                  "value": "{{userId}}",
+                  "type": "text",
+                  "description": "Required identity for ingest + KG session"
+                },
+                {
+                  "key": "user_name",
+                  "value": "Demo User",
+                  "type": "text"
+                },
+                {
                   "key": "file",
                   "description": "Select postman/fixtures/needs.csv",
                   "type": "file",
@@ -307,6 +394,17 @@
             "body": {
               "mode": "formdata",
               "formdata": [
+                {
+                  "key": "user_id",
+                  "value": "{{userId}}",
+                  "type": "text",
+                  "description": "Required identity for ingest + KG session"
+                },
+                {
+                  "key": "user_name",
+                  "value": "Demo User",
+                  "type": "text"
+                },
                 {
                   "key": "file",
                   "description": "Select postman/fixtures/needs.json",
@@ -348,6 +446,17 @@
               "mode": "formdata",
               "formdata": [
                 {
+                  "key": "user_id",
+                  "value": "{{userId}}",
+                  "type": "text",
+                  "description": "Required identity for ingest + KG session"
+                },
+                {
+                  "key": "user_name",
+                  "value": "Demo User",
+                  "type": "text"
+                },
+                {
                   "key": "file",
                   "description": "Select postman/fixtures/needs.csv",
                   "type": "file",
@@ -361,7 +470,7 @@
               ]
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "CSV (structured) + free-text (unstructured) → often `data_kind=mixed`."
+            "description": "CSV (structured) + free-text (unstructured) \u2192 often `data_kind=mixed`."
           },
           "response": []
         }
@@ -403,7 +512,7 @@
               "raw": "{\n  \"user_id\": \"user_demo\",\n  \"project_text\": \"   \"\n}\n"
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "Whitespace-only text → 400."
+            "description": "Whitespace-only text \u2192 400."
           },
           "response": []
         },
@@ -440,7 +549,7 @@
               "raw": "{}\n"
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "Empty JSON object → 400."
+            "description": "Empty JSON object \u2192 400."
           },
           "response": []
         },
@@ -477,7 +586,7 @@
               "raw": "{\n  \"user_id\": \"user_demo\",\n  \"project_text\": \"Need an excavator\",\n  \"start_date\": \"2026-09-12\",\n  \"end_date\": \"2026-09-01\"\n}\n"
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "`end_date` before `start_date` → 400."
+            "description": "`end_date` before `start_date` \u2192 400."
           },
           "response": []
         },
@@ -508,6 +617,17 @@
               "mode": "formdata",
               "formdata": [
                 {
+                  "key": "user_id",
+                  "value": "{{userId}}",
+                  "type": "text",
+                  "description": "Required identity for ingest + KG session"
+                },
+                {
+                  "key": "user_name",
+                  "value": "Demo User",
+                  "type": "text"
+                },
+                {
                   "key": "file",
                   "description": "Select postman/fixtures/unsupported.bin",
                   "type": "file",
@@ -516,7 +636,7 @@
               ]
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "Attach `postman/fixtures/unsupported.bin` → 400."
+            "description": "Attach `postman/fixtures/unsupported.bin` \u2192 400."
           },
           "response": []
         },
@@ -547,6 +667,17 @@
               "mode": "formdata",
               "formdata": [
                 {
+                  "key": "user_id",
+                  "value": "{{userId}}",
+                  "type": "text",
+                  "description": "Required identity for ingest + KG session"
+                },
+                {
+                  "key": "user_name",
+                  "value": "Demo User",
+                  "type": "text"
+                },
+                {
                   "key": "file",
                   "description": "Select postman/fixtures/empty.txt",
                   "type": "file",
@@ -555,7 +686,7 @@
               ]
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "Attach `postman/fixtures/empty.txt` (0 bytes) → 400."
+            "description": "Attach `postman/fixtures/empty.txt` (0 bytes) \u2192 400."
           },
           "response": []
         },
@@ -593,7 +724,200 @@
               ]
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "Empty multipart (no file, no text) → 400."
+            "description": "Empty multipart (no file, no text) \u2192 400."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04 Stage-1 multi-agent Q&A",
+      "description": "Project DocumentStore + KG-1 only. Run **15** then **16** in the same server process.\n`ingestId` is written to collection/environment variables on successful ingest.",
+      "item": [
+        {
+          "name": "15 POST ingest project-spec for multi-agent",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('ingest_id prefix', function () {",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "});",
+                  "pm.test('kg_built true', function () {",
+                  "    pm.expect(j.kg_built).to.eql(true);",
+                  "    pm.expect(j.kg_node_count).to.be.at.least(1);",
+                  "});",
+                  "pm.test('wrote embedded chunks', function () {",
+                  "    pm.expect(j.documents_written).to.be.at.least(1);",
+                  "    pm.expect(j.chunk_count).to.be.at.least(1);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const j = pm.response.json();",
+                  "    if (j.ingest_id) {",
+                  "        pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "        pm.environment.set('ingestId', j.ingest_id);",
+                  "    }",
+                  "    if (j.user_id) {",
+                  "        pm.collectionVariables.set('userId', j.user_id);",
+                  "        pm.environment.set('userId', j.user_id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{userId}}\",\n  \"user_name\": \"Demo User\",\n  \"project_text\": \"Site preparation for foundation work. Requires a 20-ton excavator operating on soft clay soil. Project timeline is 8 weeks from mobilisation.\"\n}\n"
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Ingest project text with distinctive capacity/soil/timeline tokens for dual-source multi-agent checks.\n\nOn success, Tests save `ingestId` and `userId` for request **16**."
+          },
+          "response": []
+        },
+        {
+          "name": "16 POST project-knowledge query (multi-agent)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.collectionVariables.get('ingestId') || pm.environment.get('ingestId');",
+                  "if (!id) {",
+                  "    console.warn('ingestId is empty \u2014 run request 15 first in this server process.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('answer present', function () {",
+                  "    pm.expect(j.answer).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.answer).to.include('## Answer');",
+                  "});",
+                  "pm.test('both tools used', function () {",
+                  "    pm.expect(j.sources_used).to.include('project_vector_search');",
+                  "    pm.expect(j.sources_used).to.include('project_kg_query');",
+                  "});",
+                  "pm.test('tool_traces dual agents', function () {",
+                  "    pm.expect(j.tool_traces).to.be.an('array').that.is.not.empty;",
+                  "    const tools = j.tool_traces.map(t => t.tool);",
+                  "    pm.expect(tools).to.include('project_vector_search');",
+                  "    pm.expect(tools).to.include('project_kg_query');",
+                  "});",
+                  "pm.test('identity echoes request', function () {",
+                  "    pm.expect(j.user_id).to.eql(pm.collectionVariables.get('userId') || 'user_demo');",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{userId}}\",\n  \"ingest_id\": \"{{ingestId}}\",\n  \"query\": \"{{agentQuery}}\",\n  \"top_k\": 5\n}\n"
+            },
+            "url": "{{baseUrl}}{{projectKnowledgePath}}",
+            "description": "LangGraph Stage-1 multi-agent: research \u2192 graph \u2192 synthesis.\n\nTools: `project_vector_search` (InMemoryDocumentStore) + `project_kg_query` (KG-1).\n\nRequires `ingestId` from request **15** (same process). Default stub synthesis needs no LLM key."
+          },
+          "response": []
+        },
+        {
+          "name": "17 POST project-knowledge missing session (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('shared error shape', function () {",
+                  "    pm.expect(j.error).to.eql('not_found');",
+                  "    pm.expect(j.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"nobody\",\n  \"ingest_id\": \"ing_missing\",\n  \"query\": \"anything\"\n}\n"
+            },
+            "url": "{{baseUrl}}{{projectKnowledgePath}}",
+            "description": "Unknown session \u2192 404 `not_found`."
+          },
+          "response": []
+        },
+        {
+          "name": "18 POST project-knowledge empty query (422 or 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 4xx', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([400, 422]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{userId}}\",\n  \"ingest_id\": \"ing_any\",\n  \"query\": \"\"\n}\n"
+            },
+            "url": "{{baseUrl}}{{projectKnowledgePath}}",
+            "description": "Empty query fails validation (422 from FastAPI/Pydantic or 400)."
           },
           "response": []
         }
@@ -605,7 +929,9 @@
       "listen": "prerequest",
       "script": {
         "type": "text/javascript",
-        "exec": [""]
+        "exec": [
+          ""
+        ]
       }
     },
     {
