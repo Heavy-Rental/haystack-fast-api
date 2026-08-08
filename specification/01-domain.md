@@ -136,11 +136,11 @@ Industry breadth above is research context; **responses MUST stay within this ca
 - Deposit guidance default: **30%** (unless policy config overrides).
 - Currency default: **SGD**.
 
-#### Knowledge graph (target)
+#### Knowledge graph (target + as-built)
 
-- Offline / batch structure over catalog and historical project text (e.g. Ragas `KnowledgeGraph`) for multi-hop suitability, richer rationales, and evaluation aids.
-- **As-built (HR-76):** **mandatory** **user-scoped** KG artifact from a project-spec upload (`user_id` + `ingest_id`), built after indexing chunks — see [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md).
-- **Does not replace** Asset SQL filtering, Booking availability, or `predict_price()` on the online path unless a later SDD promotes graph traversal to a live tool.
+- Offline / batch structure over catalog and historical project text (e.g. Ragas `KnowledgeGraph`) for multi-hop suitability, richer rationales, and evaluation aids — **Stage 2** for equipment stockpile (**KG-2**).
+- **As-built (HR-76 + Stage 1):** **mandatory** **user-scoped** KG-1 artifact from a project-spec upload (`user_id` + `ingest_id`), built after indexing chunks; multi-agent Q&A over project DocumentStore + KG-1 — see [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md).
+- **Does not replace** Asset SQL filtering, Booking availability, or `predict_price()` on the recommend path unless a later SDD promotes those as live agent tools.
 
 ---
 
@@ -228,7 +228,7 @@ Ownership boundaries
 | [`00-overview.md`](./00-overview.md) | Vision, problem space, product focus |
 | [`README.md`](./README.md) | Sequential reading order (live index → KG → deferred recommend) |
 | [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) | Live project-spec ingest / indexing |
-| [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) | Optional user-scoped KG after chunk join |
+| [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) | Mandatory user-scoped KG after chunk join + Stage-1 multi-agent Q&A |
 | [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) | Parent product SDD |
 | [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md) | `predict_price()`, features, guardrails, retrain |
 | [`SPEC-project.md`](./SPEC-project.md) / [`SPEC-project-setup.md`](./SPEC-project-setup.md) | As-built service and environment |
