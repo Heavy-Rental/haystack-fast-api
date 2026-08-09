@@ -74,7 +74,7 @@ As the agentic recommendation pipeline, when I have a candidate asset and a prop
 
 - GIVEN a candidate asset and a proposed rental window (`start_date`/`end_date`)
   WHEN `predict_price(...)` is called
-  THEN `period_utilization` is computed as a live aggregate — the fraction of assets in the same `category` + spec-band (bucketed from `capacity`/`platform_height`, §5.2) with a `CONFIRMED`/`PENDING`, non-cancelled booking overlapping the requested window — not a forecast, and not a static per-category constant.
+  THEN `period_utilization` is computed as a live aggregate — the fraction of assets in the same `category` + spec-band (bucketed from `capacity`/`platform_height`, §5.2) with a live-hold booking overlapping the requested window, per the status set and overlap rule in §5.2 — not a forecast, and not a static per-category constant.
 
 - GIVEN a proposed `start_date`
   WHEN `predict_price(...)` is called
@@ -124,12 +124,12 @@ Ports `ml-experiments/feature_schema.py` directly — same `CATEGORIES`, `CONDIT
 | Feature | Encoding | Notes |
 |---|---|---|
 | `category` | one-hot, fixed `CATEGORIES` order | via `AssetCategory.name`; never encode the raw FK |
-| `condition` | ordinal, `NEEDS_REPAIR=0…EXCELLENT=3` | `Asset.condition` |
+| `condition` | ordinal, `NEEDS_REPAIR=0…EXCELLENT=3`; **falls back to `"GOOD"` when null** | `Asset.condition`; nullable in the real schema — see masterplan for why `"GOOD"` and not NaN |
 | `duration_days` | numeric passthrough | `Booking.endDate − Booking.startDate` |
-| `capacity` | numeric passthrough | `Asset.capacity` |
+| `capacity` | numeric passthrough; **falls back to `pricing_tables.CATEGORY_CAPACITY_KG` per-category midpoint when null** (not NaN — see masterplan for why this differs from `platform_height`) | `Asset.capacity`; nullable in the real schema, currently unset for non-forklift seed rows |
 | `distance_km` | numeric passthrough | Phase 1/2: still a sampled proxy, not geocoded (see Scope) |
 | `platform_height` | numeric, **NaN for forklift/excavator** | `Asset.platform_height`; left as a native missing value for XGBoost, not imputed — see masterplan for why |
-| `period_utilization` | numeric passthrough, `[0,1]` | Live aggregate over same `category` + spec-band (see below); status `CONFIRMED`/`PENDING`, non-cancelled; computed at prediction time — **Phase 1d/1e**, not a Phase 1b feature |
+| `period_utilization` | numeric passthrough, `[0,1]` | Live aggregate over same `category` + spec-band (see below); counts bookings in `{PENDING_DEPOSIT, PENDING_CONFIRMED, CONFIRMED, MOBILISED}` — excludes `COMPLETED` (already returned) and `CANCELLED` (releases the hold; cancellation is real — see masterplan) — that overlap the requested window on an inclusive both-boundaries basis (matching `BookingAvailabilityFilter`, no same-day turnover); computed at prediction time — **Phase 1d/1e**, not a Phase 1b feature |
 | `lead_time_days` | numeric passthrough | `Booking.startDate − today`; derived, no new column — **Phase 1d** |
 
 Target: `price_per_day` (training-time only; not part of the prediction input).
@@ -140,14 +140,18 @@ Target: `price_per_day` (training-time only; not part of the prediction input).
 
 `booking_month`/seasonality: resolved **not added** — `period_utilization` already captures realized seasonality (see masterplan for the full analysis).
 
-### 5.3 Data access (open item — confirm before implementing)
+### 5.3 Data access (confirmed against the real schema, 2026-08-09)
 
-Pricing needs read access to `AssetCategory.name`, `Asset.category_id`/`capacity`/`condition`/`platform_height`/`minDailyRate`/`maxDailyRate`, and `Booking.startDate`/`endDate`/`status` (the last needed for `period_utilization`'s overlap query, §5.2), plus write access to `RecommendationItem.mlPredictedPrice`. **`app/models/` currently has no concrete models** — just a `Base` re-export placeholder. Per the masterplan, Spring Boot owns the schema/migrations; Python maps onto the existing tables (no Alembic, no new tables).
+Pricing needs read access to `asset_categories.name`, `assets.category_id`/`capacity`/`condition`/`platform_height`/`min_daily_rate`/`max_daily_rate`, and `bookings.start_date`/`end_date`/`status` (the last needed for `period_utilization`'s overlap query, §5.2), plus write access to `recommendation_items.ml_predicted_price`. **`app/models/` currently has no concrete models** — just a `Base` re-export placeholder. Per the masterplan, Spring Boot owns the schema/migrations; Python maps onto the existing tables (no Alembic, no new tables).
 
-Before implementing `model.py`, confirm against the actual Spring Boot schema (not just the ERD/Class Diagram field names referenced in the masterplan):
-- Exact table/column names and casing (the masterplan's field list is diagram-sourced, e.g. `purchaseYear`/`baseDailyRate` read as camelCase — confirm whether the real Postgres columns are camelCase or snake_case).
-- Whether `Asset.platform_height` exists as a real column yet, or needs to be added by whoever owns that migration.
-- **(Phase 1d/1e)** Whether `BookingStatus` actually has a `CONFIRMED` member — only `PENDING`/`CANCELLED` are ever named anywhere in this repo, but `period_utilization`'s overlap query (§5.2) requires filtering on `CONFIRMED`/`PENDING`, non-cancelled bookings.
+All three items previously flagged "confirm before implementing" are now resolved (see masterplan for the full confirmation trail):
+- **Column names/casing: snake_case throughout**, not camelCase.
+- `Asset.platform_height` exists as a real, nullable column. `Asset.min_daily_rate`/`max_daily_rate` are `NOT NULL`.
+- `BookingStatus` real values and the `period_utilization` status filter are as stated in §5.2.
+
+**`Asset.capacity` is nullable and is currently null for every non-forklift row** in seed data — a DB cleanup is planned, but the fallback in §5.2 is permanent regardless.
+
+**Schema targeting**: `postgres-haystack`'s `heavy_rental` database exposes two schemas — `public` (a separate, independently-writable local table set) and `primary_snapshot` (`postgres_fdw` foreign tables reading live from `postgres-primary`'s real `public` schema — the actual Spring-Boot-owned data). They currently hold identical rows, but only `primary_snapshot` is guaranteed to reflect live Spring Boot state. **All pricing SQLAlchemy models must set `schema="primary_snapshot"`** — SQLAlchemy's default search path resolves to `public`, which would silently read the wrong table set.
 
 Introduce only the minimal SQLAlchemy declarative models pricing actually reads/writes (not a full domain model set) — narrow surface, less staleness risk if the shared schema evolves elsewhere.
 
@@ -248,6 +252,11 @@ Full rationale lives in `docs/dynamic-pricing-masterplan.md` — summarized here
 | Spec-band boundaries are fixed constants | Reproducible, don't drift with fleet composition; see `pricing_tables.py` |
 | `booking_month`/seasonality: resolved, **not added** | `period_utilization` already captures realized seasonality |
 | Fuel price: considered and **rejected** | Indirect/lagged signal, needs a new external API dependency, untrainable on synthetic data without a fabricated correlation — see masterplan |
+| `period_utilization` excludes `COMPLETED` and `CANCELLED` | Both release the hold on the calendar (one by return, one by cancellation — cancellation is real, not out of scope); equipment is held from `PENDING_DEPOSIT` onward otherwise — see masterplan |
+| Overlap check is inclusive on both boundaries | Matches `BookingAvailabilityFilter`'s existing rule — no same-day turnover, by product decision |
+| `capacity` null → per-category midpoint, not NaN | Data gap, not a structural absence (unlike `platform_height`) — see masterplan |
+| `condition` null → `"GOOD"`, not NaN | Same reasoning as `capacity` — data gap, and `encode_condition()`'s ordinal cast can't take NaN anyway (would crash) — see masterplan |
+| Pricing models read `primary_snapshot` schema, not `public` | `primary_snapshot` is a live `postgres_fdw` mirror of the real Spring-Boot data; `public` is a separate, driftable local copy — see §5.3 |
 
 **Non-goals**: renter-facing pricing API/UI, real geocoding, `purchaseYear` feature, `booking_month`/seasonality feature, fuel-price feature, Alembic migrations, async DB access, full auth/JWT stack (blocks nothing here, but the retrain path should not assume it's protected until one exists).
 
@@ -264,3 +273,6 @@ Full rationale lives in `docs/dynamic-pricing-masterplan.md` — summarized here
 | 1.3.0 | 2026-08-07 | Phase 1d/1e: added `period_utilization` (live category+spec-band booking-overlap aggregate, computed at prediction time, not a forecast) and `lead_time_days` (derived from `start_date − today`) to the feature schema (§5.2), plus fixed-constant spec-band bucketing (excavator/forklift by `capacity`, scissor/boom lift by `platform_height`) with no new persisted column. Documented that early-booking scarcity pricing is intentional, not a bug. Resolved `booking_month`/seasonality as **not added** (§5.2, §8) — superseded by `period_utilization`. Documented fuel price as considered-and-rejected (§3, §8). Added §5.8, a Phase 3 cold-start bootstrap → blend → per-category cutover design decision (no code yet). Added a third "confirm before implementing" open item to §5.3 (`BookingStatus.CONFIRMED` membership) and noted `period_utilization`'s live query is pulled forward into Phase 1e (`app/repositories/pricing_repository.py` + first-ever read-only SQLAlchemy models), ahead of and later relocated into this package. Clarified the header table's "out of scope" framing to distinguish seed *data* (still out of scope) from the Phase 3 design decision itself (in scope via §5.8). |
 | 1.3.1 | 2026-08-07 | Clarified §5.2's spec-band boundaries are an implementation decision, not locked to specific numbers — grounded in this repo's existing `CATEGORY_CAPACITY_KG`/`CATEGORY_PLATFORM_HEIGHT_M` ranges plus real-world conventions, sanity-checked via `generate_synthetic_data.py --strict`. Added a §6 Verification pointer to `ml-experiments/demo_scenarios.py`, a script-based live demo (condition/duration scenario pairs, raw vs. clamped output) for audiences who can't otherwise exercise `predict_price(...)` given it's intentionally in-process only — explicitly non-exhaustive, not a substitute for the unit tests or `shap_review.py`'s sweep coverage. |
 | 1.3.2 | 2026-08-07 | Phase 1d implemented and verified (all sanity/SHAP checks pass, 87 app tests pass, no per-category regression). Updated §5.6 with final metrics (MAE 10.68/R² 0.974 overall) and final SHAP importance numbers. Condensed §5.2/§5.3/§8's prose — full reasoning now lives only in the masterplan and in code comments (`pricing_tables.py`, `feature_schema.py`), this spec keeps only the contract an implementer needs (feature table, formulas, open items), per this doc's own "restates only what's needed" convention. No content removed, only de-duplicated — see masterplan for anything not fully spelled out here. |
+| 1.4.0 | 2026-08-09 | Resolved all three §5.3 "confirm before implementing" open items against the real `postgres-haystack`/`postgres-primary` schema: snake_case columns, `platform_height` confirmed, and `BookingStatus`'s real lifecycle locking `period_utilization`'s status filter (§5.2). Locked the overlap rule as inclusive on both boundaries, matching `BookingAvailabilityFilter` (§5.2). Found `Asset.capacity` null for non-forklift seed rows; added a permanent per-category-midpoint fallback, deliberately not NaN like `platform_height` (§5.2, §8). Discovered pricing must read the `primary_snapshot` schema (live `postgres_fdw` mirror), not `public` (§5.3). Full rationale for each — see masterplan. |
+| 1.4.1 | 2026-08-09 | Correction to 1.4.0: cross-checking against the authoritative `SPEC-spring-entity-repository.md` (new) showed `BookingStatus` has 6 values, not 5 — `CANCELLED` is real and cancellation happens; the app is not happy-path-only as previously stated. `period_utilization`'s status filter/inclusion-list membership is **unchanged** (`{PENDING_DEPOSIT, PENDING_CONFIRMED, CONFIRMED, MOBILISED}` — `CANCELLED` was never in it), only the rationale text in §5.2/§8 was corrected. Also flagged (not yet designed): `Asset.condition` is nullable per the entity spec, and `feature_schema.encode_condition()` currently crashes (`ValueError`) on a null value — needs the same category of fallback treatment as `capacity` (§5.2), pending a decision on the default value. |
+| 1.4.2 | 2026-08-09 | Locked the `condition` null fallback flagged in 1.4.1: `"GOOD"`, not NaN — same reasoning as `capacity` (§5.2, §8), plus `encode_condition()`'s ordinal `astype(int)` cast can't take NaN regardless. |
