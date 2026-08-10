@@ -5,7 +5,7 @@ from app.config import Settings
 
 def test_default_database_url() -> None:
     settings = Settings(
-        postgres_hostname="postgres_haystack",
+        postgres_hostname="postgres-haystack",
         postgres_port=5432,
         postgres_db="heavy_rental",
         postgres_user="postgres",
@@ -14,7 +14,7 @@ def test_default_database_url() -> None:
     )
     assert (
         settings.database_url
-        == "postgresql+psycopg://postgres:postgres@postgres_haystack:5432/heavy_rental"
+        == "postgresql+psycopg://postgres:postgres@postgres-haystack:5432/heavy_rental"
     )
 
 
