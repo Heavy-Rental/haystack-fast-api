@@ -32,6 +32,8 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | Legacy ID range | Capability | OpenSpec home |
 |-----------------|------------|---------------|
 | FR-IX-001 … FR-IX-022 | Indexing | `specs/indexing/spec.md` |
+| FR-IX-023 (TARGET) | Indexing — Call 1 project-spec summary | `specs/indexing/spec.md` + contract; change `changes/2026-08-10-call1-project-spec-summary/` |
+| FR-I-016 (TARGET) | Intake — summary ≠ recommend | `specs/recommendation-intake/spec.md` |
 | MIME map §3 | Indexing | Requirement: MIME classification map |
 | FR-KG-001 … FR-KG-008 | KG Part A | `specs/knowledge-graph/spec.md` |
 | FR-KG-010 … FR-KG-014 | KG Part B (011 Stage 2) | same |

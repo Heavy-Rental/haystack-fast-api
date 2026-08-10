@@ -1,14 +1,14 @@
-# Feasibility Study: Postgres–Haystack Sync, Neo4j, Agent/MCP Request Workflow
+# Feasibility Study: Postgres–Haystack Sync, Neo4j, Multi-Agent Request Workflow
 
 | Field | Value |
 |-------|--------|
 | **Document type** | Architecture / infrastructure feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.6.0 |
+| **Version** | 2.5.0 |
 | **Application** | `haystack-fast-api` |
 | **Related specs** | `openspec/specs/project-setup/`, `indexing/`, `knowledge-graph/`, `recommendation-pipeline/`, `dynamic-pricing/`, `equipment-recommendation/` |
-| **Related studies** | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) · [`mcp-multi-agent-devcontainer-digitalocean.md`](./mcp-multi-agent-devcontainer-digitalocean.md) |
+| **Related studies** | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) · [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) · [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) · [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) · [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) |
 | **Cloud focus** | DigitalOcean |
 
 ---
@@ -20,7 +20,7 @@ This study covers **two complementary planes**:
 | Plane | Description |
 |-------|-------------|
 | **Fleet / data platform** | Spring **Postgres-primary** → real-time sync → **Postgres-Haystack** → **Neo4j** graph projection (KG-2) |
-| **Request / agent path** | Spring Boot calls **FastAPI** with a **project specification file** → **Multi-Agent** handles the request → **Indexing Pipeline tool** → write **DocumentStore + Knowledge Graph (KG-1)** → optional **MCP** tools and **Neo4j populate** triggers |
+| **Request / agent path** | Spring → **FastAPI** → **Multi-Agent Orchestrator** (LangGraph) → **[4] Indexing tool** → then agents invoke **in-process tools** (project store/Pgvector, Postgres-Haystack fleet SQL, Neo4j KG-2, **ML pricing**) → **synthesize recommendation** |
 | **Indexing DocumentStore cutover** | **As-built:** `InMemoryDocumentStore`. **Target:** Indexing Pipeline writes **`PgvectorDocumentStore`** on Postgres-Haystack (multi-user, multi-instance, optional TTL “temporary” project files). |
 
 ### Verdicts
@@ -30,15 +30,16 @@ This study covers **two complementary planes**:
 | Fleet real-time sync primary → Postgres-Haystack? | **Yes**, with CDC/outbox/logical replication constraints |
 | Neo4j from synced Postgres-Haystack? | **Yes as graph projection**, not native PG replication |
 | Spring → FastAPI with project file? | **Yes** (matches as-built route shape) |
-| Multi-Agent first, indexing as tool? | **Yes** — force index tool early; do not put files in LLM context |
+| Multi-Agent first, indexing as tool? | **Yes** — force index tool **[4]** early; do not put files in LLM context |
+| **Recommend after [4] via agents + in-process tools?** | **Yes** — orchestrator calls tools only; taps **Postgres-Haystack**, **Neo4j**, **ML pricing**, project context; synthesizes recommendation (§4.1) |
 | Indexing → InMemoryDocumentStore + KG-1? | **Yes — as-built today** |
 | **Indexing Pipeline cutover InMemory → PgvectorDocumentStore?** | **Yes — feasible and recommended** for multi-user project files (see §4.5) |
-| MCP retrieve tools after Pgvector cutover? | **Conditional GO** — later packaging (R4); primary durable write is Indexing → Pgvector |
-| MCP triggers Neo4j from Postgres-Haystack? | **Yes as job trigger** — depends on fleet sync plane readiness |
+| In-process tools after Pgvector cutover? | **GO for vector** (tenant filters); **conditional for KG-1** until shared load path |
+| Neo4j populate from Postgres-Haystack? | **Yes as async job** on discovery of new primary data (Track D/T) |
 | DigitalOcean hosts this? | **Yes** for Postgres (+ pgvector), apps, optional Kafka; **Neo4j DIY or Aura** |
 | Ship everything at once? | **No** — dual-track phases (see §10); agent-index can stay InMemory until phase **I1** |
 
-**Overall:** Architecture is **viable**. Keep **eventual consistency**, treat **MCP as tool transport (not source of truth)**, ship **agent-fronted indexing** without waiting for Kafka/Neo4j, and plan an explicit **Indexing Pipeline DocumentStore cutover** to **PgvectorDocumentStore** for multi-user durable (or TTL-temporary) project requirements.
+**Overall:** Architecture is **viable**. Keep **eventual consistency**, ship **agent-fronted indexing** without waiting for Kafka/Neo4j, plan **Pgvector** for project vectors, and target a **Multi-Agent Orchestrator** that **after step [4]** **runs in-process tools** (fleet SQL, Neo4j graph, ML pricing, project context) to **produce recommendations**. A separate MCP/FastMCP tool server is **not** in scope.
 
 ---
 
@@ -60,26 +61,31 @@ This study covers **two complementary planes**:
            real-time sync│                                 │
            (CDC/outbox)  │                                 ▼
                          │              ┌─────────────────────────────────────┐
-                         │              │ Multi-Agent (LangGraph orchestrator)│
-                         │              │  1) tool: run_indexing_pipeline     │
-                         │              │  2) tools: session Q&A (optional)   │
-                         │              │  3) MCP tools: retrieve / promote   │
-                         │              │  4) MCP: trigger_neo4j_populate     │
+                         │              │ Multi-Agent Orchestrator (LangGraph)│
+                         │              │  policy + tool calls only (no SoT) │
+                         │              │  [4] tool: run_indexing_pipeline   │
+                         │              │  AFTER [4] agents → in-process tools: │
+                         │              │   · project context (Pgvector/KG-1)│
+                         │              │   · fleet SQL (Postgres-Haystack)  │
+                         │              │   · graph context (Neo4j KG-2)     │
+                         │              │   · predict_asset_price (ML, in-process)│
+                         │              │  → synthesize **recommendation**   │
                          │              └───────┬─────────────┬───────────────┘
                          │                      │             │
                          ▼                      ▼             ▼
               ┌─────────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-              │ Postgres-Haystack   │  │ Indexing write:  │  │ MCP server       │
-              │ • mirrored domain   │◄─│ DocumentStore    │  │ configured tools │
-              │ • **pgvector docs** │  │ as-built: InMem  │  │ (retrieve, …)    │
-              │   (project chunks)  │  │ **target: PgvectorDocumentStore**     │
-              └──────────┬──────────┘  │ + KG-1 session   │  └────────┬─────────┘
+              │ Postgres-Haystack   │  │ Indexing write:  │  │ In-process tools │
+              │ • mirrored fleet    │◄─│ DocumentStore    │  │ (same app process)│
+              │ • **pgvector docs** │  │ as-built: InMem  │  │ SQL / Neo4j /    │
+              │   (project chunks)  │  │ **target: Pgvector**│ pricing        │
+              └──────────┬──────────┘  │ + KG-1           │  └────────┬─────────┘
                          │             └──────────────────┘           │
                          │  graph projection (fleet)                  │
                          ▼                                            │
               ┌─────────────────────┐                                 │
               │ Neo4j (KG-2 fleet)  │◄────────────────────────────────┘
               └─────────────────────┘
+              (+ ML pricing via app pricing_client / model artifacts)
 ```
 
 **Rule:** Project-file path and fleet-sync path meet at **Postgres-Haystack / Neo4j / agents**, but they are **not one pipeline**.
@@ -104,9 +110,9 @@ haystack-fast-api             (Haystack pipelines, agents, DocumentStore, KG)
 
 | Call | Typical route / payload | Latency profile (today / target) | Uses which plane? |
 |------|---------------------------|----------------------------------|-------------------|
-| **1. Ingest** | `POST /from-project-spec` — multipart file or JSON text + `user_id` | Seconds–tens of seconds (index + KG + optional agent orchestration) | **Plane B** (§4): agent → indexing → DocumentStore + KG-1 |
+| **1. Ingest** | `POST /from-project-spec` — multipart file or JSON text + `user_id` | Seconds–tens of seconds (index + KG + optional agent orchestration) | **Plane B** (§4): indexing → DocumentStore + KG-1; **as-built** technical body; **TARGET** + needs/dates/budget summary (FR-IX-023) — see [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) |
 | **2. Q&A** | `POST /project-knowledge/query` — `user_id`, `ingest_id`, `query` | Seconds if LLM; fast if stub | **Plane B** session tools over store + KG-1 from call 1 |
-| **3. Recommend** | Future / service FR-010 — needs, dates, options | Seconds; multi unit-need loop | **Plane A** mirrored Asset/Booking (+ pricing); not the project-file index alone |
+| **3. Recommend** | Future HTTP — needs, dates, options (or continue after ingest) | Seconds–tens; multi unit-need loop | **Plane B orchestrator after [4]** + **in-process tools** → Plane A fleet/Neo4j + **ML pricing** + project context |
 | **Health** | `GET /health` | Milliseconds | Ops / resilience probes |
 
 **How this fits the dual-plane architecture**
@@ -118,9 +124,10 @@ haystack-fast-api             (Haystack pipelines, agents, DocumentStore, KG)
     └─────┬──────────┬─────────────┬───────────┘
           │          │             │
           ▼          ▼             ▼
-     Plane B §4  Plane B §4[5]  Plane A §3
-     ingest+KG-1 project Q&A    fleet mirror
-     + Pgvector I1              + optional Neo4j KG-2
+     Plane B [1–4]  Plane B [5]   Plane B [8] recommend
+     index+KG-1     project Q&A   Multi-Agent → in-process tools:
+     + Pgvector I1  (optional)    fleet SQL + Neo4j + pricing
+                                  + project context  (§4.1)
 ```
 
 | Implication | Guidance |
@@ -167,7 +174,7 @@ Use **eventual consistency** with lag SLOs (`primary_to_haystack_seconds`, `hays
 
 ---
 
-## 4. Plane B — Request workflow (Spring → Agent → Index → MCP → stores/Neo4j)
+## 4. Plane B — Request workflow (Spring → Agent → Index → tools → stores/Neo4j)
 
 ### 4.1 End-to-end sequence (proposed)
 
@@ -184,8 +191,10 @@ Use **eventual consistency** with lag SLOs (`primary_to_haystack_seconds`, `hays
       • Package file bytes → Haystack ByteStream (MIME from extension)
       • run_in_threadpool( MultiAgentOrchestrator.run(payload, file_sources) )
 
-[3] Multi-Agent invoked FIRST (request handler)
-      state = { request_payload, file_sources, ingest_id?, session?, traces[] }
+[3] Multi-Agent Orchestrator invoked (LangGraph)
+      Role: **policy, sequencing, synthesis only** — does not own SQL/Cypher/pricing math
+      state = { request_payload, file_sources, ingest_id?, session?, tool_traces[], recommendation? }
+      Tool backend (target): **in-process tool module** (LangGraph nodes call Python tools directly)
 
 [4] Tool: run_indexing_pipeline  (pass request body fields + file_sources)
       • FileTypeRouter dual-branch (structured vs unstructured by type)
@@ -195,28 +204,89 @@ Use **eventual consistency** with lag SLOs (`primary_to_haystack_seconds`, `hays
             **target:  PgvectorDocumentStore on Postgres-Haystack**
             meta: user_id, ingest_id (multi-user isolation)
       • Branch B: mandatory KG-1 (+ JSON artifact) + ProjectKnowledgeSession
-            session holds handle to the same DocumentStore used in Branch A
-      • return IngestFromProjectSpecResponse-like result
+      • return ingest_id, kg_*, documents_written
+      **Gate:** no recommend / fleet tools until [4] succeeds
 
-[5] (Optional same graph) session tools
-      project_vector_search / project_kg_query / synthesis  — only AFTER [4] succeeds
-      (vector search reads the DocumentStore — InMemory today, Pgvector after cutover)
+### After step [4] — Multi-Agent uses in-process tools to recommend
 
-[6] MCP server tools (later phase)
-      • retrieve data using configured tools (fleet read models, docs, ops APIs)
-      • **after Indexing→Pgvector cutover, primary durable write is already in the pipeline**
-        • no secondary vector store (Pgvector is the durable DocumentStore)
-      • trigger_neo4j_populate(from=Postgres-Haystack)  — fleet graph job
+Target model: orchestrator agents **only invoke allowlisted in-process tools** (shared tool module). They **do not** embed ad-hoc SQL/Cypher or pricing weights inside node code — tools own those backends.
 
-[7] HTTP response to Spring
-      • Prefer: return when [4] complete (ingest_id, kg_*, documents_written)
-      • Neo4j full rebuild: async job ids / status, unless product forces sync wait
+[5] Project-context agents (optional Q&A or recommend prep) — AFTER [4]
+      In-process tools:
+        • project_vector_search   → Pgvector (I1) / session store
+        • project_kg_query        → KG-1 (session / shared load path)
+      Output: needs, constraints, site/project facts for ranking
 
-Further Spring calls (not expanded as steps [8]… here):
-  • call 2 Q&A / call 3 recommend — multi-call journey in §2.1
-  • call 3 production accuracy depends on Track D fleet mirror (Plane A), not only on this ingest
-  • wire resilience / SSE progress / 202 jobs — spring-boot-fastapi-integration-resilience.md
+[6] Fleet + graph context agents — AFTER [4] (and Plane A data available)
+      In-process tools:
+        • retrieve_fleet_assets / filter_fleet_candidates  → **Postgres-Haystack**
+        • check_booking_availability                      → **Postgres-Haystack** bookings
+        • neo4j_cypher_read                               → **Neo4j KG-2** fleet relationships
+        • trigger_neo4j_populate (ops)                    → job from Postgres-Haystack (async)
+      Output: candidate assets, graph-neighbor context, availability
+
+[7] Pricing agent — AFTER candidates exist
+      In-process tool:
+        • predict_asset_price  → **ML pricing model** (`predict_price_for_asset` / model artifacts)
+      Feature row (from docs/dynamic-pricing + fleet tools):
+        category name, condition, duration_days, capacity, distance_km,
+        platform_height (NaN if N/A), optional period_utilization + lead_time_days
+      Output: **price_per_day** (clamped) + metadata; total = rate × days
+      Fallback: category table if model missing — never silent zeros
+      Full contract: [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md)
+
+[8] Recommendation synthesis (stays in Multi-Agent Orchestrator — not a tool)
+      • Merge: project context [5] + fleet/Neo4j [6] + prices [7]
+      • Output: **recommended assets** + **predicted rent prices** (structured DTO)
+        — align `results_by_need` / `RecommendationItem` / `PricingPayload`
+      • Synthesis is **tool-free**: must not invent asset_id or daily_rate
+      • Project-spec grounds needs via [4]+[5]; fleet+price tools ground offers
+      • As-built Stage-1 synthesis is Q&A-only — target extend for recommend
+      • Full study: [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md)
+      • Record tool_traces (tool name, args summary, hit counts)
+
+[9] HTTP response to Spring
+      • Ingest-only path: return after [4] (ingest_id, kg_*, documents_written)
+      • Recommend path (same request or Spring call 3): return after [8]
+      • Neo4j full rebuild: prefer async job ids; do not block recommend on full rebuild
+      • Long runs: 202 + job status / SSE progress (resilience study)
+
+Spring multi-call alignment (§2.1):
+  • call 1 ≈ [1]–[4] ingest
+  • call 2 ≈ [5] Q&A tools
+  • call 3 ≈ [5]–[8] recommend (or combined graph after [4] when product allows)
+  • Production accuracy needs Track D fleet mirror + T3 Neo4j + pricing model deploy
 ```
+
+### 4.1.1 Multi-Agent Orchestrator vs tools (recommend-ready target)
+
+| Layer | Responsibility | Does **not** |
+|-------|----------------|--------------|
+| **Multi-Agent Orchestrator** (LangGraph in app) | Choose agents/order; call tools; synthesize recommendation text/JSON | Own fleet DB as SoT; run free SQL/Cypher; train models |
+| **In-process tool module** | Host allowlisted tools; connect to Pgvector, Postgres-Haystack, Neo4j, pricing | Replace Spring portal API |
+| **Postgres-Haystack** | Fleet mirror + project Pgvector chunks | Write primary OLTP |
+| **Neo4j KG-2** | Fleet graph context for agents | Project-file SoT (KG-1 is separate) |
+| **ML pricing model** | Price predictions via `predict_asset_price` tool | Ranking policy (orchestrator) |
+
+```text
+                    AFTER successful [4] indexing
+┌─────────────────────────────────────────────────────────────┐
+│ Multi-Agent Orchestrator (LangGraph)                        │
+│  research / fleet / pricing / rank agents                   │
+│       │  only in-process tool invocations                      │
+│       ▼                                                     │
+│  Tool module (in-process)                                    │
+│    ├─ project_*     → Pgvector / KG-1                       │
+│    ├─ retrieve_*    → Postgres-Haystack (fleet)             │
+│    ├─ neo4j_*       → Neo4j KG-2                            │
+│    └─ predict_*     → ML pricing model                      │
+│       │                                                     │
+│       ▼                                                     │
+│  synthesis node → Recommendation response                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Feasibility verdict for post-[4] recommend via in-process tools:** **GO** with prerequisites **I1** (Pgvector), **D1+/T1** (fleet SQL), **T3** (Neo4j projection), and pricing model available in-app (`pricing_client`).
 
 ### 4.2 Step-by-step feasibility
 
@@ -224,16 +294,17 @@ Further Spring calls (not expanded as steps [8]… here):
 |------|-----------|--------|
 | **1. Spring → FastAPI** project file body | **GO** | Same contract as as-built ingest route; Spring is HTTP client |
 | **2. FastAPI validate + ByteStreams** | **GO** | Keep parsing **out of** the LLM; thin router + service |
-| **3. Multi-Agent first** | **GO*** | *Force indexing tool as first edge; stub mode without LLM for CI |
+| **3. Multi-Agent Orchestrator** | **GO*** | *Policy + tool calls; stub mode without LLM for CI |
 | **4. Indexing tool from request body** | **GO** | Body → adapter → `IndexingIngestService` / pipeline (not raw `pipeline.run(http_body)`) |
+| **4e. Indexing Pipeline as SuperComponent** | **GO** | Optional packaging: `@super_component` wraps dual-branch graph; **KG stays outside**; see [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) |
 | **4b. File-type processing** | **GO** | Inside `FileTypeRouter`; agent does not choose converters |
 | **4c. InMemoryDocumentStore + KG-1** | **GO** | **As-built** today after successful ingest |
 | **4d. Indexing cutover → PgvectorDocumentStore + KG-1** | **GO** | Same pipeline; swap store backend; multi-user via meta; see **§4.5** |
-| **5. Session multi-agent Q&A** | **GO** | As-built Stage-1 graph; requires session from [4]; retriever must use same store |
-| **6a. MCP retrieve tools** | **CONDITIONAL GO** | Haystack `mcp-haystack`; Neo4j MCP servers exist; ops + auth |
-| **6b. Postgres/Pgvector as primary write** | **GO (preferred)** | **Prefer write-at-index** via §4.5 cutover; only DocumentStore path besides InMemory |
-| **6d. MCP trigger Neo4j from Postgres-Haystack** | **GO as job** | Requires Track D sync; prefer async; not full DB binary copy |
-| **7. Single HTTP does all of 4–6d sync** | **RISKY** | Latency/timeouts; split ingest response vs background jobs |
+| **5. Project tools after [4]** | **GO** | Q&A or recommend prep; Pgvector after I1 for multi-instance |
+| **6. Fleet SQL + Neo4j tools** | **GO** | After Plane A mirror + T3; in-process tools |
+| **7. ML pricing tool** | **GO** | In-process; see [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) |
+| **8. Recommendation synthesis in orchestrator** | **GO** | Assets + prices from tool hits; structured DTO; see synthesis study |
+| **9. Single HTTP does all of [4]–[8] sync** | **RISKY** | Prefer split ingest vs recommend or 202 jobs; see resilience study |
 
 ### 4.3 “Pass request body to indexing pipeline” (precise meaning)
 
@@ -344,25 +415,77 @@ Without filters, tenants can see each other’s chunks — isolation is an **app
 | **InMemoryDocumentStore** | Per process only | No | N/A | **As-built / CI / flag off** |
 | **PgvectorDocumentStore** | **Yes** | **Yes** | Managed PG + pgvector | **Target Indexing Pipeline writer (only durable path)** |
 
-### 4.6 MCP server role
+### 4.6 In-process multi-agent tool layer
 
-| MCP is | MCP is not |
-|--------|------------|
-| Tool transport for agents (retrieve, write, trigger jobs) | Source of truth for fleet or prices |
-| A way to expose Neo4j Cypher / GraphRAG / ops actions | A substitute for CDC from Spring primary |
-| Optional packaging for LangGraph tools | Required for first agent-indexing milestone |
+#### 4.6.1 Role
 
-**Industry fit:** Haystack MCP integration (`mcp-haystack`); Neo4j publishes MCP servers (Cypher / GraphRAG). Product specs already mark Hayhooks/MCP as **optional**, not a second SoT.
+| Tools are | Tools are not |
+|-----------|---------------|
+| Allowlisted callables invoked by LangGraph agents | Source of truth for fleet or prices |
+| How agents read Postgres-Haystack, Neo4j, pricing model | How Spring calls the recommender (Spring stays on **HTTP REST** to FastAPI) |
+| Shared module next to Stage-1 `app/agents/tools.py` | A separate FastMCP/MCP server process |
 
-**Suggested MCP tool catalog (illustrative)**
+**Decision:** A separate **MCP/FastMCP tool server is out of scope**. Multi-agent works by **invoking tools directly in-process** (including PostgreSQL access).
 
-| Tool name | Action |
-|-----------|--------|
-| `run_indexing_from_request` | May stay in-process LangGraph tool (not only MCP); writes DocumentStore per flag (memory/pgvector) |
-| `retrieve_project_chunks` | Read project chunks (filter `user_id` / `ingest_id`) from active DocumentStore |
-| `retrieve_fleet_assets` | Read Postgres-Haystack mirror |
-| `trigger_neo4j_populate` | Enqueue graph projection from Postgres-Haystack |
-| `neo4j_cypher_read` | Constrained read queries (KG-2) |
+#### 4.6.2 Recommended stack
+
+```text
+Spring ──REST──► FastAPI
+                    │
+                    ▼
+              LangGraph multi-agent
+                    │  in-process tool calls
+                    ▼
+              Tool module (app/agents/tools + shared core)
+                    ├─► Postgres-Haystack (fleet SQL + Pgvector)
+                    ├─► Neo4j (constrained read / graph context)
+                    ├─► ML pricing (pricing_client / predict_price)
+                    └─► trigger neo4j-populate job (async enqueue)
+```
+
+| Side | Component | Responsibility |
+|------|-----------|----------------|
+| **Tools** | Python functions / `ProjectTool`-style wrappers | SQL, KG query, pricing, job triggers |
+| **Orchestration** | LangGraph multi-agent | Policy, sequencing, synthesis — no embedded fleet SQL |
+
+#### 4.6.3 Tool catalog (recommend-capable)
+
+Tools the **Multi-Agent Orchestrator** invokes **after [4]**. Orchestrator **synthesizes**; tools **execute**.
+
+| Tool name | Action | Backend |
+|-----------|--------|---------|
+| `run_indexing_from_request` | Indexing gate **[4]** | Pipeline → Pgvector (I1) |
+| `project_vector_search` | Project chunk context | InMemory / **Pgvector** |
+| `project_kg_query` | Project KG-1 facts | Session / artifact |
+| `decompose_project_needs` | Spec → unit needs | Need decomposer / LLM |
+| `retrieve_fleet_assets` | Candidate equipment | **Postgres-Haystack** SQL (read-only allowlist) |
+| `filter_fleet_candidates` | Category/size filter | Postgres-Haystack |
+| `check_booking_availability` | Availability window | **Postgres-Haystack** bookings |
+| `neo4j_cypher_read` | Fleet graph context | **Neo4j KG-2** (templates) |
+| `trigger_neo4j_populate` | Refresh fleet graph | Async job from Haystack PG |
+| `predict_asset_price` | **ML pricing** | In-process model — [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) |
+| `generate_rank_rationale` | Explain ranks | LLM (optional) |
+
+**Orchestrator-owned (not tools):** recommendation merge/rank policy, final JSON for Spring, LangGraph edges.
+
+**Do not** invent one mega-tool `recommend_everything` — keep narrow tools after [4].
+
+#### 4.6.4 Phasing (recommend via in-process tools after [4])
+
+- **Now / R1–R2:** Stage-1 Q&A tools in-process; recommend still service/seed path.  
+- **I1:** Indexing → **Pgvector**.  
+- **D1+/T1/T3:** fleet SQL + Neo4j projection ready for tools.  
+- **R5 / recommend agents:** after [4], orchestrator runs **[5]–[8]** with in-process tools including **`predict_asset_price`** + Postgres-Haystack + Neo4j → **recommendation**.
+
+#### 4.6.5 Feasibility summary
+
+| Verdict | Detail |
+|---------|--------|
+| **GO** | In-process tool catalog; orchestrator keeps synthesis |
+| **Post-[4] recommend** | **GO** — agents call tools; merge in [8] |
+| **PostgreSQL tools** | **GO** — read-only allowlisted SQL on Postgres-Haystack |
+| **Pgvector (I1)** | Multi-instance project vector tools |
+| **No FastMCP** | Not required; not in architecture |
 
 ### 4.7 Neo4j population trigger (request path)
 
@@ -370,7 +493,7 @@ Without filters, tenants can see each other’s chunks — isolation is an **app
 Postgres-Haystack (already synced from primary)
         │
         ▼
-MCP tool trigger_neo4j_populate
+Tool / worker: trigger_neo4j_populate
         │
         ▼
 Worker: SQL → graph mapping → Cypher MERGE (KG-2)
@@ -382,7 +505,7 @@ Neo4j available to multi-agent fleet tools
 | Mode | Use |
 |------|-----|
 | **Async job** on trigger (recommended for full rebuild) | Return `job_id` to Spring |
-| **Incremental upsert** on domain CDC | Background; no per-request MCP |
+| **Incremental upsert** on domain CDC | Background; no per-request full rebuild |
 | **Inline on every project upload** | Only if graph is tiny; usually **too slow** |
 
 **KG-1 (project file)** and **KG-2 (fleet Neo4j)** remain **two planes**. Project indexing does not replace fleet Neo4j load.
@@ -391,28 +514,34 @@ Neo4j available to multi-agent fleet tools
 
 **Norms**
 
-- Orchestrator **must** call indexing tool successfully before project vector/KG tools.  
+- Orchestrator **must** complete **[4] indexing successfully** before project vector/KG, fleet, Neo4j-read, or pricing tools used for **recommend**.  
+- **After [4]**, recommend path agents invoke **allowlisted in-process tools** only.  
 - Request body files → tool args only; never full binary into LLM prompts.  
-- Record `tool_traces` for Spring/debug.
+- Record `tool_traces` for Spring/debug (every tool call).  
+- Recommendation = **orchestrator synthesis** over tool outputs — not a hidden side effect of one tool.
 
 **Safeguards**
 
-- Do not skip mandatory KG-1 hard-fail path.  
-- Do not invent fleet inventory from project KG-1 alone.  
-- Do not block ingest HTTP on full Neo4j rebuild by default.  
-- Do not treat MCP as authoritative over Spring Postgres-primary.  
-- Stub/CI path: agent graph runs with zero LLM keys.  
+- Do not skip mandatory KG-1 hard-fail path on ingest.  
+- Do not invent fleet inventory from project KG-1 alone — use **Postgres-Haystack** + **Neo4j**.  
+- Do not block ingest or recommend on full Neo4j rebuild; use `trigger_neo4j_populate` async + read what is already projected.  
+- Do not treat agent tools as authoritative over Spring Postgres-primary.  
+- Pricing tool failures: fallback policy documented (e.g. table rates) — do not silent-zero prices.  
+- Stub/CI path: agent graph runs with zero LLM keys; pricing stub OK.  
 - After Pgvector cutover: **never** retrieve project chunks without `user_id` (and usually `ingest_id`) filters.
 
 ### 4.9 As-built vs proposed (request path)
 
-| Concern | As-built today | Proposed |
-|---------|----------------|----------|
-| Who calls indexing? | FastAPI → `IndexingIngestService` directly | Multi-Agent tool (optional flag) |
-| When do agents run? | **After** ingest, on Q&A route | **First** as ingest orchestrator; Q&A still after index |
-| DocumentStore | InMemory session (as-built) | **Target:** Indexing Pipeline → **PgvectorDocumentStore** (I1); memory via flag for CI |
-| Neo4j | Not implemented | MCP/job from Postgres-Haystack |
-| Spring caller | Possible client of same HTTP | Explicit system integration |
+| Concern | As-built today | Proposed (target) |
+|---------|----------------|-------------------|
+| Who calls indexing? | FastAPI → `IndexingIngestService` directly | Multi-Agent tool **[4]** (flag); then tools for recommend |
+| Indexing graph packaging | `build_indexing_pipeline` + `run_*` | Optional **SuperComponent** wrapper (no KG inside) |
+| Orchestrator role | Stage-1 Q&A graph only | **Recommend orchestrator**: agents + in-process tools after [4] |
+| Tool host | In-process `ProjectTool` | Expanded **in-process** tool module (fleet, Neo4j, pricing) |
+| When do agents run? | **After** ingest, Q&A route | After **[4]** for Q&A **and** recommend (**[5]–[8]**) |
+| DocumentStore | InMemory session | **Pgvector** (I1) on Postgres-Haystack |
+| Fleet / Neo4j / price | Seed fleet; service pricing path | In-process tools: SQL + Neo4j + **`predict_asset_price`** |
+| Spring caller | HTTP multi-call | Same REST; call 3 = recommend graph |
 
 ---
 
@@ -423,10 +552,11 @@ Neo4j available to multi-agent fleet tools
 | App Postgres | Host `db`; SQLAlchemy sync | Can grow into Postgres-Haystack client |
 | DocumentStore | **InMemoryDocumentStore** | **Target cutover:** Indexing → **PgvectorDocumentStore** (§4.5) |
 | KG-1 | Ragas + JSON + session | Matches indexing outputs in §4.4 |
-| Agents | Fixed sequential Q&A **after** ingest | R1 adds orchestrator around indexing |
-| MCP | Spec optional only | R4 packaging |
+| Agents | Fixed sequential Q&A **after** ingest | Target: orchestrator **after [4]** recommends via **in-process** tools |
+| Tool packaging | In-process Stage-1 tools | Expand tool module (no separate MCP server) |
+| Pricing | Service / seed path | In-process `predict_asset_price` for recommend agents |
 | Asset/Booking | Seed fleet | Needs Track D for production accuracy |
-| Neo4j / KG-2 | Stage 2 backlog | Track D3 + R4/R5 |
+| Neo4j / KG-2 | Stage 2 backlog | Track D3 + T3; Neo4j tools for recommend context |
 
 ---
 
@@ -439,7 +569,6 @@ Neo4j available to multi-agent fleet tools
 | FastAPI + Spring | Strong | App Platform / Droplets / DOKS |
 | Multi-Agent + workers | Strong | Same compute; keep long jobs off request workers |
 | Kafka (optional CDC) | Good | Managed Kafka |
-| MCP server process | DIY | Droplet/DOKS sidecar next to API |
 | Neo4j | DIY / external | **No Managed Neo4j**; Droplet/DOKS or Aura |
 
 **Replication caveat:** Validate logical replication / slots on chosen Managed PG plan; Spring **outbox** is the reliable fallback.
@@ -453,7 +582,6 @@ DigitalOcean VPC
 ├── Managed Kafka (optional)
 ├── Spring Boot service
 ├── haystack-fast-api (+ LangGraph)
-├── MCP server process (optional sidecar)
 ├── CDC / ETL / Neo4j populate workers
 ├── Neo4j (Droplet/DOKS)
 └── Spaces (artifacts, dumps)
@@ -469,7 +597,7 @@ DigitalOcean VPC
 | SQL-only fleet “vector sync” (no embed) | High | Project vectors come from **Indexing Pipeline** (I1 Pgvector write), not CDC of Spring rows |
 | Neo4j as second SoT | High | Document projection-only |
 | Agent free-form skips index | High | Forced graph edge to indexing tool |
-| MCP as SoT / over-permissioned writes | High | Allowlist tools; read-mostly; audited writes |
+| Over-permissioned tool SQL/Cypher | High | Allowlist tools; read-mostly; audited writes |
 | One request = index + Neo4j rebuild | High | Async jobs; timeouts |
 | DO replication privileges | Medium | Spike; outbox fallback |
 | InMemory loss on restart | Medium | **I1:** Indexing writes **PgvectorDocumentStore** |
@@ -495,8 +623,8 @@ DigitalOcean VPC
 | Indexing → InMemory + KG-1 | **Feasible (as-built)** |
 | **Indexing Pipeline cutover → PgvectorDocumentStore + KG-1** | **Feasible (recommended target)** — §4.5 |
 | Multi-user temporary project files on Pgvector | **Feasible** (meta `user_id`/`ingest_id` + TTL delete) |
-| MCP retrieve packaging | **Conditional GO** (later R4; tools hit InMemory or Pgvector only) |
-| MCP trigger Neo4j populate | **Feasible** (job; needs Track D) |
+| In-process retrieve tools | **GO** (InMemory or Pgvector) |
+| Trigger Neo4j populate | **Feasible** (job; needs Track D) |
 | Entire stack on DigitalOcean | **Feasible** (Neo4j self-managed; pgvector on Managed PG) |
 | All-at-once day one | **Not recommended** |
 
@@ -523,7 +651,7 @@ DigitalOcean VPC
 **Gap in original list alone:** it only covers the **fleet data platform**. It does **not** schedule:
 
 - Multi-Agent as ingest orchestrator  
-- MCP packaging  
+- Expanded in-process tool module (fleet/Neo4j/pricing)  
 - **Explicit Indexing Pipeline DocumentStore cutover** (InMemory → Pgvector)  
 
 Those belong on **Track R / Track I**, which can start **without** waiting for D3 (Neo4j). Pgvector cutover **does** need a usable Postgres-Haystack (D1-level cluster or dedicated vector DB).
@@ -550,15 +678,15 @@ Those belong on **Track R / Track I**, which can start **without** waiting for D
 | **I1** | **Indexing Pipeline writes PgvectorDocumentStore** | Branch A writer + session registry + vector tools use Pgvector; multi-user meta + optional TTL job |
 | **I2** | Production default pgvector | Memory only for CI/local; monitoring + retention SLOs |
 
-### Track R — Request / agent / MCP (project specification)
+### Track R — Request / agent / tools (project specification)
 
 | Phase | Name | Outcome |
 |-------|------|---------|
 | **R0** | Contract parity | Spring→FastAPI ingest contract stable |
 | **R1** | Agent invokes indexing tool | Multi-Agent forced tool; store = whatever flag says (memory first OK) |
 | **R2** | Session Q&A | research→graph→synthesis over session DocumentStore + KG-1 |
-| **R4** | MCP tool layer | MCP exposes retrieve, `trigger_neo4j_populate`, etc. |
-| **R5** | Cross-plane agent | Project tools + fleet/Neo4j MCP tools under Safeguards |
+| **R4** | Expand tool module | Fleet SQL, Neo4j read, `trigger_neo4j_populate`, pricing tools |
+| **R5** | Cross-plane agent | Project + fleet/Neo4j/pricing tools under Safeguards |
 
 ### Dependencies
 
@@ -567,7 +695,7 @@ R0 ─────────────────────────�
                                       │
 D0 ► D1 ──► D4 ──► I0 ► I1 ► I2 ─────┘   (Indexing→Pgvector; multi-user project files)
               │
-D1 ► D2 ──────► D3 ──────────────────────► R4 / R5   (Neo4j MCP useful after D3)
+D1 ► D2 ──────► D3 ──────────────────────► R4 / R5   (fleet Neo4j tools after D3)
 ```
 
 | Can ship early without Kafka/Neo4j? | Yes |
@@ -576,7 +704,7 @@ D1 ► D2 ──────► D3 ───────────────
 | **D0–D1** | Schema + poll mirror for real Asset/Booking reads |
 | **I1** | Needs Postgres-Haystack + pgvector (**D1/D4**); **does not need Neo4j or Kafka** |
 | Needs D2+ | Tight fleet lag SLAs |
-| Needs D3 | Meaningful fleet Neo4j + MCP populate |
+| Needs D3 | Meaningful fleet Neo4j + populate job |
 | After I1 | Multi-user durable/TTL project requirement chunks in Indexing Pipeline |
 
 ### First-ship order (practical)
@@ -586,9 +714,9 @@ D1 ► D2 ──────► D3 ───────────────
 3. **I0–I1** — **Indexing Pipeline DocumentStore cutover to PgvectorDocumentStore** (multi-user project files).  
 4. **D2** — Outbox/CDC when lag demands it.  
 5. **D3** — Neo4j projection worker (admin/API trigger first).  
-6. **R4–R5** — MCP packaging + multi-agent fleet tools.
+6. **R4–R5** — expand in-process tools + multi-agent fleet tools.
 
-**Still true:** do **not** start with Kafka + Neo4j + dual PG + Pgvector + MCP + free ReAct on day one — but **do schedule I1** once Haystack Postgres exists, without waiting for Neo4j.
+**Still true:** do **not** start with Kafka + Neo4j + dual PG + Pgvector + free ReAct on day one — but **do schedule I1** once Haystack Postgres exists, without waiting for Neo4j.
 
 ---
 
@@ -684,7 +812,7 @@ heavy-rental-network
 | **T1** | Near-real-time domain sync | Set `SYNC_INTERVAL_SECONDS` to **30–120** (dev SLA); set `db-sync` **`restart: unless-stopped`**; log cycle lag; optional healthcheck | **D1→D2** | With primary online, changes appear on `db` within chosen SLA |
 | **T2** | Sync hardening | Table **allowlist** (Asset, Booking, …) if full public merge is heavy; document `merge` vs `mirror`; optional logical replication design; fail cycle alerts | **D2** | Deterministic table set; predictable lag metrics |
 | **T3** | Neo4j populate from Haystack PG | **New** script `populate-neo4j-from-haystack.sh` (or Python job) + Compose service `neo4j-populate`; read from `TARGET_HOST=db`; MERGE fleet nodes/rels; **namespace labels** vs DocumentStore | **D3** | After write on primary + sync, Neo4j Browser shows fleet graph |
-| **T4** | Triggered populate | On **successful** `run_merge` in `sync-from-primary.sh`, invoke populate (or compose `depends_on` + shared volume signal); later: MCP/admin HTTP | **D3 continuous** | Each successful sync refreshes graph (or incremental upsert) |
+| **T4** | Triggered populate | On **successful** `run_merge` in `sync-from-primary.sh`, invoke populate (or compose `depends_on` + shared volume signal); later: admin HTTP | **D3 continuous** | Each successful sync refreshes graph (or incremental upsert) |
 | **T5** | pgvector (parallel) | Switch `db` image to **`pgvector/pgvector:pg17`** (or init container `CREATE EXTENSION vector`); app env for `PgvectorDocumentStore` | **D4 / I1** | Extension present; indexing smoke write |
 
 ### 11.5 Real-time options ranked for *this* compose
@@ -779,49 +907,8 @@ restart: unless-stopped
 | Compose services, sync interval, neo4j-populate container | **heavy-rental-devcontainer-configuration** |
 | Haystack pipelines, PgvectorDocumentStore wiring, agent tools | **haystack-fast-api** application |
 | Spring outbox / primary WAL | **Spring / REST API** stack + primary PG settings |
-| Optional MCP Compose service / profile | **Config repo** (+ app client flag); see §11.12 |
+| Optional compose services (populate job) | **Config repo** (+ app client flag); see §11.12 |
 
-### 11.12 MCP server in devcontainer (optional, after T4)
-
-**MCP is not on the T0–T5 critical path** for primary→haystack sync or Neo4j populate. Multi-agent Stage 1 can keep **in-process** tools (`app/agents/tools.py`).
-
-| When | What |
-|------|------|
-| After **T0–T1** (and ideally **T3–T4**) | Optional Compose service **`mcp-haystack`** (HTTP/streamable MCP) on `heavy-rental-network` |
-| Compose | Prefer **`profiles: ["mcp"]`** so default `up` stays light |
-| Env | `PGHOST=db`, `NEO4J_URI=bolt://neo4j:7687`; app `MCP_SERVER_URL=http://mcp-haystack:8100/...` |
-| Tools | Retrieve project/fleet (tenant-scoped); `trigger_neo4j_populate` only after T3 exists |
-| Order | **T0 → T1 → T3 → T4**, then MCP phases **M1–M4** |
-
-**Illustrative service (not applied — study only):**
-
-```yaml
-  # docker compose --profile mcp up -d
-  mcp-haystack:
-    # build/image: FastMCP + allowlisted tools
-    restart: unless-stopped
-    environment:
-      PGHOST: db
-      NEO4J_URI: bolt://neo4j:7687
-      MCP_PORT: "8100"
-    ports:
-      - "8100:8100"   # local dev only
-    depends_on:
-      db:
-        condition: service_healthy
-      neo4j:
-        condition: service_healthy
-    networks:
-      - heavy-rental-network
-    profiles: ["mcp"]
-```
-
-**Full feasibility (options, security, DigitalOcean sidecar, M0–M5):**  
-[`mcp-multi-agent-devcontainer-digitalocean.md`](./mcp-multi-agent-devcontainer-digitalocean.md)
-
-**Do not** expose MCP publicly on DigitalOcean without auth; Spring portal traffic remains **FastAPI REST**, not MCP.
-
----
 
 ## 12. Suggested spikes (pre-implementation)
 
@@ -840,13 +927,13 @@ restart: unless-stopped
 3. Prototype `populate-neo4j-from-haystack.sh` for one table (e.g. Asset) → Neo4j Browser.  
 4. Confirm DocumentStore nodes (if any) are not deleted by fleet reload.  
 5. Optional: `pgvector/pgvector:pg17` image swap + `CREATE EXTENSION vector`.  
-6. Optional (§11.12 / MCP study): FastMCP “ping” on profile `mcp`; invoke from app container.
+6. Optional: in-process fleet tool stub against `db`.
 
 ### Request / agent (Track R)
 
 1. LangGraph `START → index_tool → END`; parity with existing ingest tests.  
 2. Latency: direct service vs agent tool (stub).  
-3. MCP sidecar: one read tool + one `trigger_neo4j_populate` no-op/job enqueue.  
+3. One read tool + one `trigger_neo4j_populate` no-op/job enqueue.  
 4. Failure: unsupported MIME / KG hard-fail still 400.
 
 ### Indexing DocumentStore cutover (Track I)
@@ -869,13 +956,13 @@ restart: unless-stopped
 4. Sync table allowlist?  
 5. Kafka standard vs outbox-only?  
 
-### Request / agent / MCP
+### Request / agent / tools
 
 6. Must **every** Spring call go through Multi-Agent, or feature-flag subset?  
 7. Default durable store: **Pgvector in Indexing Pipeline (I1)** only?  
 8. Project chunk **TTL** (e.g. 24h / 7d / until user deletes session)?  
 9. Should Neo4j populate run **on each project upload**, on **schedule**, or **admin-only**?  
-10. Who owns the MCP server process (same deploy as FastAPI vs sidecar)?  
+10. Who owns long-running Neo4j populate workers (app vs sidecar job)?  
 11. Auth between Spring and FastAPI (mTLS, API key, mesh)?  
 12. After I1, is **InMemory** allowed only in CI, or also single-node demos?
 
@@ -888,7 +975,7 @@ restart: unless-stopped
 - `openspec/AGENTS.md` — live flow map  
 - `openspec/specs/indexing/` — FileTypeRouter ingest, InMemory default  
 - `openspec/specs/knowledge-graph/` — KG-1 + Stage-1 agents; KG-2 Neo4j backlog  
-- `openspec/specs/equipment-recommendation/` — optional MCP; DocumentStore choices  
+- `openspec/specs/equipment-recommendation/` — DocumentStore choices  
 - `openspec/specs/project-setup/` — Postgres, layering  
 - [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) — Spring multi-call wire  
 
@@ -906,11 +993,12 @@ restart: unless-stopped
 - [Migrate / continuous migration](https://docs.digitalocean.com/products/databases/postgresql/how-to/migrate/)  
 - [Managed Kafka](https://docs.digitalocean.com/products/databases/kafka/)  
 
-### Haystack / MCP / Neo4j
+### Haystack / Neo4j
 
 - [PgvectorDocumentStore](https://docs.haystack.deepset.ai/docs/pgvectordocumentstore)  
-- [Haystack MCP integration](https://haystack.deepset.ai/integrations/mcp)  
-- [Neo4j MCP / GenAI ecosystem](https://neo4j.com/developer/genai-ecosystem/model-context-protocol-mcp/)  
+- In-repo: [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) (ML pricing) · [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md)  
+- Decision log: [`docs/dynamic-pricing-masterplan.md`](../docs/dynamic-pricing-masterplan.md) · [`docs/dynamic-pricing-execution-plan.md`](../docs/dynamic-pricing-execution-plan.md)  
+- [PgvectorDocumentStore](https://docs.haystack.deepset.ai/docs/pgvectordocumentstore)  
 
 ---
 
@@ -925,6 +1013,15 @@ restart: unless-stopped
 | **1.4.0** | 2026-08-10 | **§11 Devcontainer transition plan** for Heavy-Rental Haystack-Fast-API (primary→haystack sync + Neo4j populate) |
 | **1.5.0** | 2026-08-10 | **§11.12 MCP** optional compose profile after T4; link MCP multi-agent feasibility study |
 | **1.6.0** | 2026-08-10 | Target DocumentStore path = **InMemory → Pgvector only** (no secondary ANN store in product plan) |
+| **1.7.0** | 2026-08-10 | **§4.6 / §11.12:** MCP stack = **FastMCP server + mcp-haystack client**; LangGraph wiring + env |
+| **1.8.0** | 2026-08-10 | **§4.6.5** FastMCP **tool consolidation** GO (constraints); link dedicated consolidation study |
+| **1.9.0** | 2026-08-10 | **Pgvector I1** strengthens MCP vector **GO**; expanded §4.6.3 catalog; unlisted pipeline tools pointer |
+| **2.0.0** | 2026-08-10 | **Post-[4] recommend:** Multi-Agent Orchestrator + FastMCP tools (Postgres-Haystack, Neo4j, ML pricing); steps [5]–[8] |
+| **2.1.0** | 2026-08-10 | Link **ML pricing feasibility** (features, guardrails, Phase 1e/2a); expand [7] feature row |
+| **2.2.0** | 2026-08-10 | **§4.2 4e:** Indexing Pipeline as **SuperComponent** GO; link study |
+| **2.3.0** | 2026-08-10 | **[8] synthesis** assets+prices; link synthesis + MCP server/pyproject/config-repo studies |
+| **2.4.0** | 2026-08-10 | Call 1 **TARGET** simplified response (needs/dates/budget); link FR-IX-023 study |
+| **2.5.0** | 2026-08-10 | **Remove FastMCP/MCP server** from architecture; in-process tools only |
 
 ---
 
@@ -933,17 +1030,23 @@ restart: unless-stopped
 | Decision | Recommendation |
 |----------|----------------|
 | Build fleet sync + Neo4j? | **Yes, Track D phased** |
-| Build agent-first indexing? | **Yes, Track R1** (flag; forced index tool) |
+| Build agent-first indexing? | **Yes, Track R1** (flag; forced index tool **[4]**) |
+| Indexing as Haystack **SuperComponent**? | **GO** optional — wrap dual-branch pipeline; KG remains service-side ([study](./indexing-pipeline-supercomponent.md)) |
 | Indexing outputs (as-built) | **InMemory + KG-1** |
 | **Indexing DocumentStore cutover** | **Yes — I1: pipeline writes PgvectorDocumentStore** |
 | Multi-user project files | **Pgvector + user_id/ingest_id filters + TTL** |
 | Durable store default | **Pgvector in Indexing Pipeline only** (InMemory for CI) |
-| MCP | **Later (R4 / M\*)**; tool transport only; see MCP study + §11.12 |
-| MCP in compose | Optional service + **profile `mcp`** after T4; not T0–T5 critical path |
-| Neo4j populate via MCP | **Job trigger** after D3/T3; not per-request full rebuild by default |
+| **Call 1 simplified body (needs/dates/budget)?** | **GO (TARGET)** — FR-IX-023; keep `ingest_id`; not Call 3 recommend |
+| **Multi-Agent after [4]** | **GO** — agents run **in-process tools** then synthesize recommendation |
+| **Synthesis outputs assets + rent price?** | **GO (target)** — merge only; see [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) |
+| Recommend data sources via tools | **Postgres-Haystack** + **Neo4j KG-2** + **ML pricing** + project Pgvector/KG-1 |
+| **ML pricing detail** | See [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md); `price_per_day` + clamp; not public HTTP |
+| Tool packaging | **In-process** tool module (no FastMCP/MCP server) |
+| Recommend tools | Postgres-Haystack SQL + Neo4j + `predict_asset_price` after [4] |
+| Neo4j populate | **Job trigger** after D3/T3 on new primary data; not per-request full rebuild by default |
 | DigitalOcean | **Suitable**; Neo4j self-managed or Aura; pgvector on Managed PG |
 | **Devcontainer today** | **D1 done** (`db-sync` 24h FDW merge); Neo4j up but **no fleet populate from `db`** |
 | **Devcontainer next** | **T1** shorten sync interval + restart policy; **T3–T4** neo4j-populate from Haystack PG |
 | Original phase spine | **Keep** as Track D; parallel **Track I** + Track R + **Track T** (§11) |
-| First ship | **R1 + D0–D1**, then **I1**; local: **T0→T1→T3→T4**; not Kafka+MCP all at once |
+| First ship | **R1 + D0–D1**, then **I1**; local: **T0→T1→T3→T4**; not Kafka + free ReAct all at once |
 | Avoid | Dual-write; Neo4j as SoT; SQL-only fleet “vector sync”; free agent MIME routing; blocking ingest on Neo4j; unfiltered multi-tenant retrieve; wiping DocumentStore graph on fleet reload; secondary ANN stores outside Pgvector |

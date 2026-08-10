@@ -39,9 +39,11 @@ POST /api/v1/recommendations/from-project-spec
   │
   ▼
 IngestFromProjectSpecResponse
-  (ingest_id, user_*, data_kind, documents_written, kg_*)
+  as-built: ingest_id, user_*, data_kind, documents_written, kg_*
+  TARGET (FR-IX-023): + needs_summary, tentative_start/end_date,
+                      expected_budget (not ranked assets / ML rent)
 
-  │  optional Stage-1 Q&A
+  │  optional Stage-1 Q&A (Call 2)
   ▼
 POST /api/v1/recommendations/project-knowledge/query
   LangGraph: research → graph → synthesis
@@ -49,7 +51,7 @@ POST /api/v1/recommendations/project-knowledge/query
   prompts: app/agents/prompts.py (OpenSPDD)
 
         ─ ─ ─ ─ deferred (not default HTTP) ─ ─ ─ ─
-Recommend FR-010 (service) → pricing  → results_by_need
+Call 3 Recommend FR-010 (service) → fleet + pricing → results_by_need
 KG-2 equipment stockpile (Stage 2)
 ```
 
