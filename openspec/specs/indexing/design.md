@@ -40,6 +40,17 @@ Aligned with Packt Ch. 4 indexing flowchart
        │
        ▼
   IngestFromProjectSpecResponse
+       │
+       │  TARGET (FR-IX-023) after successful index + KG:
+       ▼
+  project-spec summary extraction
+       • needs_summary (decomposer / LLM / KG-assisted)
+       • tentative_start_date / tentative_end_date
+         (request dates preferred; else document extract)
+       • expected_budget (extract or null; never invent)
+       │
+       ▼
+  enriched response (still not results_by_need)
 ```
 
 **Branch detail:**
@@ -61,9 +72,21 @@ Default embedder is CI-safe (`MockDocumentEmbedder`); optional `openai` / `sente
 | `app/pipelines/kg/*` | Mandatory KG (HR-76) |
 | `app/services/indexing.py` | Index + mandatory KG (hard-fail) |
 | `app/api/recommendations.py` | Thin HTTP |
-| `app/schemas/indexing.py` | Response DTO |
+| `app/schemas/indexing.py` | Response DTO (as-built); TARGET summary fields |
+| `app/services/need_decomposer.py` / LLM | TARGET: needs_summary from project text |
 | `app/config.py` | `INDEXING_*`, `KG_*` |
 | `postman/` | Live collection |
+
+### TARGET extraction notes (FR-IX-023)
+
+| Output | Source precedence |
+|--------|-------------------|
+| `needs_summary` | Decompose resolved project text (and/or KG-1 nodes); stub decomposer for CI |
+| `tentative_*` dates | Request `start_date`/`end_date` if set; else extract from text; else null |
+| `expected_budget` | Extract currency/amount phrases from text; else null + warning — **not** `include_pricing` |
+| Still after index | Summary MUST NOT run if index/KG hard-fail |
+
+Compact response: portal may only need identity + summary; retain technical fields for ops/debug (`verbose` or nested `indexing`).
 
 ### Package notes under `app/pipelines/indexing/`
 

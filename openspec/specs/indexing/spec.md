@@ -33,6 +33,8 @@ When behaviour here and the codebase diverge, update them in the **same change s
 
 **As-built vs parent FR-040:** live response is **ingest + optional kg_***, not ranked `results_by_need`.
 
+**Target (not as-built):** successful Call 1 MAY add a **project-spec summary** (needs, tentative dates, expected budget) for Spring/portal UX while keeping `ingest_id` and index/KG status. MUST NOT become FR-010 `results_by_need` (ranked assets + predicted rent) without recommend reattach.
+
 ---
 
 ## Purpose
@@ -344,6 +346,43 @@ After **`final_doc_joiner`** chunks exist and index write succeeds, MUST build a
 - **WHEN** KG is built
 - **THEN** full Ragas transforms run only inside `KnowledgeGraphGenerator` when `KG_APPLY_TRANSFORMS=true`
 
+### Requirement: Project-spec summary on ingest response (TARGET)
+After successful index + mandatory KG, the live success body MUST include a **client-facing project-spec summary** in addition to `ingest_id` and index/KG status fields (or a documented compact default with optional verbose indexing detail).  
+Summary MUST include:
+
+1. **`needs_summary`** — what the uploaded project-spec implies is needed (equipment/work descriptions; optional quantity / equipment_hints).  
+2. **`tentative_start_date` / `tentative_end_date`** — from request when provided, else extracted from project-spec when confidently found, else null.  
+3. **`expected_budget`** — amount (+ currency when known) extracted from project-spec when confidently found, else null; MUST NOT invent a budget.  
+
+MUST NOT treat this summary as ranked fleet recommendations or ML rent prices (`results_by_need` / Call 3).  
+MUST NOT use `options.include_pricing` as a budget amount (boolean only).  
+(Trace: FR-IX-023)  
+**Status:** **TARGET** — not as-built; as-built body is technical ingest + `kg_*` only (FR-IX-017).
+
+#### Scenario: Needs summary present on target success
+- **GIVEN** target implementation and successful ingest of a project-spec that describes equipment needs
+- **WHEN** `POST .../from-project-spec` succeeds
+- **THEN** the body includes `ingest_id` and non-empty `needs_summary` (or empty list + warning if no needs could be inferred)
+- **AND** does not include `recommendation_id` or `results_by_need`
+
+#### Scenario: Dates from request preferred
+- **GIVEN** target implementation and request supplies valid `start_date` and `end_date`
+- **WHEN** ingest succeeds
+- **THEN** `tentative_start_date` / `tentative_end_date` echo the request window
+- **AND** if the document also states dates, conflict MAY be noted in `warnings` (request wins unless product overrides)
+
+#### Scenario: Budget extracted or null
+- **GIVEN** target implementation
+- **WHEN** the project-spec does not state a budget
+- **THEN** `expected_budget` is null and a warning MAY state that budget was not found
+- **WHEN** the project-spec states a budget confidently
+- **THEN** `expected_budget` includes amount (and currency when known) with a source marker (e.g. extracted)
+
+#### Scenario: Not recommend envelope
+- **WHEN** target summary is returned
+- **THEN** body MUST NOT require ranked `item` / `pricing.daily_rate` from fleet+ML path
+- **AND** Call 3 remains the path for recommended assets + predicted rent price
+
 ### Requirement: MIME classification map
 Sources MUST be classified according to the following normative extension / MIME map. Unclassified / other / unknown → **400**.  
 (Trace: MIME map §3; FR-IX-002, FR-IX-003)
@@ -388,6 +427,8 @@ Sources MUST be classified according to the following normative extension / MIME
 - Do not treat KG as optional on success path; missing `user_id`, zero chunks, or KG failure → 400.
 - Do not invent a second public API style for ingest; field tables live in the contract file.
 - Do not silently replace process-local `InMemoryDocumentStore` with multi-instance persistence without a dedicated change.
+- Do not invent `expected_budget` or dates when not in request/document (FR-IX-023).
+- Do not conflate **needs summary** with **fleet recommendation** or **predicted rent price**.
 
 ---
 
@@ -397,6 +438,8 @@ Sources MUST be classified according to the following normative extension / MIME
 |---------|------|--------|
 | **0.1.0** | 2026-08-07 | Part 1 FileTypeRouter + route reroute |
 | **0.2.0** | 2026-08-07 | Part 2 converters |
+| **0.3.0** | 2026-08-10 | OpenSpec migration / FR-IX-001…022 restatement |
+| **0.4.0** | 2026-08-10 | **FR-IX-023 TARGET:** project-spec summary (needs, dates, budget) on Call 1 response |
 | **0.3.0** | 2026-08-07 | Part 3 embed/write |
 | **0.3.1** | 2026-08-07 | Spec reconcile vs recommend SPECs |
 | **0.4.0** | 2026-08-07 | Packt dual-branch FR-IX-018–020 |

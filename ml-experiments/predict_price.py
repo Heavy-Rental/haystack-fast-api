@@ -3,7 +3,7 @@
 Scratch/offline script -- lives outside the app's SDD structure per
 docs/dynamic-pricing-masterplan.md, same convention as generate_synthetic_data.py
 and shap_review.py. Not the production implementation: the real
-predict_price() is speced for Phase 2a in specification/SPEC-dynamic-pricing.md,
+predict_price() is speced for Phase 2a in openspec/specs/dynamic-pricing/spec.md,
 at app/services/pricing/model.py, clamped against the real per-asset
 Asset.minDailyRate/maxDailyRate read from the database.
 
