@@ -1,6 +1,6 @@
 """MIME / extension map for project-spec indexing (Part 1).
 
-Normative table: specification/SPEC-indexing-file-type-router.md §3.
+Normative table: openspec/specs/indexing/spec.md (MIME classification map).
 """
 
 from __future__ import annotations

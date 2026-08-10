@@ -1,0 +1,137 @@
+# Feasibility Study: ML Pricing Model for Multi-Agent Recommend Path
+
+| Field | Value |
+|-------|--------|
+| **Document type** | Architecture / ML integration feasibility study |
+| **Status** | Complete (study only — no implementation) |
+| **Date** | 2026-08-10 |
+| **Version** | 1.1.0 |
+| **Application** | `haystack-fast-api` equipment recommendation |
+| **Question** | Can the **ML pricing model** supply structured context for Multi-Agent **recommend after [4]** when agents invoke tools **in-process** (including fleet data from Postgres-Haystack)? |
+| **Primary sources** | [`docs/dynamic-pricing-masterplan.md`](../docs/dynamic-pricing-masterplan.md) · [`docs/dynamic-pricing-execution-plan.md`](../docs/dynamic-pricing-execution-plan.md) · [`openspec/specs/dynamic-pricing/`](../openspec/specs/dynamic-pricing/) · `ml-experiments/` · `app/services/pricing_client.py` |
+| **Related studies** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) §4.1 [7] · [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) |
+
+> **Normative product rules** for pricing remain in OpenSpec dynamic-pricing. This study maps pricing into the **in-process multi-agent tool** path (no separate tool server).
+
+---
+
+## 1. Executive summary
+
+| Question | Result |
+|----------|--------|
+| ML pricing as **in-process agent tool** (`predict_asset_price`)? | **GO** |
+| Tool returns **`price_per_day` (+ clamp metadata)**; app computes **total**? | **GO** |
+| Pricing is **public Spring-facing HTTP**? | **NO** — internal only |
+| Masterplan “in-process function call”? | **Aligns** — agents call same path as `pricing_client` / `predict_price` |
+| Feature vector from fleet + booking data? | **Almost** — assets from Postgres-Haystack; live util needs Phase 1e |
+| Neo4j / project KG as model features? | **No** without retrain — use for agent rank/explain only |
+| Fallback when model missing? | **GO** — category table (as-built) |
+
+**Overall:** **GO.** Price via **in-process** tool after fleet candidates exist; synthesis merges prices into the recommendation.
+
+---
+
+## 2. Baseline
+
+| Source | Role |
+|--------|------|
+| `ml-experiments/predict_price.py` | Experimental `predict_price()` + category guardrails |
+| `app/services/pricing_client.py` | App import site → ml-experiments or fallback |
+| `app/pipelines/predict_price_adapter.py` | Prices each candidate on service recommend path |
+
+### Feature set (model inputs)
+
+| Feature | Source in multi-agent world |
+|---------|----------------------------|
+| `category`, `condition`, `capacity`, `platform_height` | Postgres-Haystack Asset row |
+| `duration_days` | Request rental window |
+| `distance_km` | Site vs yard (default/proxy today) |
+| `period_utilization`, `lead_time_days` | Bookings on mirror (Phase 1e) |
+
+**Target:** `price_per_day`; total = rate × days. Guardrails: category stand-in now → per-asset min/max in Phase 2a.
+
+---
+
+## 3. Role after step [4]
+
+```text
+[4] indexing succeeds
+[5] project / needs tools (in-process)
+[6] fleet tools → Postgres-Haystack (+ Neo4j context)
+[7] pricing tool → predict_asset_price (in-process)
+[8] synthesis → assets + prices
+```
+
+| Layer | Pricing responsibility |
+|-------|------------------------|
+| **Orchestrator** | When to price; rank; totals; rationale |
+| **`predict_asset_price` tool** | Model + clamp; return daily rate + metadata |
+| **Postgres-Haystack** | Asset attributes + booking util |
+| **Neo4j / project KG** | Agent context only, not untrained XGBoost features |
+
+### Tool contract (illustrative)
+
+```text
+predict_asset_price(
+  category, condition, duration_days, capacity, distance_km,
+  platform_height | null,
+  period_utilization | null, lead_time_days = 0,
+  asset_id | null
+) -> { daily_rate, total_price?, currency, was_clamped, model_version, explanation }
+```
+
+---
+
+## 4. Packaging
+
+| Mode | Recommendation |
+|------|----------------|
+| **In-process in app** (as-built / target) | **Primary** — `pricing_client` → model |
+| Separate pricing microservice | Optional later scale-out only |
+
+No separate tool-server process is required for multi-agent pricing.
+
+---
+
+## 5. Risks
+
+| Risk | Mitigation |
+|------|------------|
+| Missing model.pkl | Category fallback; surface `model_version` |
+| Silent zero prices | Forbidden |
+| Feature mismatch | Shared `feature_schema` |
+| Distance default 15 km | Later: project/site tools |
+
+---
+
+## 6. Phasing
+
+| Phase | Work |
+|-------|------|
+| P1 | Keep as-built `pricing_client` on service path |
+| P2 | Phase 1e live utilization |
+| P3 | Phase 2a `app/services/pricing/` + per-asset clamp |
+| P4 | Wire `predict_asset_price` as multi-agent tool (in-process) |
+| P5 | Recommend graph [7]–[8] when `include_pricing` |
+
+---
+
+## 7. Document control
+
+| Version | Date | Notes |
+|---------|------|--------|
+| **1.0.0** | 2026-08-10 | Initial (with FastMCP packaging options) |
+| **1.1.0** | 2026-08-10 | **Remove FastMCP**; in-process multi-agent tool only |
+
+---
+
+## 8. One-page decision card
+
+| Decision | Recommendation |
+|----------|----------------|
+| ML pricing as agent tool? | **Yes (GO)** in-process |
+| Public price HTTP API? | **No** |
+| Target variable | **`price_per_day`** |
+| Feature sources | **Postgres-Haystack** + request window |
+| Neo4j / project KG | Agent context only |
+| Packaging | **In-app** `pricing_client` / predict_price |
