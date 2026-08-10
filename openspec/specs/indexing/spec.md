@@ -1,0 +1,409 @@
+# Indexing Specification (File Type Router → Vectorize)
+
+| Field | Value |
+|-------|--------|
+| **Status** | as-built |
+| **Standards** | OpenSpec · Spec-kit · OpenSPDD |
+| **Feature id** | `indexing-file-type-router` |
+| **Tracking** | HR-74 · HR-76 (identity + KG hook) |
+| **Contracts** | [`contracts/ingest-from-project-spec.md`](./contracts/ingest-from-project-spec.md) |
+| **Design** | [`design.md`](./design.md) |
+| **Archived tasks** | [`../../changes/archive/2026-08-07-indexing-file-type-router/tasks.md`](../../changes/archive/2026-08-07-indexing-file-type-router/tasks.md) |
+| **Next in flow** | [`../knowledge-graph/spec.md`](../knowledge-graph/spec.md) |
+| **Postman (live HTTP)** | [`../../../postman/README.md`](../../../postman/README.md) |
+| **Env** | [`../../../.env.example`](../../../.env.example) |
+| **Agent map** | [`../../AGENTS.md`](../../AGENTS.md) Path B |
+
+**Spec-kit phases:** Specify (this file) → Plan → Tasks → Implement → Converge.
+
+When behaviour here and the codebase diverge, update them in the **same change set**.
+
+### Document roles & conflict rule
+
+| Document | Owns |
+|----------|------|
+| **This capability** | Live HTTP index graph, MIME map, `user_id`, full ingest response table |
+| [`../knowledge-graph/spec.md`](../knowledge-graph/spec.md) | Mandatory KG after `final_doc_joiner` (hard-fail) |
+| [`../recommendation-pipeline/spec.md`](../recommendation-pipeline/spec.md) | FR-010 **service-level** (not default route) |
+| [`../recommendation-intake/spec.md`](../recommendation-intake/spec.md) | Deferred recommend envelope |
+| Parent agentic / product vision | Catalog and product vision |
+| [`../../../postman/README.md`](../../../postman/README.md) | Live Postman |
+
+**Conflict rule:** Live route → **this capability wins here**. Optional / full KG rules → [`../knowledge-graph/spec.md`](../knowledge-graph/spec.md). Recommend envelope without a “deferred” label loses to this capability.
+
+**As-built vs parent FR-040:** live response is **ingest + optional kg_***, not ranked `results_by_need`.
+
+---
+
+## Purpose
+
+Introduce a Haystack **indexing-style pipeline** that starts with **file type routing** (extension / MIME) so project-spec uploads are classified as **structured** or **unstructured**, then converted, chunked, embedded, and written to a DocumentStore.
+
+**Part 1 delivered:**
+
+1. `FileTypeRouter`-backed classification under `app/pipelines/indexing/`.
+2. Reroute `POST /api/v1/recommendations/from-project-spec` to this pipeline **instead of** `build_intake_front_pipeline` / FR-010 recommend.
+
+**Part 2 delivered:**
+
+3. MIME-specific converters on structured and unstructured branches → Haystack `Document`s.
+4. API response includes `document_count` and truncated `documents[]` previews.
+
+**Part 3 delivered:**
+
+5. `DocumentCleaner` → `DocumentSplitter` → document embedder → `DocumentWriter`.
+6. Default process-local `InMemoryDocumentStore`; CI-safe default embedder (`MockDocumentEmbedder`).
+7. Response fields `chunk_count`, `documents_written`, and `has_embedding` on previews.
+
+**HR-76 (shipped):** required `user_id`; **mandatory** user-scoped KG after post-join chunks ([`../knowledge-graph/spec.md`](../knowledge-graph/spec.md)).
+
+### Outcomes
+
+- Multipart file uploads are packaged as Haystack `ByteStream` with `mime_type` derived from filename extension.
+- Pipeline classifies each source as structured, unstructured, or unclassified.
+- Classified sources are **converted** to Haystack `Document`s by MIME type.
+- Converted documents are **cleaned, split, embedded, and written** to a DocumentStore.
+- Request requires **`user_id`** (optional `user_name`); echoed on response; stamped on chunk meta.
+- Successful responses return ingest fields plus **`kg_*`** (`kg_built=true` on success).
+- Missing `user_id`, unclassified type, empty source, zero written chunks, or KG failure → **400**.
+- Dates accepted; unused for ranking until reattach.
+
+### Out of scope (still)
+
+- Persistent multi-instance DocumentStore
+- Naive/hybrid RAG **query** HTTP
+- Recommend reattach on this route (T017)
+- `LinkContentFetcher` (T030)
+
+---
+
+## User Scenarios & Testing
+
+### User Story 1 - Structured CSV ingest (Priority: P1)
+
+A portal user uploads a structured project-spec CSV (e.g. `needs.csv`) with a required `user_id` and receives an ingest response classifying the source as structured, with documents and written chunks.
+
+**Independent Test:** Multipart POST to `/api/v1/recommendations/from-project-spec` with `user_id` and `needs.csv`.
+
+**Acceptance Scenarios:**
+
+1. **Given** multipart `needs.csv`, **When** POST, **Then** `data_kind=structured`, `structured_count≥1`, `document_count≥1`, content preview includes CSV text.
+2. **Given** successful convert and Part 3 pipeline, **When** write completes, **Then** `documents_written ≥ 1`, chunk previews have `has_embedding=true`, and the DocumentStore count increases.
+
+### User Story 2 - Unstructured text / markdown ingest (Priority: P1)
+
+A portal user submits free-text `project_text` or a markdown brief and receives unstructured classification with extracted document content.
+
+**Independent Test:** JSON or multipart POST with non-empty `project_text` or `brief.md`.
+
+**Acceptance Scenarios:**
+
+1. **Given** multipart `brief.md` or JSON `project_text`, **When** POST, **Then** `data_kind=unstructured` and `document_count≥1` with extracted text.
+2. **Given** a successful POST, **When** body is inspected, **Then** `ingest_id` and `user_id` present; `results_by_need` absent.
+
+### User Story 3 - Reject unsupported or empty sources (Priority: P1)
+
+Clients sending unsupported extensions, empty payloads, or missing identity receive HTTP 400 with shared error JSON.
+
+**Independent Test:** POST with `.bin`, empty file/text, or no `user_id`.
+
+**Acceptance Scenarios:**
+
+1. **Given** unsupported extension (e.g. `.bin`), **When** POST, **Then** **400**.
+2. **Given** empty file / empty text, **When** POST, **Then** **400**.
+3. **Given** no `user_id`, **When** POST, **Then** **400**.
+
+### User Story 4 - Office document conversion (Priority: P2)
+
+Valid `.docx` / `.xlsx` content converts to at least one Haystack Document on the correct branch.
+
+**Independent Test:** Unit/integration convert tests with sample office files.
+
+**Acceptance Scenarios:**
+
+1. **Given** `.docx` / `.xlsx` with valid content, **When** convert runs, **Then** at least one Document is produced.
+
+### User Story 5 - Indexing owns the live HTTP path (Priority: P1)
+
+The public from-project-spec route runs the indexing pipeline, not intake-front recommend.
+
+**Independent Test:** Route handler and MIME map unit tests.
+
+**Acceptance Scenarios:**
+
+1. **Given** the route handler, **When** Parts 1–3 ship, **Then** it does not call `run_intake_front` as primary path.
+2. **Given** unit tests on the router component, **When** run standalone, **Then** MIME map matches the MIME classification map requirement.
+
+---
+
+## Requirements
+
+### Requirement: Live route runs indexing pipeline
+`POST /api/v1/recommendations/from-project-spec` MUST run the **indexing file-type pipeline**, not `intake_front`, as the default HTTP path.  
+(Trace: FR-IX-001)
+
+#### Scenario: Default HTTP path is indexing
+- **WHEN** a client calls `POST /api/v1/recommendations/from-project-spec`
+- **THEN** the handler runs the indexing file-type pipeline
+- **AND** does not use `build_intake_front_pipeline` / FR-010 recommend as the primary path
+
+### Requirement: Classify uploads as structured or unstructured
+Uploaded files MUST be classified by extension/MIME into **structured** or **unstructured**.  
+(Trace: FR-IX-002)
+
+#### Scenario: Structured vs unstructured classification
+- **WHEN** an uploaded file has a known extension/MIME from the MIME classification map
+- **THEN** it is classified as structured or unstructured accordingly
+
+### Requirement: Unclassified types yield 400
+Unclassified / unsupported types MUST yield HTTP **400** `{"error","message"}`.  
+(Trace: FR-IX-003)
+
+#### Scenario: Unsupported type rejected
+- **WHEN** a client uploads an unsupported extension (e.g. `.bin`) or unknown MIME
+- **THEN** the response is HTTP 400 with `error` and `message` fields
+
+### Requirement: Thin routers; policy under pipelines/services
+Routers stay thin; MIME policy and branching live under `app/pipelines/` / services.  
+(Trace: FR-IX-004)
+
+#### Scenario: Router does not own MIME policy
+- **WHEN** MIME classification or branch selection is required
+- **THEN** policy and branching execute under `app/pipelines/` / services, not inline in the router
+
+### Requirement: Haystack 2.0 component conventions
+Components follow Haystack 2.0: `@component`, typed sockets, `run()` → `dict`.  
+(Trace: FR-IX-005)
+
+#### Scenario: Component contract
+- **WHEN** an indexing pipeline component is invoked
+- **THEN** it is a Haystack 2.0 `@component` with typed sockets and returns a `dict` from `run()`
+
+### Requirement: project_text as unstructured plain text
+Non-empty JSON `project_text` MUST be treated as unstructured `text/plain` when no file (or in addition to file sources).  
+(Trace: FR-IX-006)
+
+#### Scenario: JSON-only project_text
+- **WHEN** a client sends non-empty `project_text` without a file
+- **THEN** the source is treated as unstructured `text/plain`
+
+#### Scenario: project_text plus file
+- **WHEN** a client sends non-empty `project_text` in addition to file sources
+- **THEN** `project_text` is included as an unstructured `text/plain` source alongside files
+
+### Requirement: Process-local DocumentStore by default
+Part 3 MAY use a process-local `InMemoryDocumentStore` by default; persistent stores are a later swap.  
+(Trace: FR-IX-007)
+
+#### Scenario: Default store
+- **WHEN** the indexing pipeline writes documents without a persistent-store override
+- **THEN** a process-local `InMemoryDocumentStore` is used
+
+### Requirement: Offload sync pipeline work
+Async handlers MUST offload sync pipeline work with `run_in_threadpool`.  
+(Trace: FR-IX-008)
+
+#### Scenario: Threadpool offload
+- **WHEN** an async HTTP handler runs the sync indexing pipeline
+- **THEN** work is offloaded via `run_in_threadpool`
+
+### Requirement: Empty sources yield 400
+Empty file bytes and empty combined sources → **400**.  
+(Trace: FR-IX-009)
+
+#### Scenario: Empty file or empty combined sources
+- **WHEN** file bytes are empty or all combined sources are empty
+- **THEN** the response is HTTP 400
+
+### Requirement: FileTypeRouter is authoritative for MIME buckets
+Classification MUST use Haystack `FileTypeRouter` (wrapped or connected) so MIME buckets are authoritative.  
+(Trace: FR-IX-010)
+
+#### Scenario: FileTypeRouter drives classification
+- **WHEN** sources are classified
+- **THEN** Haystack `FileTypeRouter` (wrapped or connected) determines MIME buckets
+
+### Requirement: Convert classified sources to Documents
+After classification, structured and unstructured sources MUST be converted to Haystack `Document`s via MIME-specific converters.  
+(Trace: FR-IX-011)
+
+#### Scenario: Post-classification convert
+- **WHEN** sources have been classified as structured or unstructured
+- **THEN** each is converted to Haystack `Document`s via MIME-specific converters
+
+### Requirement: MIME-specific converter map
+Converter map: plain/json text → `TextFileToDocument`; markdown → `MarkdownToDocument`; html → `HTMLToDocument`; pdf → `PyPDFToDocument`; docx → `DOCXToDocument`; csv → `CSVToDocument`; xlsx → `XLSXToDocument`.  
+(Trace: FR-IX-012)
+
+#### Scenario: Converter selection by MIME
+- **WHEN** a classified source has a mapped MIME type
+- **THEN** the corresponding converter from the map is used
+
+### Requirement: Zero documents after convert yields 400
+Zero documents after successful classification (hard conversion failure) → **400**. Soft per-file conversion issues MAY appear in `warnings`.  
+(Trace: FR-IX-013)
+
+#### Scenario: Hard conversion failure
+- **WHEN** classification succeeds but conversion yields zero documents
+- **THEN** the response is HTTP 400
+
+#### Scenario: Soft conversion issues
+- **WHEN** a per-file conversion issue is soft (non-fatal for the batch)
+- **THEN** it MAY appear in `warnings` without necessarily failing the whole request if other documents remain
+
+### Requirement: Dual preprocess then join embed write
+After convert, unstructured vs CSV preprocess separately, then **join** → embed → write.  
+(Trace: FR-IX-014)
+
+#### Scenario: Join before embed/write
+- **WHEN** convert completes for unstructured and CSV branches
+- **THEN** each branch preprocesses separately
+- **AND** branches join before embed and write
+
+### Requirement: CI-safe default embedder
+Default embedder MUST be CI-safe (`MockDocumentEmbedder` or equivalent). Optional `openai` mode via `INDEXING_EMBEDDER`.  
+(Trace: FR-IX-015)
+
+#### Scenario: Default embedder is mock
+- **WHEN** `INDEXING_EMBEDDER` is unset or set to the default mock mode
+- **THEN** a CI-safe `MockDocumentEmbedder` (or equivalent) is used
+
+#### Scenario: Optional openai embedder
+- **WHEN** `INDEXING_EMBEDDER` is set to `openai`
+- **THEN** the optional OpenAI document embedder mode is used
+
+### Requirement: Successful ingest reports written chunks
+Successful ingest MUST report `documents_written` ≥ 1 (and matching `chunk_count` for the default path). Zero written chunks → **400**.  
+(Trace: FR-IX-016)
+
+#### Scenario: At least one written document
+- **WHEN** ingest completes successfully
+- **THEN** `documents_written` ≥ 1 and `chunk_count` matches for the default path
+
+#### Scenario: Zero written chunks rejected
+- **WHEN** the pipeline would write zero chunks
+- **THEN** the response is HTTP 400
+
+### Requirement: Ingest response shape (no recommend envelope)
+Successful responses MUST use `IngestFromProjectSpecResponse` (`ingest_id`, …). MUST NOT return `recommendation_id` / `results_by_need` on the default path until reattach is specified.  
+(Trace: FR-IX-017)
+
+#### Scenario: Ingest DTO only
+- **WHEN** a successful default-path response is returned
+- **THEN** the body is `IngestFromProjectSpecResponse` with `ingest_id`
+- **AND** does not include `recommendation_id` or `results_by_need`
+
+### Requirement: Explicit dual-branch Packt Ch.4 graph
+Indexing graph MUST expose an explicit **FileTypeRouter** (or equivalent) with **parallel** unstructured vs CSV preprocess branches, then join before embed/write (Packt Ch. 4 pattern).  
+(Trace: FR-IX-018)
+
+#### Scenario: Parallel branches then join
+- **WHEN** the indexing pipeline is built
+- **THEN** it exposes an explicit FileTypeRouter (or equivalent)
+- **AND** parallel unstructured vs CSV preprocess branches join before embed/write
+
+### Requirement: CSV-oriented clean and split
+CSV branch MUST use CSV-oriented clean/split (e.g. `CSVDocumentCleaner` + row-wise `CSVDocumentSplitter`), not only the unstructured word splitter.  
+(Trace: FR-IX-019)
+
+#### Scenario: CSV branch preprocessing
+- **WHEN** a CSV source is on the structured/CSV branch
+- **THEN** CSV-oriented cleaner and row-wise splitter are used (not only the unstructured word splitter)
+
+### Requirement: Unstructured sanitizer cleaner word split
+Unstructured branch MUST run sanitizer (or equivalent quality gate) → `DocumentCleaner` → word `DocumentSplitter` before the final joiner.  
+(Trace: FR-IX-020)
+
+#### Scenario: Unstructured branch preprocessing
+- **WHEN** an unstructured source is preprocessed
+- **THEN** sanitizer (or equivalent) → `DocumentCleaner` → word `DocumentSplitter` run before `final_doc_joiner`
+
+### Requirement: user_id required; user_name optional
+Request MUST include `user_id`; MAY include `user_name`. Chunks SHOULD carry these in metadata.  
+(Trace: FR-IX-021)
+
+#### Scenario: user_id required
+- **WHEN** a request omits `user_id`
+- **THEN** the response is HTTP 400
+
+#### Scenario: Identity on chunks
+- **WHEN** chunks are written for a request with `user_id` (and optional `user_name`)
+- **THEN** chunks SHOULD carry these fields in metadata
+- **AND** `user_id` / `user_name` are echoed on the response
+
+### Requirement: Mandatory KG after final_doc_joiner
+After **`final_doc_joiner`** chunks exist and index write succeeds, MUST build a user-scoped KG (hard-fail on failure); full Ragas transforms run only inside `KnowledgeGraphGenerator` when `KG_APPLY_TRANSFORMS=true` (see [`../knowledge-graph/spec.md`](../knowledge-graph/spec.md)).  
+(Trace: FR-IX-022)
+
+#### Scenario: Mandatory user-scoped KG
+- **WHEN** post-join chunks exist and index write succeeds
+- **THEN** a user-scoped knowledge graph is built
+- **AND** failure of KG build hard-fails the request (HTTP 400)
+
+#### Scenario: Ragas transforms gated
+- **WHEN** KG is built
+- **THEN** full Ragas transforms run only inside `KnowledgeGraphGenerator` when `KG_APPLY_TRANSFORMS=true`
+
+### Requirement: MIME classification map
+Sources MUST be classified according to the following normative extension / MIME map. Unclassified / other / unknown → **400**.  
+(Trace: MIME map §3; FR-IX-002, FR-IX-003)
+
+| Kind | Extensions | MIME types |
+|------|------------|------------|
+| **Unstructured** | `.txt`, `.md`, `.markdown`, `.pdf`, `.docx`, `.html`, `.htm` | `text/plain`, `text/markdown`, `application/pdf`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `text/html` |
+| **Structured** | `.csv`, `.json`, `.xlsx` | `text/csv`, `application/json`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+| **Unclassified** | other / unknown | → **400** |
+
+**Routing note:** Explicit `FileTypeRouter`. Unstructured: sanitizer → cleaner → word split. CSV: CSV cleaner → row-wise split. Meet at **`final_doc_joiner`** → embed → write. JSON/XLSX use unstructured clean/split path but count as **structured** for `data_kind`.
+
+#### Scenario: Unstructured extension maps correctly
+- **WHEN** a file has extension `.txt`, `.md`, `.markdown`, `.pdf`, `.docx`, `.html`, or `.htm` (or matching MIME)
+- **THEN** it is classified as unstructured
+
+#### Scenario: Structured extension maps correctly
+- **WHEN** a file has extension `.csv`, `.json`, or `.xlsx` (or matching MIME)
+- **THEN** it is classified as structured for `data_kind`
+
+#### Scenario: JSON/XLSX clean path vs data_kind
+- **WHEN** a JSON or XLSX source is processed
+- **THEN** it uses the unstructured clean/split path
+- **AND** still counts as **structured** for `data_kind`
+
+#### Scenario: Unknown type rejected by map
+- **WHEN** extension/MIME is outside the map
+- **THEN** the source is unclassified and yields HTTP 400
+
+---
+
+## Norms (OpenSPDD)
+
+- Live HTTP index graph and MIME policy live in this capability; KG hard-fail rules live in knowledge-graph.
+- Packt Ch. 4 dual-branch pattern is normative for the graph shape (FileTypeRouter → dual preprocess → joiner → embed → write).
+- CI-safe default embedder; optional modes via `INDEXING_*` settings.
+- Thin routers; pipelines and services own branching.
+
+## Safeguards (OpenSPDD)
+
+- Do not restore `results_by_need` / FR-010 as the default HTTP path without an explicit reattach SDD (T017).
+- Do not treat KG as optional on success path; missing `user_id`, zero chunks, or KG failure → 400.
+- Do not invent a second public API style for ingest; field tables live in the contract file.
+- Do not silently replace process-local `InMemoryDocumentStore` with multi-instance persistence without a dedicated change.
+
+---
+
+## Change control
+
+| Version | Date | Notes |
+|---------|------|--------|
+| **0.1.0** | 2026-08-07 | Part 1 FileTypeRouter + route reroute |
+| **0.2.0** | 2026-08-07 | Part 2 converters |
+| **0.3.0** | 2026-08-07 | Part 3 embed/write |
+| **0.3.1** | 2026-08-07 | Spec reconcile vs recommend SPECs |
+| **0.4.0** | 2026-08-07 | Packt dual-branch FR-IX-018–020 |
+| **0.5.0** | 2026-08-07 | HR-76 user_id + KG hook FR-IX-021–022 |
+| **0.6.0** | 2026-08-07 | Sequential reading map; full API tables; KG not “future-only” |
+| **1.0.0** | 2026-08-10 | Migrated to OpenSpec Requirement/Scenario + OpenSPDD; contract + design split |
+
+---
+
+**Reading order:** [← Setup](../project-setup/spec.md) · [Agent map](../../AGENTS.md) · [Contract](./contracts/ingest-from-project-spec.md) · [Design](./design.md) · [Next: Knowledge graph →](../knowledge-graph/spec.md)

@@ -178,8 +178,11 @@ Env: `PROJECT_AGENT_MODE=stub` (default) or `llm`; `PROJECT_AGENT_TOP_K=5`.
 
 ## Specs
 
-- **Indexing (live ingest):** [`specification/SPEC-indexing-file-type-router.md`](../specification/SPEC-indexing-file-type-router.md)
-- **Knowledge graph + multi-agent (incl. §10 Testing):** [`specification/SPEC-knowledge-graph.md`](../specification/SPEC-knowledge-graph.md)
-- Tasks: [`tasks-indexing-file-type-router.md`](../specification/tasks-indexing-file-type-router.md) · [`tasks-knowledge-graph.md`](../specification/tasks-knowledge-graph.md) · [`tasks-kg-multi-agent-stage1.md`](../specification/tasks-kg-multi-agent-stage1.md)
-- Broader pipeline testing guide: [`specification/SPEC-recommendation-pipeline-testing-guide.md`](../specification/SPEC-recommendation-pipeline-testing-guide.md)
-- Deferred recommend Postman (reattach only): [`specification/SPEC-recommendation-postman-testing-guide.md`](../specification/SPEC-recommendation-postman-testing-guide.md)
+SDD source of truth: [`openspec/AGENTS.md`](../openspec/AGENTS.md) (OpenSpec · Spec-kit · OpenSPDD).
+
+- **Indexing (live ingest):** [`openspec/specs/indexing/spec.md`](../openspec/specs/indexing/spec.md)
+- **Knowledge graph + multi-agent:** [`openspec/specs/knowledge-graph/spec.md`](../openspec/specs/knowledge-graph/spec.md)
+- **KG testing (pytest / curl / Postman):** [`docs/testing/knowledge-graph-testing-guide.md`](../docs/testing/knowledge-graph-testing-guide.md)
+- Tasks (archived): [`openspec/changes/archive/2026-08-07-indexing-file-type-router/tasks.md`](../openspec/changes/archive/2026-08-07-indexing-file-type-router/tasks.md) · [`…/knowledge-graph-hr-76/tasks.md`](../openspec/changes/archive/2026-08-07-knowledge-graph-hr-76/tasks.md) · [`…/kg-multi-agent-stage1/tasks.md`](../openspec/changes/archive/2026-08-08-kg-multi-agent-stage1/tasks.md)
+- Broader pipeline testing guide: [`docs/testing/recommendation-pipeline-testing-guide.md`](../docs/testing/recommendation-pipeline-testing-guide.md)
+- Deferred recommend Postman (reattach only): [`docs/testing/recommendation-postman-testing-guide.md`](../docs/testing/recommendation-postman-testing-guide.md)

@@ -1,0 +1,39 @@
+# OpenSpec project configuration (schema: spec-driven)
+# Standards: OpenSpec + GitHub Spec-kit + OpenSPDD
+
+schema: spec-driven
+
+context: |
+  Platform: Linux server (dev container / workspace)
+  Language: Python ≥ 3.12
+  Package manager: uv (pyproject.toml + uv.lock)
+  Web: FastAPI + Uvicorn (app.main:app, port 8000)
+  Pipelines: deepset Haystack 2.0 under app/pipelines/
+  Agents: LangGraph under app/agents/ (Stage-1 project knowledge)
+  KG: Ragas KnowledgeGraph (mandatory after project-spec indexing)
+  DB: PostgreSQL host `db`, SQLAlchemy sync + psycopg (default)
+  Pricing: predict_price() experimental under ml-experiments/; production path deferred
+  Spec standards:
+    - OpenSpec: openspec/specs/<capability>/spec.md (Requirements + Scenarios)
+    - Spec-kit: .specify/memory/constitution.md; user stories; contracts; tasks
+    - OpenSPDD: design.md as REASONS Canvas; structured prompts first-class;
+      when behaviour wrong → fix prompt/spec first, then code
+  Live HTTP path: POST /api/v1/recommendations/from-project-spec (user_id required)
+    → dual-branch index → DocumentStore + mandatory KG → optional
+    POST .../project-knowledge/query multi-agent Q&A
+  Deferred: FR-010 recommend HTTP results_by_need (service-level only today)
+
+rules:
+  specs: |
+    - Use ### Requirement: and #### Scenario: headers (OpenSpec).
+    - SHALL/MUST for normative requirements.
+    - Every requirement needs ≥1 scenario with **WHEN**/**THEN**.
+    - Keep legacy FR-IDs as (Trace: FR-…) tags.
+    - Status front-matter: as-built | deferred | target.
+  design: |
+    - Structure design.md as OpenSPDD REASONS Canvas (R-E-A-S-O-N-S).
+    - Norms and Safeguards are mandatory for multi-agent and API work.
+    - Link structured prompts (e.g. app/agents/prompts.py).
+  tasks: |
+    - Checkbox tasks with IDs; group by phase or user story (Spec-kit).
+    - Completed work lives under openspec/changes/archive/.
