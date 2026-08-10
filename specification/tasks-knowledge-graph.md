@@ -1,13 +1,7 @@
-# Tasks: Knowledge Graph (HR-76)
+# Tasks: Knowledge Graph (moved)
 
-**Input:** [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) Part A (HR-76 assembly; multi-agent Stage 1 is Part B / [`tasks-kg-multi-agent-stage1.md`](./tasks-kg-multi-agent-stage1.md))
+> **This document has moved.** Canonical location: [../openspec/changes/archive/2026-08-07-knowledge-graph-hr-76/tasks.md](../openspec/changes/archive/2026-08-07-knowledge-graph-hr-76/tasks.md)
 
-- [x] T001 SPEC + tasks
-- [x] T002 Config `KG_*`
-- [x] T003 `user_id` / `user_name` on request/response
-- [x] T004 Stamp meta on chunks
-- [x] T005 `app/pipelines/kg` bridge + generator + saver
-- [x] T006 Full Ragas transforms only inside generator when flagged
-- [x] T007 Hook after indexing (post-join chunks)
-- [x] T008 Tests + Postman user fields
-- [x] T009 Mandatory KG + hard-fail; remove `KG_ENABLED` / `KG_STRICT`
+Standards: **OpenSpec** · **GitHub Spec-kit** · **OpenSPDD**
+
+See also: [specification/README.md](./README.md) · [openspec/AGENTS.md](../openspec/AGENTS.md)

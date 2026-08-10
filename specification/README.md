@@ -1,117 +1,36 @@
-# Specification reading order
+# Specification (legacy path)
 
-This folder is the SDD source of truth for `haystack-fast-api`.  
-**Start here**, then follow a path. Do not treat all SPECs as equally “live.”
+**SDD source of truth has moved to [`../openspec/`](../openspec/).**
 
----
+| Standard | Role |
+|----------|------|
+| **OpenSpec** | `openspec/specs/<capability>/spec.md` |
+| **GitHub Spec-kit** | `.specify/memory/constitution.md`, user stories, contracts, tasks |
+| **OpenSPDD** | REASONS Canvas designs + structured prompts; fix prompt/spec first |
 
-## Runtime flow (as-built)
+**Start here:** [`../openspec/AGENTS.md`](../openspec/AGENTS.md)
 
-```text
-Portal
-  │  user_id (required) + project_text | file
-  ▼
-POST /api/v1/recommendations/from-project-spec
-  │
-  ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 5 · INDEXING  (SPEC-indexing-file-type-router)              │
-│  FileTypeRouter → convert → dual clean/split                │
-│       text_splitter ──┐                                     │
-│       csv_splitter  ──┴→ final_doc_joiner                     │
-│                            │                                │
-│              ┌─────────────┴─────────────┐                  │
-│              ▼                           ▼                  │
-│       doc_embedder → writer      6 · KNOWLEDGE GRAPH        │
-│       InMemoryDocumentStore      (SPEC-knowledge-graph)     │
-│                                  Part A: mandatory KG after │
-│                                  joiner + JSON artifact     │
-│                                  Part B: session registry   │
-│                                  for multi-agent tools      │
-└─────────────────────────────────────────────────────────────┘
-  │
-  ▼
-IngestFromProjectSpecResponse
-  (ingest_id, user_*, data_kind, documents_written, kg_*)
+## Old → new map
 
-  │  optional Stage-1 Q&A
-  ▼
-POST /api/v1/recommendations/project-knowledge/query
-  LangGraph: research → graph → synthesis
-  tools: project_vector_search + project_kg_query
+| Legacy file | New location |
+|-------------|--------------|
+| `README.md` (this map) | [`openspec/AGENTS.md`](../openspec/AGENTS.md) |
+| `00-overview.md` | [`openspec/project.md`](../openspec/project.md) |
+| `01-domain.md` | [`openspec/specs/domain/spec.md`](../openspec/specs/domain/spec.md) |
+| `SPEC-project.md` | [`openspec/project.md`](../openspec/project.md) |
+| `SPEC-project-setup.md` | [`openspec/specs/project-setup/`](../openspec/specs/project-setup/) · constitution [`.specify/memory/constitution.md`](../.specify/memory/constitution.md) |
+| `SPEC-indexing-file-type-router.md` | [`openspec/specs/indexing/`](../openspec/specs/indexing/) |
+| `SPEC-knowledge-graph.md` | [`openspec/specs/knowledge-graph/`](../openspec/specs/knowledge-graph/) · testing [`docs/testing/knowledge-graph-testing-guide.md`](../docs/testing/knowledge-graph-testing-guide.md) |
+| `SPEC-recommendation-intake.md` | [`openspec/specs/recommendation-intake/spec.md`](../openspec/specs/recommendation-intake/spec.md) |
+| `SPEC-recommendation-pipeline.md` | [`openspec/specs/recommendation-pipeline/`](../openspec/specs/recommendation-pipeline/) |
+| `SPEC-dynamic-pricing.md` | [`openspec/specs/dynamic-pricing/`](../openspec/specs/dynamic-pricing/) |
+| `SPEC-agentic-equipment-recommendation-and-pricing.md` | [`openspec/specs/equipment-recommendation/`](../openspec/specs/equipment-recommendation/) |
+| `SPEC-recommendation-intake-and-pipeline-front.md` | [`openspec/changes/archive/2026-08-07-hr-65-intake-front/`](../openspec/changes/archive/2026-08-07-hr-65-intake-front/) |
+| `SPEC-recommendation-pipeline-testing-guide.md` | [`docs/testing/recommendation-pipeline-testing-guide.md`](../docs/testing/recommendation-pipeline-testing-guide.md) |
+| `SPEC-recommendation-postman-testing-guide.md` | [`docs/testing/recommendation-postman-testing-guide.md`](../docs/testing/recommendation-postman-testing-guide.md) |
+| `tasks-indexing-file-type-router.md` | [`openspec/changes/archive/2026-08-07-indexing-file-type-router/tasks.md`](../openspec/changes/archive/2026-08-07-indexing-file-type-router/tasks.md) |
+| `tasks-knowledge-graph.md` | [`openspec/changes/archive/2026-08-07-knowledge-graph-hr-76/tasks.md`](../openspec/changes/archive/2026-08-07-knowledge-graph-hr-76/tasks.md) |
+| `tasks-kg-multi-agent-stage1.md` | [`openspec/changes/archive/2026-08-08-kg-multi-agent-stage1/tasks.md`](../openspec/changes/archive/2026-08-08-kg-multi-agent-stage1/tasks.md) |
+| Traceability | [`openspec/TRACEABILITY.md`](../openspec/TRACEABILITY.md) |
 
-        ─ ─ ─ ─ deferred (not default HTTP) ─ ─ ─ ─
-Recommend FR-010 (service) → pricing  → results_by_need
-KG-2 equipment stockpile (Stage 2)
-```
-
----
-
-## Path A — Onboard (always)
-
-| Step | Document | Role |
-|------|----------|------|
-| **0** | [This file](./README.md) | Map & flow |
-| **1** | [`00-overview.md`](./00-overview.md) | Vision, as-built vs target |
-| **2** | [`01-domain.md`](./01-domain.md) | Ubiquitous language |
-| **3** | [`SPEC-project.md`](./SPEC-project.md) | Repo identity |
-| **4** | [`SPEC-project-setup.md`](./SPEC-project-setup.md) | Stack, uv, Postgres, layering, env |
-
----
-
-## Path B — Live project-spec pipeline ★ primary
-
-| Step | Document | Runtime step |
-|------|----------|--------------|
-| **5** | [`SPEC-indexing-file-type-router.md`](./SPEC-indexing-file-type-router.md) | Live HTTP: index dual-branch → DocumentStore; **`user_id` required** |
-| **6** | [`SPEC-knowledge-graph.md`](./SPEC-knowledge-graph.md) | **Part A:** mandatory user-scoped KG after `final_doc_joiner` (hard-fail). **Part B:** Stage-1 multi-agent Q&A. **§10 Testing:** pytest / curl / Postman |
-| **7** | [`.env.example`](../.env.example) | `INDEXING_*`, `KG_*`, `PROJECT_AGENT_*` |
-| **8** | [`../postman/README.md`](../postman/README.md) | Manual live HTTP (include `user_id`; optional project-knowledge query) |
-
-**Tasks:** [`tasks-indexing-file-type-router.md`](./tasks-indexing-file-type-router.md) · [`tasks-knowledge-graph.md`](./tasks-knowledge-graph.md) · [`tasks-kg-multi-agent-stage1.md`](./tasks-kg-multi-agent-stage1.md)
-
----
-
-## Path C — Deferred recommend (service / reattach)
-
-Read only when working on FR-010 rank/price or reattaching recommend HTTP.
-
-| Step | Document | Status |
-|------|----------|--------|
-| **9** | [`SPEC-recommendation-intake.md`](./SPEC-recommendation-intake.md) | Deferred `results_by_need` envelope; live identity on index SPEC |
-| **10** | [`SPEC-recommendation-pipeline.md`](./SPEC-recommendation-pipeline.md) | FR-010.1–8 **service-level** |
-| **11** | [`SPEC-dynamic-pricing.md`](./SPEC-dynamic-pricing.md) | `predict_price` for recommend |
-| **12** | [`SPEC-recommendation-intake-and-pipeline-front.md`](./SPEC-recommendation-intake-and-pipeline-front.md) | **Historical** HR-65 |
-
----
-
-## Path D — Parent product + verification
-
-| Step | Document | Role |
-|------|----------|------|
-| **13** | [`SPEC-agentic-equipment-recommendation-and-pricing.md`](./SPEC-agentic-equipment-recommendation-and-pricing.md) | Full product SDD; §11 KG vision |
-| **14** | [`SPEC-recommendation-pipeline-testing-guide.md`](./SPEC-recommendation-pipeline-testing-guide.md) | Pytest / curl (live = ingest + `user_id`) |
-| **15** | [`SPEC-recommendation-postman-testing-guide.md`](./SPEC-recommendation-postman-testing-guide.md) | **Deferred** recommend Postman |
-
----
-
-## Conflict rules (short)
-
-| Concern | Wins |
-|---------|------|
-| Live `POST .../from-project-spec` fields & index graph | **Indexing SPEC** |
-| Mandatory KG after joiner / transforms / multi-agent Stage 1 | **Knowledge-graph SPEC** (Parts A–B) |
-| FR-010 components / seed fleet | **Recommendation-pipeline SPEC** (service) |
-| Deferred recommend JSON envelope | **Recommendation-intake SPEC** (labeled deferred) |
-
----
-
-## Suggested first read (new engineer)
-
-1. This README (flow)  
-2. `00-overview` (as-built blurb)  
-3. `SPEC-indexing-file-type-router` (live API)  
-4. `SPEC-knowledge-graph` (mandatory KG + Stage-1 multi-agent)  
-5. `.env.example` + `postman/README`  
-
-Then domain / project-setup / parent as needed.
+Stub files in this directory keep old relative links working.
