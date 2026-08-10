@@ -5,10 +5,10 @@
 | **Document type** | Architecture / infrastructure feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.4.0 |
+| **Version** | 1.6.0 |
 | **Application** | `haystack-fast-api` |
 | **Related specs** | `openspec/specs/project-setup/`, `indexing/`, `knowledge-graph/`, `recommendation-pipeline/`, `dynamic-pricing/`, `equipment-recommendation/` |
-| **Related study** | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) (multi-call wire, REST/SSE/jobs) |
+| **Related studies** | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) · [`mcp-multi-agent-devcontainer-digitalocean.md`](./mcp-multi-agent-devcontainer-digitalocean.md) |
 | **Cloud focus** | DigitalOcean |
 
 ---
@@ -33,7 +33,7 @@ This study covers **two complementary planes**:
 | Multi-Agent first, indexing as tool? | **Yes** — force index tool early; do not put files in LLM context |
 | Indexing → InMemoryDocumentStore + KG-1? | **Yes — as-built today** |
 | **Indexing Pipeline cutover InMemory → PgvectorDocumentStore?** | **Yes — feasible and recommended** for multi-user project files (see §4.5) |
-| MCP retrieve + Faiss/PostgresDocumentStore? | **Conditional GO** — later; if indexing already writes Pgvector, “promote” is thinner |
+| MCP retrieve tools after Pgvector cutover? | **Conditional GO** — later packaging (R4); primary durable write is Indexing → Pgvector |
 | MCP triggers Neo4j from Postgres-Haystack? | **Yes as job trigger** — depends on fleet sync plane readiness |
 | DigitalOcean hosts this? | **Yes** for Postgres (+ pgvector), apps, optional Kafka; **Neo4j DIY or Aura** |
 | Ship everything at once? | **No** — dual-track phases (see §10); agent-index can stay InMemory until phase **I1** |
@@ -204,8 +204,8 @@ Use **eventual consistency** with lag SLOs (`primary_to_haystack_seconds`, `hays
 
 [6] MCP server tools (later phase)
       • retrieve data using configured tools (fleet read models, docs, ops APIs)
-      • optional promote only if a *second* store is needed (e.g. Faiss experiment);
-        **after Indexing→Pgvector cutover, primary durable write is already in the pipeline**
+      • **after Indexing→Pgvector cutover, primary durable write is already in the pipeline**
+        • no secondary vector store (Pgvector is the durable DocumentStore)
       • trigger_neo4j_populate(from=Postgres-Haystack)  — fleet graph job
 
 [7] HTTP response to Spring
@@ -231,8 +231,7 @@ Further Spring calls (not expanded as steps [8]… here):
 | **4d. Indexing cutover → PgvectorDocumentStore + KG-1** | **GO** | Same pipeline; swap store backend; multi-user via meta; see **§4.5** |
 | **5. Session multi-agent Q&A** | **GO** | As-built Stage-1 graph; requires session from [4]; retriever must use same store |
 | **6a. MCP retrieve tools** | **CONDITIONAL GO** | Haystack `mcp-haystack`; Neo4j MCP servers exist; ops + auth |
-| **6b. Create FaissDocumentStore** | **CONDITIONAL GO** | Optional side path; not preferred over Pgvector for multi-user API |
-| **6c. Postgres/Pgvector as primary write** | **GO (preferred)** | **Prefer write-at-index** via §4.5 cutover rather than only post-hoc promote |
+| **6b. Postgres/Pgvector as primary write** | **GO (preferred)** | **Prefer write-at-index** via §4.5 cutover; only DocumentStore path besides InMemory |
 | **6d. MCP trigger Neo4j from Postgres-Haystack** | **GO as job** | Requires Track D sync; prefer async; not full DB binary copy |
 | **7. Single HTTP does all of 4–6d sync** | **RISKY** | Latency/timeouts; split ingest response vs background jobs |
 
@@ -336,15 +335,14 @@ Without filters, tenants can see each other’s chunks — isolation is an **app
 **Embedder constraint:** `INDEXING_EMBEDDING_DIM` (and model) must match the Pgvector column dimension used at table create time.
 
 **Promotion vs write-at-index:**  
-Earlier drafts allowed InMemory first then MCP “promote” to Pgvector. **Preferred target:** Indexing Pipeline **writes Pgvector directly** so durable multi-user storage is not an extra hop. MCP promote remains optional for Faiss experiments or secondary indexes.
+**Preferred target:** Indexing Pipeline **writes Pgvector directly** so durable multi-user storage is not an extra hop. The only DocumentStore backends in scope are **InMemory** (as-built/CI) and **Pgvector** (target).
 
-#### 4.5.5 Comparison: InMemory vs Faiss vs Pgvector (indexing write target)
+#### 4.5.5 Comparison: InMemory vs Pgvector (indexing write target)
 
 | Store | Multi-user shared API | Durable | DO fit | Role after this study |
 |-------|----------------------|---------|--------|------------------------|
 | **InMemoryDocumentStore** | Per process only | No | N/A | **As-built / CI / flag off** |
-| **FaissDocumentStore** | Weak multi-replica | File-based | DIY volume | Optional experiment only |
-| **PgvectorDocumentStore** | **Yes** | **Yes** | Managed PG + pgvector | **Target Indexing Pipeline writer** |
+| **PgvectorDocumentStore** | **Yes** | **Yes** | Managed PG + pgvector | **Target Indexing Pipeline writer (only durable path)** |
 
 ### 4.6 MCP server role
 
@@ -363,7 +361,6 @@ Earlier drafts allowed InMemory first then MCP “promote” to Pgvector. **Pref
 | `run_indexing_from_request` | May stay in-process LangGraph tool (not only MCP); writes DocumentStore per flag (memory/pgvector) |
 | `retrieve_project_chunks` | Read project chunks (filter `user_id` / `ingest_id`) from active DocumentStore |
 | `retrieve_fleet_assets` | Read Postgres-Haystack mirror |
-| `promote_to_faiss` | Optional secondary materialize (not required if indexing already uses Pgvector) |
 | `trigger_neo4j_populate` | Enqueue graph projection from Postgres-Haystack |
 | `neo4j_cypher_read` | Constrained read queries (KG-2) |
 
@@ -444,7 +441,6 @@ Neo4j available to multi-agent fleet tools
 | Kafka (optional CDC) | Good | Managed Kafka |
 | MCP server process | DIY | Droplet/DOKS sidecar next to API |
 | Neo4j | DIY / external | **No Managed Neo4j**; Droplet/DOKS or Aura |
-| Faiss on disk | DIY | Attach volume on Droplet; not ideal multi-replica |
 
 **Replication caveat:** Validate logical replication / slots on chosen Managed PG plan; Spring **outbox** is the reliable fallback.
 
@@ -475,7 +471,6 @@ DigitalOcean VPC
 | Agent free-form skips index | High | Forced graph edge to indexing tool |
 | MCP as SoT / over-permissioned writes | High | Allowlist tools; read-mostly; audited writes |
 | One request = index + Neo4j rebuild | High | Async jobs; timeouts |
-| Faiss multi-instance split brain | Medium | Prefer **Pgvector in Indexing Pipeline (I1)** for shared prod |
 | DO replication privileges | Medium | Spike; outbox fallback |
 | InMemory loss on restart | Medium | **I1:** Indexing writes **PgvectorDocumentStore** |
 | Missing `user_id` filter on Pgvector retrieve | **High** | Enforce tenant filters in all tools/retrievers |
@@ -500,7 +495,7 @@ DigitalOcean VPC
 | Indexing → InMemory + KG-1 | **Feasible (as-built)** |
 | **Indexing Pipeline cutover → PgvectorDocumentStore + KG-1** | **Feasible (recommended target)** — §4.5 |
 | Multi-user temporary project files on Pgvector | **Feasible** (meta `user_id`/`ingest_id` + TTL delete) |
-| MCP retrieve + optional Faiss | **Conditional GO** (later; not required after I1) |
+| MCP retrieve packaging | **Conditional GO** (later R4; tools hit InMemory or Pgvector only) |
 | MCP trigger Neo4j populate | **Feasible** (job; needs Track D) |
 | Entire stack on DigitalOcean | **Feasible** (Neo4j self-managed; pgvector on Managed PG) |
 | All-at-once day one | **Not recommended** |
@@ -562,7 +557,6 @@ Those belong on **Track R / Track I**, which can start **without** waiting for D
 | **R0** | Contract parity | Spring→FastAPI ingest contract stable |
 | **R1** | Agent invokes indexing tool | Multi-Agent forced tool; store = whatever flag says (memory first OK) |
 | **R2** | Session Q&A | research→graph→synthesis over session DocumentStore + KG-1 |
-| **R3** | (Optional) secondary promote | Only if Faiss/other side index needed — **not** required after I1 |
 | **R4** | MCP tool layer | MCP exposes retrieve, `trigger_neo4j_populate`, etc. |
 | **R5** | Cross-plane agent | Project tools + fleet/Neo4j MCP tools under Safeguards |
 
@@ -610,11 +604,10 @@ Key paths:
 | Path | Role |
 |------|------|
 | `.devcontainer/docker-compose.yml` | Services: app, `db` (postgres-haystack), `db-sync`, `neo4j` |
-| `.devcontainer/devcontainer.json` | Ports 5434 / 7474 / 7687; PG connection profiles; postCreate (uv, neo4j-haystack, faiss-haystack) |
+| `.devcontainer/devcontainer.json` | Ports 5434 / 7474 / 7687; PG connection profiles; postCreate (uv, neo4j-haystack) |
 | `.devcontainer/scripts/sync-from-primary.sh` | FDW + merge-upsert from `postgres-primary` → `db` |
 | `specs/001-haystack-postgres-merge-sync/` | Merge-sync contract |
 | `specs/002-haystack-neo4j/` | Neo4j DocumentStore path |
-| `specs/003-haystack-faiss/` | FAISS in-process path |
 
 ### 11.1 Current topology (as of `develop`)
 
@@ -765,7 +758,7 @@ restart: unless-stopped
 | `restart: "no"` stops continuous cycles | T1 → `unless-stopped` |
 | Primary not on network | Document dependency on Spring compose |
 | App writes OLTP to primary | Keep FastAPI on **`db` only** for domain R/W sandbox |
-| FAISS vs Pgvector confusion | FAISS remains optional local; fleet path is PG+Neo4j |
+| Extra local ANN packages in config repo | Not part of target architecture; durable vectors = Pgvector only |
 
 ### 11.10 Mapping T-phases → study Track D / first-ship
 
@@ -786,6 +779,47 @@ restart: unless-stopped
 | Compose services, sync interval, neo4j-populate container | **heavy-rental-devcontainer-configuration** |
 | Haystack pipelines, PgvectorDocumentStore wiring, agent tools | **haystack-fast-api** application |
 | Spring outbox / primary WAL | **Spring / REST API** stack + primary PG settings |
+| Optional MCP Compose service / profile | **Config repo** (+ app client flag); see §11.12 |
+
+### 11.12 MCP server in devcontainer (optional, after T4)
+
+**MCP is not on the T0–T5 critical path** for primary→haystack sync or Neo4j populate. Multi-agent Stage 1 can keep **in-process** tools (`app/agents/tools.py`).
+
+| When | What |
+|------|------|
+| After **T0–T1** (and ideally **T3–T4**) | Optional Compose service **`mcp-haystack`** (HTTP/streamable MCP) on `heavy-rental-network` |
+| Compose | Prefer **`profiles: ["mcp"]`** so default `up` stays light |
+| Env | `PGHOST=db`, `NEO4J_URI=bolt://neo4j:7687`; app `MCP_SERVER_URL=http://mcp-haystack:8100/...` |
+| Tools | Retrieve project/fleet (tenant-scoped); `trigger_neo4j_populate` only after T3 exists |
+| Order | **T0 → T1 → T3 → T4**, then MCP phases **M1–M4** |
+
+**Illustrative service (not applied — study only):**
+
+```yaml
+  # docker compose --profile mcp up -d
+  mcp-haystack:
+    # build/image: FastMCP + allowlisted tools
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      NEO4J_URI: bolt://neo4j:7687
+      MCP_PORT: "8100"
+    ports:
+      - "8100:8100"   # local dev only
+    depends_on:
+      db:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    networks:
+      - heavy-rental-network
+    profiles: ["mcp"]
+```
+
+**Full feasibility (options, security, DigitalOcean sidecar, M0–M5):**  
+[`mcp-multi-agent-devcontainer-digitalocean.md`](./mcp-multi-agent-devcontainer-digitalocean.md)
+
+**Do not** expose MCP publicly on DigitalOcean without auth; Spring portal traffic remains **FastAPI REST**, not MCP.
 
 ---
 
@@ -805,7 +839,8 @@ restart: unless-stopped
 2. Set `SYNC_INTERVAL_SECONDS=60`; change a row on primary; measure time-to-visible on `db`.  
 3. Prototype `populate-neo4j-from-haystack.sh` for one table (e.g. Asset) → Neo4j Browser.  
 4. Confirm DocumentStore nodes (if any) are not deleted by fleet reload.  
-5. Optional: `pgvector/pgvector:pg17` image swap + `CREATE EXTENSION vector`.
+5. Optional: `pgvector/pgvector:pg17` image swap + `CREATE EXTENSION vector`.  
+6. Optional (§11.12 / MCP study): FastMCP “ping” on profile `mcp`; invoke from app container.
 
 ### Request / agent (Track R)
 
@@ -837,7 +872,7 @@ restart: unless-stopped
 ### Request / agent / MCP
 
 6. Must **every** Spring call go through Multi-Agent, or feature-flag subset?  
-7. Default durable store: **Pgvector in Indexing Pipeline (I1)** — confirm; Faiss only experimental?  
+7. Default durable store: **Pgvector in Indexing Pipeline (I1)** only?  
 8. Project chunk **TTL** (e.g. 24h / 7d / until user deletes session)?  
 9. Should Neo4j populate run **on each project upload**, on **schedule**, or **admin-only**?  
 10. Who owns the MCP server process (same deploy as FastAPI vs sidecar)?  
@@ -862,7 +897,7 @@ restart: unless-stopped
 - [Haystack-Fast-API on `develop`](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API)  
 - `.devcontainer/docker-compose.yml` — `db` (postgres-haystack), `db-sync`, `neo4j`  
 - `.devcontainer/scripts/sync-from-primary.sh` — FDW merge (default 24h)  
-- `specs/001-haystack-postgres-merge-sync`, `002-haystack-neo4j`, `003-haystack-faiss`  
+- `specs/001-haystack-postgres-merge-sync`, `002-haystack-neo4j`  
 
 ### DigitalOcean
 
@@ -884,10 +919,12 @@ restart: unless-stopped
 | Version | Date | Notes |
 |---------|------|--------|
 | **1.0.0** | 2026-08-10 | Fleet sync + Neo4j + DigitalOcean |
-| **1.1.0** | 2026-08-10 | Spring→Agent→Indexing→MCP→Faiss/Postgres→Neo4j workflow; dual-track phases; original phase list reviewed |
+| **1.1.0** | 2026-08-10 | Spring→Agent→Indexing→MCP→stores/Neo4j workflow; dual-track phases; original phase list reviewed |
 | **1.2.0** | 2026-08-10 | **Indexing Pipeline DocumentStore cutover** InMemory → **PgvectorDocumentStore** (§4.5); Track I; multi-user TTL project files |
 | **1.3.0** | 2026-08-10 | **§2.1 Spring multi-call journey** (ingest → Q&A → recommend) from resilience study; map to Plane A/B; §4.1 cross-link |
 | **1.4.0** | 2026-08-10 | **§11 Devcontainer transition plan** for Heavy-Rental Haystack-Fast-API (primary→haystack sync + Neo4j populate) |
+| **1.5.0** | 2026-08-10 | **§11.12 MCP** optional compose profile after T4; link MCP multi-agent feasibility study |
+| **1.6.0** | 2026-08-10 | Target DocumentStore path = **InMemory → Pgvector only** (no secondary ANN store in product plan) |
 
 ---
 
@@ -900,12 +937,13 @@ restart: unless-stopped
 | Indexing outputs (as-built) | **InMemory + KG-1** |
 | **Indexing DocumentStore cutover** | **Yes — I1: pipeline writes PgvectorDocumentStore** |
 | Multi-user project files | **Pgvector + user_id/ingest_id filters + TTL** |
-| Durable store default | **Pgvector in Indexing Pipeline** (not Faiss for prod) |
-| MCP | **Later (R4)**; tool transport only |
-| Neo4j populate via MCP | **Job trigger** after D3; not per-request full rebuild by default |
+| Durable store default | **Pgvector in Indexing Pipeline only** (InMemory for CI) |
+| MCP | **Later (R4 / M\*)**; tool transport only; see MCP study + §11.12 |
+| MCP in compose | Optional service + **profile `mcp`** after T4; not T0–T5 critical path |
+| Neo4j populate via MCP | **Job trigger** after D3/T3; not per-request full rebuild by default |
 | DigitalOcean | **Suitable**; Neo4j self-managed or Aura; pgvector on Managed PG |
 | **Devcontainer today** | **D1 done** (`db-sync` 24h FDW merge); Neo4j up but **no fleet populate from `db`** |
 | **Devcontainer next** | **T1** shorten sync interval + restart policy; **T3–T4** neo4j-populate from Haystack PG |
 | Original phase spine | **Keep** as Track D; parallel **Track I** + Track R + **Track T** (§11) |
 | First ship | **R1 + D0–D1**, then **I1**; local: **T0→T1→T3→T4**; not Kafka+MCP all at once |
-| Avoid | Dual-write; Neo4j as SoT; SQL-only fleet “vector sync”; free agent MIME routing; blocking ingest on Neo4j; unfiltered multi-tenant retrieve; wiping DocumentStore graph on fleet reload |
+| Avoid | Dual-write; Neo4j as SoT; SQL-only fleet “vector sync”; free agent MIME routing; blocking ingest on Neo4j; unfiltered multi-tenant retrieve; wiping DocumentStore graph on fleet reload; secondary ANN stores outside Pgvector |
