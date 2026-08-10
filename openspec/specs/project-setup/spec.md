@@ -7,7 +7,7 @@
 
 ## Purpose
 
-Capture normative environment and setup contracts so feature work reuses PostgreSQL on host `db`, uv packaging, layering, shared errors, and env-backed configuration—without each capability restating the full stack.
+Capture normative environment and setup contracts so feature work reuses PostgreSQL on host `postgres_haystack` (DB `heavy_rental`), uv packaging, layering, shared errors, and env-backed configuration—without each capability restating the full stack.
 
 ## User Scenarios & Testing
 
@@ -19,7 +19,7 @@ An engineer clones the app module, syncs with uv, runs the API, and sees health 
 
 **Acceptance Scenarios:**
 
-1. **Given** Postgres on `db` is up, **When** `GET /health`, **Then** `{"status":"ok","database":"up"}`.
+1. **Given** Postgres on `postgres_haystack` is up, **When** `GET /health`, **Then** `{"status":"ok","database":"up"}`.
 2. **Given** Postgres is unreachable, **When** `GET /health`, **Then** HTTP 200 with `status=degraded` and `database=down`.
 
 ## Requirements
@@ -39,13 +39,20 @@ The service SHALL run on Python **≥ 3.12**, expose **FastAPI** as the ASGI app
 - **WHEN** the API is started for development
 - **THEN** `uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload` is a valid invocation
 
-### Requirement: PostgreSQL on host db
-The API SHALL use the project’s existing **PostgreSQL** on hostname **`db`**. Default credentials/db name are `postgres` unless overridden via `POSTGRES_*` or `DATABASE_URL`.  
-Sync SQLAlchemy + **psycopg** is the running default; **asyncpg** MAY be installed but SHALL NOT be primary without an explicit SDD.
+### Requirement: PostgreSQL on host postgres_haystack
+The API SHALL use the project’s existing **PostgreSQL** on hostname **`postgres_haystack`**. Default database name is **`heavy_rental`**; default credentials are user/password `postgres` unless overridden via `POSTGRES_*` or `DATABASE_URL`.  
+Sync SQLAlchemy + **psycopg** (v3) is the running default; the default constructed URL SHALL use scheme **`postgresql+psycopg://`**. **asyncpg** MAY be installed but SHALL NOT be primary without an explicit SDD.
+
+When `DATABASE_URL` is set with a bare scheme (`postgresql://` or `postgres://`), settings SHALL normalize it to **`postgresql+psycopg://`** before engine creation. Explicit SQLAlchemy dialects (`+psycopg`, `+asyncpg`, `+psycopg2`, and other `+driver` forms) SHALL be left unchanged. Bare `postgresql://` maps to SQLAlchemy’s legacy **psycopg2** dialect; this project depends on **psycopg** v3 only and SHALL NOT require `psycopg2` as a workaround for bare URLs.
 
 #### Scenario: Connectivity host
 - **WHEN** the app builds its default database URL
-- **THEN** the host is `db` (or `DATABASE_URL` override) and the scheme matches engine type (`+psycopg` sync)
+- **THEN** the host is `postgres_haystack`, the database is `heavy_rental` (or `DATABASE_URL` override), and the scheme matches engine type (`+psycopg` sync)
+
+#### Scenario: Bare DATABASE_URL uses psycopg v3
+- **WHEN** `DATABASE_URL` is `postgresql://user:pass@host:5432/db` (or `postgres://…`)
+- **THEN** the effective SQLAlchemy URL is `postgresql+psycopg://user:pass@host:5432/db`
+- **AND** explicit schemes such as `postgresql+asyncpg://…` are not rewritten
 
 #### Scenario: Forbidden alternate primary DBs
 - **WHEN** default runtime or default tests are configured
@@ -105,6 +112,7 @@ The normative stack SHALL include: FastAPI, Uvicorn, haystack-ai, langgraph, SQL
 
 - Do not introduce Poetry/Pipenv as primary package manager without constitution + this spec update.
 - Do not switch default runtime driver from psycopg to asyncpg silently.
+- Do not treat installing `psycopg2` as the fix for bare `postgresql://` URLs; normalize to `+psycopg` instead.
 - Do not add GraphQL (or a second public API style) without an environment decision.
 - Do not commit production secrets.
 
@@ -114,3 +122,4 @@ The normative stack SHALL include: FastAPI, Uvicorn, haystack-ai, langgraph, SQL
 |---------|------|--------|
 | 1.0.0–1.9.0 | 2026-08-03…04 | Historical versions from SPEC-project-setup (stack, health, uv, SHAP, sklearn) |
 | 2.0.0 | 2026-08-10 | Migrated to OpenSpec Requirement/Scenario + OpenSPDD Norms/Safeguards; runbooks → design.md |
+| 2.0.1 | 2026-08-10 | Document bare `DATABASE_URL` → `postgresql+psycopg` normalization (psycopg v3) |

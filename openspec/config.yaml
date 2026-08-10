@@ -11,7 +11,7 @@ context: |
   Pipelines: deepset Haystack 2.0 under app/pipelines/
   Agents: LangGraph under app/agents/ (Stage-1 project knowledge)
   KG: Ragas KnowledgeGraph (mandatory after project-spec indexing)
-  DB: PostgreSQL host `db`, SQLAlchemy sync + psycopg (default)
+  DB: PostgreSQL host `postgres_haystack`, db `heavy_rental`, SQLAlchemy sync + psycopg (default)
   Pricing: predict_price() experimental under ml-experiments/; production path deferred
   Spec standards:
     - OpenSpec: openspec/specs/<capability>/spec.md (Requirements + Scenarios)

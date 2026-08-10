@@ -2,7 +2,7 @@
 
 ## R — Requirements
 
-See [`spec.md`](./spec.md) Purpose and Requirements. Outcomes: feature SDDs do not restate full stack; Postgres on `db`; uv-centric install; thin routers; sync DB default until explicit async SDD.
+See [`spec.md`](./spec.md) Purpose and Requirements. Outcomes: feature SDDs do not restate full stack; Postgres on `postgres_haystack` (DB `heavy_rental`); uv-centric install; thin routers; sync DB default until explicit async SDD.
 
 ## E — Entities
 
@@ -14,7 +14,7 @@ See [`spec.md`](./spec.md) Purpose and Requirements. Outcomes: feature SDDs do n
 
 ## A — Approach
 
-Co-locate SDD under `openspec/` next to the uv app. External shared Postgres (host `db`) avoids Compose. Dual drivers installed (psycopg primary, asyncpg ready) without forcing async migration.
+Co-locate SDD under `openspec/` next to the uv app. External shared Postgres (host `postgres_haystack`, DB `heavy_rental`) avoids Compose. Dual drivers installed (psycopg primary, asyncpg ready) without forcing async migration.
 
 ## S — Structure
 
@@ -94,8 +94,18 @@ curl -s http://localhost:8000/health
 
 | Mode | Default construction | Used today? |
 |------|----------------------|-------------|
-| Sync | `postgresql+psycopg://…@db:5432/postgres` | **Yes** |
+| Sync | `postgresql+psycopg://…@postgres_haystack:5432/heavy_rental` | **Yes** |
 | Async | `postgresql+asyncpg://…` | No (future SDD) |
+
+`Settings.database_url` (and `_normalize_database_url` in `app/config.py`) owns the effective URL passed to `create_engine`. Bare container-style overrides are rewritten so SQLAlchemy loads **psycopg** v3, not the default **psycopg2** dialect:
+
+| Input scheme | Effective scheme |
+|--------------|------------------|
+| `postgresql+psycopg://…` | Unchanged (default path) |
+| `postgresql://…` / `postgres://…` | Rewritten to `postgresql+psycopg://…` |
+| `postgresql+asyncpg://…` (and other explicit `+driver`) | Unchanged (async still not primary) |
+
+Do not document installing `psycopg2` as the fix for bare URLs.
 
 ## N — Norms
 
@@ -110,12 +120,13 @@ Forbidden without dedicated SDD + constitution update:
 - Compose Postgres as primary; SQLite default tests; non-uv primary package managers
 - Cookie-session primary auth; second API style (GraphQL); secrets in VCS
 - Silent async driver switch; mandatory Alembic without feature SDD
+- Requiring `psycopg2` for bare `postgresql://` `DATABASE_URL` values (normalize to `+psycopg` instead)
 
 ## Key decisions
 
 | Decision | Rationale |
 |----------|-----------|
-| External Postgres on `db` | Shared network already provides DB |
+| External Postgres on `postgres_haystack` / `heavy_rental` | Shared network already provides DB |
 | uv | Fast lockfile workflow |
 | FastAPI + Uvicorn | Framework + ASGI server |
 | Specs under app module | Co-located agent context |

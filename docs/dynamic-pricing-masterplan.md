@@ -90,7 +90,7 @@ Only the fields that matter for pricing — not the full schema. Field names as 
 - **Where the prediction lands**: `RecommendationItem.mlPredictedPrice`. The pricing call is **internal-only** — never a public/renter-facing route. The agentic pipeline calls it, then persists the result to that field.
 - **Prediction call shape: in-process Python function call, not an HTTP endpoint.** Decided once ownership of both the pricing service and the agentic pipeline's calling code landed with the same person, closing the earlier "TBD" — no cross-team contract to negotiate, so no need for the overhead of a real HTTP route (auth, serialization, separate test client). Lives in `app.services.pricing` and is called directly from `app.pipelines` (or wherever the agentic pipeline's recommendation step lives). Revisit only if the pipeline ever needs to run as a decoupled/separate service — not a goal for this build.
 - **Guardrails**: `Asset.minDailyRate` / `Asset.maxDailyRate`, admin-editable per asset via the admin portal's asset tag. The service reads the specific asset's row and clamps the model's raw output to that range at prediction time. No separate env var or config table needed.
-- **DB access**: sync SQLAlchemy + `psycopg` only, per the setup constitution. No async wiring for this feature.
+- **DB access**: sync SQLAlchemy + `psycopg` only, per the setup constitution. No async wiring for this feature. Bare `DATABASE_URL` schemes are normalized per project-setup (`postgresql+psycopg`).
 - **Migrations**: no Alembic. Pricing reuses existing `Asset`/`Booking`/`BookingItem`/`AIRecommendation` schema — doesn't create new tables, so no migration story needed on the FastAPI side at all.
 
 ### Phase 1c — prototype `predict_price()` (ml-experiments)
