@@ -20,9 +20,9 @@ class Settings(BaseSettings):
     app_env: str = Field(default="local", alias="APP_ENV")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
-    postgres_hostname: str = Field(default="db", alias="POSTGRES_HOSTNAME")
+    postgres_hostname: str = Field(default="postgres_haystack", alias="POSTGRES_HOSTNAME")
     postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
-    postgres_db: str = Field(default="postgres", alias="POSTGRES_DB")
+    postgres_db: str = Field(default="heavy_rental", alias="POSTGRES_DB")
     postgres_user: str = Field(default="postgres", alias="POSTGRES_USER")
     postgres_password: str = Field(default="postgres", alias="POSTGRES_PASSWORD")
 
@@ -70,11 +70,27 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         if self.database_url_override:
-            return self.database_url_override
+            return self._normalize_database_url(self.database_url_override)
         return (
             f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_hostname}:{self.postgres_port}/{self.postgres_db}"
         )
+
+    @staticmethod
+    def _normalize_database_url(url: str) -> str:
+        """Ensure bare postgresql:// URLs use the installed psycopg (v3) driver.
+
+        SQLAlchemy maps scheme ``postgresql://`` to the legacy ``psycopg2``
+        dialect. This project depends on ``psycopg`` v3, so a bare URL from
+        env (common in containers) would fail at engine creation with
+        ``ModuleNotFoundError: No module named 'psycopg2'``. Explicit dialects
+        (``+psycopg``, ``+asyncpg``, ``+psycopg2``, …) are left unchanged.
+        """
+        if url.startswith("postgresql://"):
+            return "postgresql+psycopg://" + url.removeprefix("postgresql://")
+        if url.startswith("postgres://"):
+            return "postgresql+psycopg://" + url.removeprefix("postgres://")
+        return url
 
 
 @lru_cache
