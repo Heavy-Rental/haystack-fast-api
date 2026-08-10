@@ -24,7 +24,7 @@ Related documents:
 This specification captures the **as-built project environment and setup** so later SDD work:
 
 1. Knows where the code lives and how packages are organized.
-2. Uses the **existing PostgreSQL** service (host `db`) and does not reintroduce Compose or embedded databases as the primary path.
+2. Uses the **existing PostgreSQL** service (host `postgres-haystack` — not `db`, ambiguous on this network, §5.2) and does not reintroduce Compose or embedded databases as the primary path.
 3. Reuses established **layering, configuration, and error-handling** patterns.
 4. Respects **configuration via environment variables**.
 5. Knows how to **install dependencies with uv**, **test**, and **run** the API.
@@ -88,7 +88,7 @@ haystack-fast-api/                         # workspace root
         └── test_health.py
 ```
 
-**There is no `compose.yaml` as the primary database provisioner.** The database is an external shared PostgreSQL instance (host `db`).
+**There is no `compose.yaml` as the primary database provisioner.** The database is an external shared PostgreSQL instance (host `postgres-haystack` — not `db`, ambiguous on this network, §5.2).
 
 ---
 
@@ -111,7 +111,7 @@ haystack-fast-api/                         # workspace root
 | Test data (dev) | **Faker** |
 | Persistence | **SQLAlchemy 2.x** (sync runtime + **asyncio** API available) |
 | Database drivers | **psycopg** (sync, **app default**) + **asyncpg** (async, installed) |
-| Database | **PostgreSQL** (host `db`) |
+| Database | **PostgreSQL** (host `postgres-haystack` — not `db`, ambiguous on this network, §5.2) |
 | HTTP testing | **httpx** + pytest / FastAPI `TestClient` |
 | Lint / format | **ruff** (dev dependency) |
 
@@ -170,7 +170,7 @@ haystack-fast-api/                         # workspace root
 
 ### 5.2 PostgreSQL (existing shared service)
 
-The API **must** use the project’s existing PostgreSQL. Connectivity is expected on hostname **`db`**.
+The API **must** use the project's existing PostgreSQL. Connectivity is expected on hostname **`postgres-haystack`** — **not** `db`: `db` is ambiguous on this Docker network and can resolve to either `postgres-haystack` or the Spring Boot primary, depending on the connection (confirmed via DNS, 2026-08-10). Use `postgres-haystack` explicitly, or set `POSTGRES_HOSTNAME`/`DATABASE_URL` accordingly.
 
 **Verified shared defaults** (also documented in `.env.example`):
 
@@ -183,6 +183,8 @@ The API **must** use the project’s existing PostgreSQL. Connectivity is expect
 | Password | `POSTGRES_PASSWORD` | `postgres` |
 | Full URL (optional override) | `DATABASE_URL` | See URL schemes below |
 
+> **Known-stale default (flagged 2026-08-10, not yet fixed):** the `POSTGRES_HOSTNAME` default above is still `db` in `.env.example` and `app/config.py` — this table documents the *current* default, not a recommendation. Until that default is corrected (a behavior change, tracked separately from this doc fix), set `POSTGRES_HOSTNAME=postgres-haystack` (or a full `DATABASE_URL`) explicitly rather than relying on it.
+
 #### SQLAlchemy URL schemes
 
 | Mode | Engine API | Default URL construction | Used by app today? |
@@ -194,13 +196,13 @@ Notes:
 
 - SQLAlchemy **async** is not a separate package; use `sqlalchemy.ext.asyncio` with the **asyncpg** driver.
 - `DATABASE_URL` may override either form; the scheme must match the engine type (`+psycopg` for sync, `+asyncpg` for async).
-- Connectivity check: resolve host `db`, TCP `db:5432`, or `SELECT 1` via either driver.
+- Connectivity check: resolve host `postgres-haystack` (not `db` — ambiguous, see above), TCP `postgres-haystack:5432`, or `SELECT 1` via either driver.
 
 #### Environment constraints (binding for future SDD)
 
 1. **Do not** add SQLite or other embedded databases for the default app or default tests in this environment.
 2. **Do not** reintroduce Docker Compose as the primary way to provision Postgres for this workspace.
-3. **Do not** hardcode a different host without updating this spec; prefer `POSTGRES_HOSTNAME` / default `db`, or a single `DATABASE_URL` override.
+3. **Do not** hardcode a different host without updating this spec; prefer `POSTGRES_HOSTNAME=postgres-haystack` (the default, `db`, is ambiguous on this network — see §5.2 above), or a single `DATABASE_URL` override.
 4. Schema management starts simple (create tables via SQLAlchemy metadata or equivalent for early iteration). Introducing **Alembic** (or another migration tool) requires an explicit feature SDD and an update to this document.
 5. Switching the app’s primary session path to **async** requires an explicit feature/setup SDD update and code changes in `app/core/db.py` (and callers).
 
@@ -314,7 +316,7 @@ cd haystack-fast-api
 
 1. Python **3.12** available (uv can install via `.python-version`).
 2. **uv** installed and on `PATH`.
-3. PostgreSQL reachable on host **`db`** (TCP `db:5432`), with defaults user/password/db `postgres` unless overridden.
+3. PostgreSQL reachable on host **`postgres-haystack`** (TCP `postgres-haystack:5432`), with defaults user/password/db `postgres` unless overridden — **not** `db`, which is ambiguous on this network (§5.2).
 4. Env vars optional if defaults match the shared instance (`POSTGRES_*` / `DATABASE_URL`).
 
 ### 8.2 Install dependencies (uv)
@@ -405,7 +407,7 @@ With the server running (`uv run uvicorn …` in another terminal):
 ```bash
 # Health
 curl -s http://localhost:8000/health
-# Expected when Postgres on db is up:
+# Expected when Postgres on postgres-haystack is up:
 # {"status":"ok","database":"up"}
 
 # OpenAPI (optional)
@@ -413,14 +415,14 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/docs
 
 # Optional: verify Postgres with SQLAlchemy (sync)
 # uv run python -c "from sqlalchemy import create_engine, text; \
-#   e=create_engine('postgresql+psycopg://postgres:postgres@db:5432/postgres'); \
+#   e=create_engine('postgresql+psycopg://postgres:postgres@postgres-haystack:5432/postgres'); \
 #   print(e.connect().execute(text('SELECT 1')).scalar())"
 
 # Optional: verify asyncpg path
 # uv run python -c "import asyncio; from sqlalchemy.ext.asyncio import create_async_engine; \
 #   from sqlalchemy import text; \
 #   async def m():
-#     e=create_async_engine('postgresql+asyncpg://postgres:postgres@db:5432/postgres');
+#     e=create_async_engine('postgresql+asyncpg://postgres:postgres@postgres-haystack:5432/postgres');
 #     async with e.connect() as c: print((await c.execute(text('SELECT 1'))).scalar());
 #     await e.dispose();
 #   asyncio.run(m())"
@@ -495,7 +497,7 @@ Unless a dedicated SDD says otherwise:
 
 | Decision | Rationale |
 |----------|-----------|
-| External Postgres on host `db` | Shared project network already provides DB; avoid Compose conflict |
+| External Postgres on host `postgres-haystack` (not `db` — ambiguous on this network, §5.2) | Shared project network already provides DB; avoid Compose conflict |
 | Defaults user/password/db `postgres` | Match shared service; override via env in non-dev environments |
 | uv as package manager | Fast, lockfile-based, modern Python workflow |
 | FastAPI + Uvicorn | FastAPI is the framework; Uvicorn is the ASGI server needed to bind host/port and serve the app |
@@ -532,5 +534,6 @@ Unless a dedicated SDD says otherwise:
 | 1.7.0 | 2026-08-03 | Expand §8 runbook: uv + Uvicorn host FastAPI endpoints; command breakdown, URLs, dev vs production-style |
 | 1.8.0 | 2026-08-03 | Add runtime `shap` (+ `numba>=0.61`, `llvmlite>=0.44` for Py3.12/NumPy 2.x); matplotlib/seaborn already direct |
 | 1.9.0 | 2026-08-04 | Add runtime `scikit-learn` — train/test split + regression metrics for the dynamic-pricing model's Phase 1b offline training scripts (`ml-experiments/train.py`, `category_metrics.py`) |
+| 1.10.0 | 2026-08-10 | Corrected Postgres connectivity guidance throughout (§1, §3, §4, §5.2, §8, §11): hostname `db` is ambiguous on this Docker network (confirmed via DNS — resolves to either `postgres-haystack` or the Spring Boot primary) and must not be used; normative guidance and example commands now say `postgres-haystack`. **`POSTGRES_HOSTNAME`'s actual default is unchanged** — `.env.example`/`app/config.py` still default to `db`; flagged inline in §5.2 as a known-stale default requiring a separate decision, not fixed in this pass. No stack/dependency change. |
 
 When changing stack, database strategy, package manager, default security model, layout, or SDD file locations, bump this table and notify dependent feature specs.
