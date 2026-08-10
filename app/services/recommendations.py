@@ -12,6 +12,7 @@ from datetime import date
 from typing import Any
 
 from haystack import Pipeline
+from sqlalchemy.orm import Session
 
 from app.core.exceptions import BadRequestError
 from app.pipelines.asset_candidate_filter import AssetCandidateFilter
@@ -52,7 +53,9 @@ class RecommendationService:
         ranker: RankRationaleGenerator | None = None,
         default_duration_days: float = 7.0,
         default_distance_km: float = 15.0,
+        db: Session | None = None,
     ) -> None:
+        self._db = db
         self._decomposer: NeedDecomposer = decomposer or create_need_decomposer()
         self._pipeline = pipeline or build_intake_front_pipeline(
             decomposer=self._decomposer
@@ -153,6 +156,9 @@ class RecommendationService:
                 candidates=available,
                 duration_days=duration_days,
                 include_pricing=include_pricing,
+                start_date=start_date,
+                end_date=end_date,
+                db=self._db,
             ).get("priced_candidates")
             or []
         )
