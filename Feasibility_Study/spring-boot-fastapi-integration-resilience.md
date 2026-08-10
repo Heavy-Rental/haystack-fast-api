@@ -6,7 +6,7 @@
 | **Document type** | Architecture / integration feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.0.0 |
+| **Version** | 1.1.0 |
 | **Application** | `haystack-fast-api` (equipment recommendation / project-spec AI feature) |
 | **Caller** | Spring Boot REST API (portal / domain system of record) |
 | **Related** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) (data planes, agent→indexing, Pgvector) |
@@ -65,13 +65,18 @@ haystack-fast-api             (Haystack pipelines, agents, stores)
 |------|-----------------|----------------------------------|
 | **Ingest** `POST /from-project-spec` | Multipart file or JSON text + `user_id` | Seconds–tens of seconds (index + KG + optional agent orchestration) |
 | **Q&A** `POST /project-knowledge/query` | JSON `user_id`, `ingest_id`, `query` | Seconds if LLM; fast if stub |
-| **Recommend** (service / future HTTP) | Needs / dates / options | Seconds; multi unit-need loop |
+| **Recommend** (service / future HTTP) | Needs / dates / options | Seconds–tens; multi unit-need loop via **Multi-Agent Orchestrator** after ingest **[4]** |
 | **Health** `GET /health` | — | Milliseconds |
 
 **Implication:** One protocol choice will not optimize all four. Design **per interaction type**.
 
-Related internal flow (after request arrives): Multi-Agent may invoke indexing as a tool, write DocumentStore + KG-1, etc. — see the dual-plane feasibility study. This document focuses on the **Spring ↔ FastAPI wire**.
+Related internal flow (after request arrives) — target (dual-plane study §4.1):
 
+1. Multi-Agent **indexing tool [4]** (project → Pgvector + KG-1).  
+2. **After [4]**, Multi-Agent Orchestrator agents invoke **FastMCP tools only** (target): project context, **Postgres-Haystack** fleet, **Neo4j** graph, **ML pricing** (`predict_asset_price`).  
+3. Orchestrator **synthesizes recommendation** (not a single MCP mega-tool).  
+
+Spring still uses **REST** to FastAPI; it does **not** speak MCP. Wire resilience (this doc) stays focused on the **Spring ↔ FastAPI** connection.
 ---
 
 ## 3. Clarifying streaming and SSE
@@ -444,6 +449,7 @@ Optional: large files via **Spaces** + URL.
 | Version | Date | Notes |
 |---------|------|--------|
 | **1.0.0** | 2026-08-10 | Initial study: Spring↔FastAPI resilience; SSE vs upload; multi-call recommender; C1–C3 |
+| **1.1.0** | 2026-08-10 | Call 3 recommend maps to Multi-Agent after [4] + FastMCP tools (pricing, Neo4j, Postgres-Haystack) |
 
 ---
 

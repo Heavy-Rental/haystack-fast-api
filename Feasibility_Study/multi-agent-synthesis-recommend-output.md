@@ -1,0 +1,192 @@
+# Feasibility Study: Multi-Agent Synthesis Output — Recommended Assets + Predicted Rent Price
+
+| Field | Value |
+|-------|--------|
+| **Document type** | Architecture / agent orchestration feasibility study |
+| **Status** | Complete (study only — no implementation) |
+| **Date** | 2026-08-10 |
+| **Version** | 1.0.0 |
+| **Application** | `haystack-fast-api` Multi-Agent Orchestrator (LangGraph) |
+| **Question** | Can the **synthesis** step under Multi-Agent Orchestrator output **recommended assets** and **predicted rent price** grounded in the **uploaded project specification**? |
+| **As-built** | `app/agents/nodes.py` (`make_synthesis_node`), `app/agents/prompts.py`, Stage-1 Q&A only |
+| **Target contract** | Align with `RecommendFromProjectSpecResponse` / `RecommendationItem` + `PricingPayload` (`app/schemas/recommendations.py`) |
+| **Related** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) §4.1 [5]–[8] · [`ml-pricing-multi-agent-fastmcp.md`](./ml-pricing-multi-agent-fastmcp.md) · [`fastmcp-tool-consolidation-multi-agent.md`](./fastmcp-tool-consolidation-multi-agent.md) |
+
+---
+
+## 1. Executive summary
+
+### Question
+
+After a project-spec is uploaded and indexed (**step [4]**), can Multi-Agent **synthesis ([8])** emit:
+
+1. **Recommended assets** (equipment / fleet selections), and  
+2. **Predicted rent price** (daily rate / total for the rental window),  
+
+using evidence from the **uploaded project specification** plus fleet/pricing tools?
+
+### Verdicts
+
+| Question | Result |
+|----------|--------|
+| **Target architecture: synthesis outputs assets + prices?** | **GO** |
+| **As-built Stage-1 synthesis already does this?** | **No** — Q&A markdown only; **forbids** inventing fleet/rates |
+| Synthesis **calls** pricing / fleet tools itself? | **No** — synthesis is **tool-free**; consumes prior agent/tool results |
+| Prices from LLM free-text without `predict_asset_price`? | **NO** — must use ML/fallback tool results only |
+| Assets from project KG alone without fleet tools? | **NO** for production — project KG-1 has needs/constraints; **Postgres-Haystack / Neo4j** supply inventory |
+| Grounding in uploaded project-spec? | **GO** — via [4] index + project tools [5] → needs/constraints into rank |
+| Structured output vs markdown only? | **GO** — prefer structured JSON matching recommend DTO (+ optional narrative) |
+| Prerequisites | [4] success; fleet mirror; pricing tool; recommend agent graph [5]–[7] before [8] |
+
+**Overall:** **GO for target (R5 / M6).** Synthesis **can and should** assemble **recommended assets + predicted rent prices** for the project-spec journey, but only as a **merge/rank node** over tool outputs—not by inventing stock or rates. Stage-1 synthesis remains **project Q&A** until the recommend graph is built.
+
+---
+
+## 2. As-built vs target
+
+### 2.1 As-built (Stage-1)
+
+```text
+research_agent → project_vector_search
+graph_agent    → project_kg_query
+synthesis_agent → final_answer (markdown)   # NO tools, NO assets, NO prices
+```
+
+From `SYNTHESIS_AGENT_SYSTEM` / prompts:
+
+- Tools: **none**  
+- **Do not invent** equipment fleet inventory, rates, or bookings  
+- Output: grounded Q&A answer (Vector vs Graph cites)
+
+### 2.2 Target (post-[4] recommend graph)
+
+```text
+[4] indexing (project-spec → Pgvector + KG-1)
+[5] project / needs agents   → project_* , decompose_project_needs
+[6] fleet / graph agents     → retrieve_fleet_*, neo4j_*, availability
+[7] pricing agent            → predict_asset_price  (per candidate)
+[8] SYNTHESIS                → structured recommendation
+      results_by_need[]:
+        need_id, item { asset_id, equipment_type, rank, rationale,
+                        pricing { daily_rate, total_price, currency, … } }
+```
+
+Project-spec document grounds **what** is needed; fleet + pricing tools ground **what is offered** and **at what rate**.
+
+---
+
+## 3. What synthesis is allowed to do
+
+| Responsibility | In synthesis? | Source of truth |
+|----------------|---------------|-----------------|
+| Choose rank order among **already priced** candidates | **Yes** | Policy + tool hits + project constraints |
+| Fill `RecommendationItem` + `PricingPayload` | **Yes** | Copy prices from [7]; assets from [6] |
+| Write human rationale tied to project-spec passages | **Yes** | [5] research/KG notes + tool traces |
+| Call FastMCP / SQL / XGBoost | **No** | Prior agents only |
+| Invent asset_id or daily_rate | **No** | — |
+| Skip [4] and still recommend | **No** | Gate |
+
+### 3.1 Output contract (illustrative — align OpenSpec FR-010 when reattached)
+
+Prefer **structured** state fields (not only markdown):
+
+```text
+recommendation:
+  recommendation_id: str
+  start_date / end_date: optional
+  results_by_need: [
+    { need_id, item: { equipment_type, asset_id, rank, rationale,
+                       pricing: { daily_rate, total_price, currency,
+                                  deposit_rate, model_version, explanation },
+                       availability },
+      warnings: [] }
+  ]
+  tool_traces: […]
+  sources_used: […]   # project_vector_search, retrieve_fleet_*, predict_asset_price, …
+final_answer: optional markdown summary for humans
+```
+
+Map 1:1 to existing `RecommendFromProjectSpecResponse` where possible so Spring call 3 stays stable.
+
+### 3.2 Stub vs LLM synthesis
+
+| Mode | Feasible for assets+prices? |
+|------|----------------------------|
+| **Stub** (deterministic merge) | **GO** and preferred for CI — pick top candidate per need, attach tool pricing |
+| **LLM** synthesis | **GO** for rationale text only; **must not** override numeric prices or invent assets — validate against tool payload |
+
+---
+
+## 4. Grounding chain from uploaded project-spec
+
+```text
+Upload project-spec
+    → [4] Index + KG-1
+    → [5] Vector/KG/needs tools  → equipment hints, duration, site constraints
+    → [6] Fleet tools (Postgres-Haystack + Neo4j)
+    → [7] predict_asset_price
+    → [8] Synthesis: match needs → assets + attach prices + rationale
+```
+
+| If missing… | Synthesis behaviour |
+|-------------|---------------------|
+| [4] failed | **No recommend** |
+| No fleet match | `item: null` + warnings (as FR-010 style) |
+| Pricing tool failed | Fallback pricing with `model_version` explained, or item with `pricing: null` + warning — never silent zeros |
+| No rental dates | Duration default policy (document) or warning |
+
+---
+
+## 5. Feasibility matrix
+
+| Claim | Feasible? | Notes |
+|-------|-----------|--------|
+| Synthesis outputs recommended assets from project-spec journey | **GO** (target) | Needs [5]+[6] before [8] |
+| Synthesis outputs predicted rent price | **GO** (target) | From [7] tool only |
+| Same graph as Stage-1 Q&A synthesis | **Extend** | New recommend graph or mode flag `qa` vs `recommend` |
+| Single HTTP after upload returns recommend | **RISKY** | Prefer split ingest vs recommend or 202 job (resilience study) |
+| Synthesis replaces RecommendationService entirely | **GO later** | Service path can become thin façade over orchestrator |
+
+---
+
+## 6. Risks
+
+| Risk | Mitigation |
+|------|------------|
+| LLM hallucinates prices | Structured merge; schema validation; LLM only for rationale |
+| Project-spec-only “recommend” without fleet | Product forbid; empty item + warning |
+| Stage-1 prompt still forbids fleet in shared synthesis | Separate `RECOMMEND_SYNTHESIS_*` prompts / node |
+| Partial tool failures | Per-need warnings; don’t fail entire envelope unless hard policy |
+
+---
+
+## 7. Phasing
+
+| Phase | Work |
+|-------|------|
+| **Now** | Stage-1 synthesis stays Q&A-only |
+| **R5 / M6** | Recommend graph [5]–[8]; synthesis emits structured assets+prices |
+| **Tests** | Stub synthesis: fixture tool hits → DTO equals expected rates/assets |
+| **OpenSpec** | Reattach FR-010 response to agent path when product ready |
+
+---
+
+## 8. Document control
+
+| Version | Date | Notes |
+|---------|------|--------|
+| **1.0.0** | 2026-08-10 | Initial: synthesis **GO** for assets+prices as merge node; as-built Q&A gap |
+
+---
+
+## 9. One-page decision card
+
+| Decision | Recommendation |
+|----------|----------------|
+| Synthesis outputs recommended assets + rent prices? | **Yes (target GO)** |
+| As-built today? | **No** (Q&A only) |
+| How prices appear | Only from **`predict_asset_price`** (or documented fallback) |
+| How assets appear | Only from fleet tools after project-spec needs extraction |
+| Project-spec role | Grounds needs/constraints via [4]+[5] |
+| Synthesis tools | **None** — merge/rank only |
+| Output shape | Structured recommend DTO + optional markdown |
