@@ -6,7 +6,7 @@
 | **Document type** | Architecture / integration feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.1.0 |
+| **Version** | 1.2.0 |
 | **Application** | `haystack-fast-api` (equipment recommendation / project-spec AI feature) |
 | **Caller** | Spring Boot REST API (portal / domain system of record) |
 | **Related** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) (data planes, agent→indexing, Pgvector) |
@@ -73,10 +73,10 @@ haystack-fast-api             (Haystack pipelines, agents, stores)
 Related internal flow (after request arrives) — target (dual-plane study §4.1):
 
 1. Multi-Agent **indexing tool [4]** (project → Pgvector + KG-1).  
-2. **After [4]**, Multi-Agent Orchestrator agents invoke **FastMCP tools only** (target): project context, **Postgres-Haystack** fleet, **Neo4j** graph, **ML pricing** (`predict_asset_price`).  
-3. Orchestrator **synthesizes recommendation** (not a single MCP mega-tool).  
+2. **After [4]**, Multi-Agent Orchestrator agents invoke **in-process tools** (target): project context, **Postgres-Haystack** fleet SQL, **Neo4j** graph, **ML pricing** (`predict_asset_price`).  
+3. Orchestrator **synthesizes recommendation** (merge of tool results).  
 
-Spring still uses **REST** to FastAPI; it does **not** speak MCP. Wire resilience (this doc) stays focused on the **Spring ↔ FastAPI** connection.
+Spring still uses **REST** to FastAPI. Wire resilience (this doc) stays focused on the **Spring ↔ FastAPI** connection.
 ---
 
 ## 3. Clarifying streaming and SSE
@@ -449,7 +449,8 @@ Optional: large files via **Spaces** + URL.
 | Version | Date | Notes |
 |---------|------|--------|
 | **1.0.0** | 2026-08-10 | Initial study: Spring↔FastAPI resilience; SSE vs upload; multi-call recommender; C1–C3 |
-| **1.1.0** | 2026-08-10 | Call 3 recommend maps to Multi-Agent after [4] + FastMCP tools (pricing, Neo4j, Postgres-Haystack) |
+| **1.1.0** | 2026-08-10 | Call 3 recommend maps to Multi-Agent after [4] + tools (pricing, Neo4j, Postgres-Haystack) |
+| **1.2.0** | 2026-08-10 | Remove FastMCP; in-process tools only |
 
 ---
 

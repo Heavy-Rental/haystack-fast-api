@@ -5,12 +5,12 @@
 | **Document type** | Architecture / Haystack packaging feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.0.0 |
+| **Version** | 1.1.0 |
 | **Application** | `haystack-fast-api` indexing (Plane B step **[4]**) |
 | **Question** | Can the existing **indexing pipeline** (`build_indexing_pipeline` / `run_indexing_pipeline`) be packaged as a Haystack **SuperComponent**? |
 | **As-built** | `app/pipelines/indexing/pipeline.py`, `app/services/indexing.py` |
 | **Haystack ref** | [SuperComponents](https://docs.haystack.deepset.ai/docs/supercomponents) · hierarchy in `openspec/specs/equipment-recommendation/` (Component → Pipeline → SuperComponent → Tool → Agent) |
-| **Related studies** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) §4 · [`fastmcp-tool-consolidation-multi-agent.md`](./fastmcp-tool-consolidation-multi-agent.md) · [`mcp-multi-agent-devcontainer-digitalocean.md`](./mcp-multi-agent-devcontainer-digitalocean.md) |
+| **Related studies** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) §4 |
 
 ---
 
@@ -29,7 +29,7 @@ Is it **feasible** to wrap the dual-branch FileTypeRouter indexing **Pipeline** 
 | Drop `build_indexing_pipeline` / keep factory inside SuperComponent `__init__`? | **Either** — factory remains; SuperComponent owns one built pipeline |
 | SuperComponent alone replaces `run_indexing_pipeline` summary logic? | **Partial** — need **output mapping** and/or thin post-process adapter for API parity |
 | SuperComponent includes **mandatory KG-1**? | **NO** — keep KG in `IndexingIngestService` (or separate component) after index |
-| SuperComponent = FastMCP tool body for `run_indexing_from_request`? | **GO** (optional later) — SuperComponent or PipelineTool; still prefer multipart on FastAPI for Spring |
+| SuperComponent as body of agent indexing tool? | **GO** — service/SC; prefer multipart on FastAPI for Spring |
 | Required for Stage-1 / dual-plane T0–T1? | **No** — optional packaging refactor (R1-friendly) |
 | Blockers | Intermediate outputs (`include_outputs_from`), per-ingest DocumentStore, multi-MIME router sockets |
 
@@ -100,7 +100,6 @@ Related (not the same):
 |-----------|------|
 | **SuperComponent** | Pipeline as one component |
 | **PipelineTool** / **ComponentTool** | Expose pipeline/component to LLM tools |
-| **FastMCP tool** | Network tool host; may **call** SuperComponent.run inside server |
 
 Product OpenSpec already targets SuperComponents for **recurring subgraphs** (equipment-recommendation FR-019a); indexing is a natural **first** candidate for Plane B.
 
@@ -164,7 +163,7 @@ class IndexingPipelineSuperComponent:
 | I1 Pgvector shared store | One SC with shared store; meta filters on docs still stamped pre-run |
 | Tests inject pipeline | Keep inject path: pass prebuilt Pipeline into SC **or** bypass SC in tests |
 
-### 4.4 Multi-Agent / FastMCP — **GO** as packaging for tool **[4]**
+### 4.4 Multi-Agent — **GO** as packaging for tool **[4]**
 
 ```text
 Multi-Agent Orchestrator
@@ -178,7 +177,6 @@ Multi-Agent Orchestrator
 |------|-----------|
 | Agent tool → service → SuperComponent | **Preferred** |
 | Agent tool → SuperComponent only | **Risky** — loses KG hard-fail & DTO |
-| FastMCP tool → SuperComponent.run | **GO** for external hosts; Spring still multipart → FastAPI |
 | PipelineTool(LLM) wrapping full index | **Optional** — free-form LLM tool calling not required for Stage 1 (forced index edge) |
 
 ### 4.5 What should **not** be inside the SuperComponent
@@ -225,7 +223,7 @@ Multi-Agent Orchestrator
 | **S0** | This study | — |
 | **S1** | Add `IndexingPipelineSuperComponent` wrapping `build_indexing_pipeline` | — |
 | **S2** | `IndexingIngestService` uses SC; preserve KG + DTO | S1 |
-| **S3** | Agent tool / FastMCP calls same service (not raw SC) | R1 / M* |
+| **S3** | Agent tool calls same service (not raw SC) | R1 |
 | **S4** | Optional: nest SC in outer Haystack pipeline | Product need |
 | **S5** | I1: SC writer → Pgvector store | I1 |
 
@@ -238,7 +236,7 @@ Multi-Agent Orchestrator
 | Topic | Interaction |
 |-------|-------------|
 | Dual-plane **[4]** indexing tool | SuperComponent is the **Haystack packaging** of that tool’s core graph |
-| FastMCP `run_indexing_from_request` | Server may invoke SuperComponent; prefer still go through service for KG |
+| Agent `run_indexing_from_request` | Prefer service (index + KG), which may call SuperComponent |
 | Pgvector I1 | Writer store behind SC constructor |
 | Recommend **[5]–[8]** | Only after SC/index + KG succeed |
 
@@ -266,7 +264,8 @@ Multi-Agent Orchestrator
 
 | Version | Date | Notes |
 |---------|------|--------|
-| **1.0.0** | 2026-08-10 | Initial: indexing Pipeline → SuperComponent **GO** with boundary (no KG inside); maps/adapter; multi-agent/FastMCP fit |
+| **1.0.0** | 2026-08-10 | Initial: indexing Pipeline → SuperComponent **GO** with boundary (no KG inside) |
+| **1.1.0** | 2026-08-10 | Remove FastMCP packaging language |
 
 ---
 
@@ -280,6 +279,6 @@ Multi-Agent Orchestrator
 | Include HTTP DTO / session registry? | **No** |
 | Required now? | **No** — optional packaging |
 | Multi-Agent [4] | Service → SuperComponent.run(sources) |
-| FastMCP indexing tool | Optional; wrap service/SC; Spring stays REST multipart |
+| Agent indexing tool | Wrap service/SC; Spring stays REST multipart |
 | Outputs | Map documents + documents_written; keep summary adapter if needed |
 | Avoid | Mega SuperComponent (index+KG+session); silent loss of chunk outputs for KG |

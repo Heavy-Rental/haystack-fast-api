@@ -5,12 +5,12 @@
 | **Document type** | Architecture / agent orchestration feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.0.0 |
+| **Version** | 1.1.0 |
 | **Application** | `haystack-fast-api` Multi-Agent Orchestrator (LangGraph) |
 | **Question** | Can the **synthesis** step under Multi-Agent Orchestrator output **recommended assets** and **predicted rent price** grounded in the **uploaded project specification**? |
 | **As-built** | `app/agents/nodes.py` (`make_synthesis_node`), `app/agents/prompts.py`, Stage-1 Q&A only |
 | **Target contract** | Align with `RecommendFromProjectSpecResponse` / `RecommendationItem` + `PricingPayload` (`app/schemas/recommendations.py`) |
-| **Related** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) §4.1 [5]–[8] · [`ml-pricing-multi-agent-fastmcp.md`](./ml-pricing-multi-agent-fastmcp.md) · [`fastmcp-tool-consolidation-multi-agent.md`](./fastmcp-tool-consolidation-multi-agent.md) |
+| **Related** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) §4.1 [5]–[8] · [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) |
 
 ---
 
@@ -82,7 +82,7 @@ Project-spec document grounds **what** is needed; fleet + pricing tools ground *
 | Choose rank order among **already priced** candidates | **Yes** | Policy + tool hits + project constraints |
 | Fill `RecommendationItem` + `PricingPayload` | **Yes** | Copy prices from [7]; assets from [6] |
 | Write human rationale tied to project-spec passages | **Yes** | [5] research/KG notes + tool traces |
-| Call FastMCP / SQL / XGBoost | **No** | Prior agents only |
+| Call SQL / XGBoost from synthesis | **No** | Prior agents only |
 | Invent asset_id or daily_rate | **No** | — |
 | Skip [4] and still recommend | **No** | Gate |
 
@@ -176,6 +176,7 @@ Upload project-spec
 | Version | Date | Notes |
 |---------|------|--------|
 | **1.0.0** | 2026-08-10 | Initial: synthesis **GO** for assets+prices as merge node; as-built Q&A gap |
+| **1.1.0** | 2026-08-10 | Tools are in-process (no FastMCP) |
 
 ---
 
