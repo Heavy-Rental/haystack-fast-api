@@ -69,14 +69,12 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:
-        url = self.database_url_override or (
+        if self.database_url_override:
+            return self.database_url_override
+        return (
             f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_hostname}:{self.postgres_port}/{self.postgres_db}"
         )
-        # Bare postgresql:// resolves to psycopg2; this project installs psycopg v3.
-        if url.startswith("postgresql://"):
-            url = url.replace("postgresql://", "postgresql+psycopg://", 1)
-        return url
 
 
 @lru_cache
