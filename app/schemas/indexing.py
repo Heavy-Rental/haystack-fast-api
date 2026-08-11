@@ -1,5 +1,7 @@
 """Schemas for project-spec indexing HTTP response (Call 1 / S1 lean body)."""
 
+from datetime import date
+
 from pydantic import BaseModel, Field
 
 
@@ -18,6 +20,14 @@ class IngestFromProjectSpecResponse(BaseModel):
             "Deterministic summary of the submitted project requirement "
             "(from project_text or extracted multipart file content)"
         ),
+    )
+    tentative_start_date: date | None = Field(
+        default=None,
+        description="Echo of request start_date when supplied (S1b); null if omitted",
+    )
+    tentative_end_date: date | None = Field(
+        default=None,
+        description="Echo of request end_date when supplied (S1b); null if omitted",
     )
     warnings: list[str] = Field(
         default_factory=list,

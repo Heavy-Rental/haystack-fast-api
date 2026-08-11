@@ -98,6 +98,8 @@ async def recommend_from_project_spec(request: Request) -> IngestFromProjectSpec
             user_name=body.user_name,
             project_text=body.project_text,
             file_sources=None,
+            start_date=body.start_date,
+            end_date=body.end_date,
         )
 
     if "multipart/form-data" in content_type:
@@ -115,8 +117,10 @@ async def recommend_from_project_spec(request: Request) -> IngestFromProjectSpec
             if project_text is not None and str(project_text).strip()
             else None
         )
-        _ = _parse_optional_date(form.get("start_date"))
-        _ = _parse_optional_date(form.get("end_date"))
+        start_date = _parse_optional_date(form.get("start_date"))
+        end_date = _parse_optional_date(form.get("end_date"))
+        if start_date is not None and end_date is not None and end_date < start_date:
+            raise BadRequestError("end_date must be on or after start_date")
 
         file_sources = []
         upload = form.get("file")
@@ -141,6 +145,8 @@ async def recommend_from_project_spec(request: Request) -> IngestFromProjectSpec
             user_name=user_name,
             project_text=project_text_str,
             file_sources=file_sources or None,
+            start_date=start_date,
+            end_date=end_date,
         )
 
     raise BadRequestError(

@@ -28,12 +28,12 @@ These apply across studies unless a study explicitly narrows scope:
 | [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) | Synthesis **[8]** (Coordinator) → recommended assets + predicted rent prices. | **1.4.1** |
 | [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) | C/W/D role vocabulary; **[4]** forced non-agent gate; explicit Delegator router; fan-out Workers per need; **§10 A–L templates** (seq/par + workflow; haystack←primary). | **2.1.0** |
 | [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) | Indexing Pipeline → Haystack SuperComponent (optional packaging for Coordinator gate **[4]**). | **1.2.1** |
-| [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) | Call 1 lean body (`ingest_id`, `user_id`, `user_requirement_summary`); full needs/dates/budget TARGET; not Call 3. | **1.1.0** |
+| [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) | Call 1 lean body; S1b date echo; FR-IX-023 order S1c→S1d→S1e; not Call 3. | **1.1.1** |
 
 ### Implementation plan
 
 | Document | Topic | Version |
 |----------|--------|---------|
-| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog S0–S9 / S7.0–S7.7; Call 1 lean body; Call 2 request contract; **TDD (P9) + BDD (P10)**; **PR template**; C/W/D A–L. | **3.3.1** |
+| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog S0–S9 / S7.0–S7.7; Call 1 S1a–S1e (FR-IX-023 after S1d = free-text dates); Call 2 contract; TDD/BDD; PR template. | **3.4.0** |
 
 Normative product behaviour remains under [`../openspec/`](../openspec/). Pricing decision log: [`../docs/dynamic-pricing-masterplan.md`](../docs/dynamic-pricing-masterplan.md).

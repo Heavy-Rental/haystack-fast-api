@@ -120,9 +120,13 @@ Knowledge graph is **mandatory** on successful ingest. Artifacts land under `art
   "ingest_id": "ing_…",
   "user_id": "user_demo",
   "user_requirement_summary": "Indoor elevated work ~8m; need scissors lift…",
+  "tentative_start_date": "2026-09-01",
+  "tentative_end_date": "2026-09-12",
   "warnings": []
 }
 ```
+
+(`tentative_*` are `null` when request omits dates.)
 
 **Not present on public body:** `documents[]`, `kg_*`, counts, `data_kind` (still run internally for Call 2).  
 **Not present** (old recommend API): `recommendation_id`, `results_by_need`.

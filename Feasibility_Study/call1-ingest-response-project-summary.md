@@ -5,7 +5,7 @@
 | **Document type** | API / product feasibility study |
 | **Status** | Complete (study) — **lean public body is the shipping contract**; full FR-IX-023 still TARGET |
 | **Date** | 2026-08-11 |
-| **Version** | 1.1.0 |
+| **Version** | 1.1.1 |
 | **Endpoint** | `POST /internal/v1/recommendations/submitprojectspecification` |
 | **Question** | What should Call 1 return for Spring/portal without over-exposing indexing/KG internals, while enabling Call 2? |
 | **OpenSpec** | FR-IX-023 TARGET (full) · contract `openspec/specs/indexing/contracts/ingest-from-project-spec.md` · proposal `openspec/changes/2026-08-10-call1-project-spec-summary/` |
@@ -136,16 +136,19 @@ Skipping Call 2 after Call 1 remains valid once Call 3 is reattached.
 
 ## 7. Implementation phasing
 
-| Phase | Work |
-|-------|------|
-| S0 | Specs + this study |
-| **S1a (lean)** | Schema + service: `ingest_id`, `user_id`, `user_requirement_summary`, `warnings`; no technical public fields |
-| S1b | Echo request dates (optional) |
-| S1c | `needs_summary` via decomposer (FR-IX-023) |
-| S1d | Budget extract + warnings |
-| S1e | Mark full FR-IX-023 as-built when shipped |
+| Phase | Work | Notes |
+|-------|------|--------|
+| S0 | Specs + this study | Done |
+| **S1a (lean)** | `ingest_id`, `user_id`, `user_requirement_summary`, `warnings` | **Done** |
+| **S1b** | Echo request dates as `tentative_*` | **Done** |
+| **S1c** | `needs_summary[]` via decomposer | Planned |
+| **S1d** | `expected_budget` extract; never invent | Planned |
+| **S1e** | Free-text / file date extract when request omits dates | Planned **after S1d** |
+| **1.7** | Mark full FR-IX-023 as-built (OpenSpec + Postman) | After **S1c + S1d + S1e** |
 
-See [`implementation-plan.md`](./implementation-plan.md) Phase 1 / Stage S1.
+**FR-IX-023 order:** S1c → S1d → **S1e** → 1.7. Free-text dates are **not** part of S1b.
+
+See [`implementation-plan.md`](./implementation-plan.md) Phase 1 (v3.4.0+).
 
 ---
 
@@ -156,6 +159,7 @@ See [`implementation-plan.md`](./implementation-plan.md) Phase 1 / Stage S1.
 | **1.0.0** | 2026-08-10 | Initial GO for simplified Call 1 summary; linked OpenSpec FR-IX-023 |
 | **1.0.1** | 2026-08-11 | Clarify Call 1 ≠ multi-agent recommend synthesis / Workers |
 | **1.1.0** | 2026-08-11 | Lean public body: `ingest_id` + `user_id` + `user_requirement_summary`; internal path `/internal/v1/.../submitprojectspecification`; full FR-IX-023 remains TARGET |
+| **1.1.1** | 2026-08-11 | FR-IX-023 order: S1c → S1d → **S1e free-text dates** (after S1d) → 1.7 as-built; aligns with implementation-plan v3.4.0 |
 
 ---
 
