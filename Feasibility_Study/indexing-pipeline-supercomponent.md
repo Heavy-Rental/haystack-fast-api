@@ -5,7 +5,7 @@
 | **Document type** | Architecture / Haystack packaging feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.2.0 |
+| **Version** | 1.2.1 |
 | **Application** | `haystack-fast-api` indexing (Plane B step **[4]**) |
 | **Question** | Can the existing **indexing pipeline** (`build_indexing_pipeline` / `run_indexing_pipeline`) be packaged as a Haystack **SuperComponent**? |
 | **As-built** | `app/pipelines/indexing/pipeline.py`, `app/services/indexing.py` |
@@ -79,9 +79,9 @@ Outside the Pipeline:
 | Embedder settings from config | Service → `build_indexing_pipeline` |
 | **Mandatory KG-1** after chunks | Service (`run_knowledge_graph`) |
 | Session registry put | Service |
-| `IngestFromProjectSpecResponse` | Service |
+| Lean `IngestFromProjectSpecResponse` (`ingest_id`, `user_id`, `user_requirement_summary`, `warnings`) | Service (public HTTP); SC must not own this DTO |
 
-**SuperComponent boundary:** wrap **only** the Haystack graph (convert → split → embed → write), not the full ingest saga.
+**SuperComponent boundary:** wrap **only** the Haystack graph (convert → split → embed → write), not the full ingest saga or lean public response assembly.
 
 ---
 
@@ -269,6 +269,7 @@ Multi-Agent Orchestrator (Coordinator)
 | **1.0.0** | 2026-08-10 | Initial: indexing Pipeline → SuperComponent **GO** with boundary (no KG inside) |
 | **1.1.0** | 2026-08-10 | Remove FastMCP packaging language |
 | **1.2.0** | 2026-08-11 | **[4]** = Coordinator gate (non-agent); not Worker; LLM PipelineTool avoided for gate |
+| **1.2.1** | 2026-08-11 | Service owns lean Call 1 DTO; SuperComponent stays pipeline-only |
 
 ---
 

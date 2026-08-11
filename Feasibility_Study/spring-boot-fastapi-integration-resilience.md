@@ -6,11 +6,11 @@
 | **Document type** | Architecture / integration feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.3.0 |
+| **Version** | 1.3.1 |
 | **Application** | `haystack-fast-api` (equipment recommendation / project-spec AI feature) |
 | **Caller** | Spring Boot REST API (portal / domain system of record) |
 | **Related** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) (data planes, agent→indexing, Pgvector) · [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) (FastAPI multi-agent roles) |
-| **As-built routes** | `POST .../from-project-spec`, `POST .../project-knowledge/query`, `GET /health` |
+| **As-built routes** | `POST /internal/v1/recommendations/submitprojectspecification`, `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations`, `GET /health` |
 
 ---
 
@@ -63,8 +63,8 @@ haystack-fast-api             (Haystack pipelines, agents, stores)
 
 | Call | Typical payload | Latency profile (today / target) |
 |------|-----------------|----------------------------------|
-| **Ingest** `POST /from-project-spec` | Multipart file or JSON text + `user_id` | Seconds–tens of seconds (index + KG + optional agent orchestration) |
-| **Q&A** `POST /project-knowledge/query` | JSON `user_id`, `ingest_id`, `query` | Seconds if LLM; fast if stub |
+| **Ingest** `POST /internal/v1/recommendations/submitprojectspecification` | Multipart file or JSON text + `user_id` → lean **200**: `ingest_id`, `user_id`, `user_requirement_summary`, `warnings` | Seconds–tens of seconds (index + KG; technical detail not on public body) |
+| **Q&A** `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` | JSON `user_id`, `ingest_id` (from Call 1), `query` | Seconds if LLM; fast if stub |
 | **Recommend** (service / future HTTP) | Needs / dates / options | Seconds–tens; multi unit-need **fan-out Workers** via **Multi-Agent Orchestrator** after ingest **[4]** (may warrant C2 jobs) |
 | **Health** `GET /health` | — | Milliseconds |
 
@@ -118,7 +118,7 @@ Spring still uses **REST** to FastAPI and does **not** implement C/W/D roles —
 ```text
 Spring WebClient
   .post()
-  .uri("/api/v1/recommendations/from-project-spec")
+  .uri("/internal/v1/recommendations/submitprojectspecification")
   .body(MultipartBody...)  // or JSON project_text
   .retrieve()
   .bodyToMono(IngestResponse.class)
@@ -159,7 +159,7 @@ Same idea as SSE without `EventSource` framing: `application/x-ndjson` lines.
 [1] Spring POST /ingest          → 202 { job_id }
 [2] Spring GET  /jobs/{job_id}   → 200 { status: running|succeeded|failed, ingest_id?, error? }
     or SSE /jobs/{job_id}/events → progress stream
-[3] Spring POST /project-knowledge/query  with ingest_id
+[3] Spring POST /project-knowledge/getassetrecommendations  with ingest_id
 [4] Spring POST /recommend (later)
 ```
 
@@ -325,8 +325,8 @@ Without idempotency, **retry after timeout** may **double-index** the same proje
 
 | As-built | Integration note |
 |----------|------------------|
-| `POST /from-project-spec` | Unary REST ingest — **keep** as file/JSON entry; optionally add 202 mode later |
-| `POST /project-knowledge/query` | Unary REST — second Spring call after ingest |
+| `POST /submitprojectspecification` | Unary REST ingest — **keep** as file/JSON entry; optionally add 202 mode later |
+| `POST /project-knowledge/getassetrecommendations` | Unary REST — second Spring call after ingest |
 | `GET /health` | Resilience probe |
 | `run_in_threadpool` | Correct for sync pipelines under async FastAPI |
 | No job API / no SSE today | Gap for long-running robustness — Phase C2 |
@@ -452,6 +452,7 @@ Optional: large files via **Spaces** + URL.
 | **1.1.0** | 2026-08-10 | Call 3 recommend maps to Multi-Agent after [4] + tools (pricing, Neo4j, Postgres-Haystack) |
 | **1.2.0** | 2026-08-10 | Remove FastMCP; in-process tools only |
 | **1.3.0** | 2026-08-11 | Call 3 internal flow: C/W/D roles; fan-out Workers; Spring stays REST saga |
+| **1.3.1** | 2026-08-11 | Full internal paths; Call 1 lean response fields for Spring handoff |
 
 ---
 
