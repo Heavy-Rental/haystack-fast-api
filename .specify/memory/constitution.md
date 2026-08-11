@@ -44,7 +44,7 @@ When documents disagree on live behaviour:
 
 | Concern | Wins |
 |---------|------|
-| Live `POST .../from-project-spec` ingest | `openspec/specs/indexing/` |
+| Live `POST .../submitprojectspecification` ingest | `openspec/specs/indexing/` |
 | Mandatory KG + Stage-1 multi-agent Q&A | `openspec/specs/knowledge-graph/` |
 | FR-010 recommend service (not default HTTP) | `openspec/specs/recommendation-pipeline/` |
 | Deferred recommend JSON envelope | `openspec/specs/recommendation-intake/` (Status: deferred) |

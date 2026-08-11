@@ -5,10 +5,10 @@
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
 | **Date** | 2026-08-11 |
-| **Version** | 3.2.1 |
+| **Version** | 3.3.1 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.2.1** accuracy validation vs as-built (Phase 1e partial, error contract, Call 3 service-only); **3.2.0** required PR description template; **3.1.0** TDD + BDD (P9/P10); **3.0.0** stage catalog + per-stage tests |
+| **Revision notes** | **3.3.1** Call 2 request contract (`query` required; predefined prompt + `user_requirement_summary` allowed); **3.3.0** Call 1 lean body + internal routes; **3.2.1** accuracy validation; **3.2.0** PR template; **3.1.0** TDD/BDD; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -20,7 +20,7 @@ Related studies: [`README.md`](./README.md) · normative product behaviour: [`..
 
 | Study | Verdict | Priority for shipping value |
 |-------|---------|------------------------------|
-| **Call 1 project-spec summary** | GO (TARGET FR-IX-023) — needs + dates + budget on ingest | **High** — client-facing, small surface |
+| **Call 1 project-spec summary** | GO lean body first (`ingest_id`, `user_id`, `user_requirement_summary`); full FR-IX-023 needs/dates/budget **TARGET** | **High** — client-facing, small surface |
 | **Spring ↔ FastAPI resilience** | REST default; SSE not for upload; C1 then C2 jobs | **High** for production multi-call |
 | **Postgres–Haystack–Neo4j dual plane** | Viable dual-track; poll ETL first; Neo4j projection async | **High** for production recommend accuracy |
 | **Indexing → SuperComponent** | GO, optional packaging; no KG inside SC; packaging for **Coordinator gate [4]** | **Low** — refactor, not product path |
@@ -44,16 +44,21 @@ Related studies: [`README.md`](./README.md) · normative product behaviour: [`..
 
 ### 1.2 As-built baseline (today)
 
-API routes below are under **`/api/v1/recommendations`** (short form `/from-project-spec` used later means that prefix).
+API routes under **`/internal/v1/recommendations`** (Spring-facing internal API).
 
 ```text
-Call 1: POST /api/v1/recommendations/from-project-spec
-  → IndexingIngestService → InMemoryDocumentStore + mandatory KG-1
-  → technical IngestFromProjectSpecResponse (no needs/dates/budget summary)
+Call 1: POST /internal/v1/recommendations/submitprojectspecification
+  → IndexingIngestService → InMemoryDocumentStore + mandatory KG-1 + session register
+  → lean public body (shipping contract):
+       ingest_id, user_id, user_requirement_summary, warnings[]
+  → technical indexing/KG fields NOT on public body (still run internally)
+  → full FR-IX-023 needs_summary[] / dates / budget — not yet
 
-Call 2: POST /api/v1/recommendations/project-knowledge/query
+Call 2: POST /internal/v1/recommendations/project-knowledge/getassetrecommendations
+  → requires user_id + ingest_id from Call 1 + query
   → LangGraph research → graph → synthesis (Q&A markdown only)
   → tools: project_vector_search, project_kg_query
+  → path name is Spring-facing; behaviour is project-knowledge Q&A (not Call 3 assets)
 
 Call 3: no public multi-agent recommend HTTP yet
   In-process RecommendationService (FR-010 MVP: seed fleet + pricing_client → results_by_need)
@@ -71,11 +76,81 @@ Error JSON: {"error","message"} handlers already as-built
 Idempotency-Key / ingest correlation headers — not as-built (S2a remaining)
 ```
 
+**Call 1 → Call 2 handoff (minimum):** Spring stores `user_id` + `ingest_id` from Call 1; Call 2 sends those plus `query`. See **§1.2.1** for full Call 2 request rules (including predefined prompt + summary).
+
+### 1.2.1 Call 2 request contract — `getassetrecommendations`
+
+**Route:** `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations`  
+**Behaviour (as-built):** Stage-1 **project-knowledge Q&A** over the Call 1 session (DocumentStore + KG-1). Tools: `project_vector_search`, `project_kg_query`. Response focus: markdown **`answer`** (+ hits / `tool_traces`).  
+**Not Call 3:** path name is Spring-facing; this is **not** ranked fleet assets + prices (`results_by_need` — that is **S7.5** / multi-agent recommend).
+
+#### As-built request body
+
+| Field | Required | Notes |
+|-------|----------|--------|
+| `user_id` | **yes** | Same as Call 1 |
+| `ingest_id` | **yes** | From Call 1 lean response — session key |
+| `query` | **yes** | Natural-language question **or** a **predefined prompt** (see below) |
+| `top_k` | no | Retrieval depth override (`1…50`) |
+| `kg_artifact_path` | no | Reload KG-1 if process-local session lost; vectors empty until re-ingest |
+
+```json
+{
+  "user_id": "user_demo",
+  "ingest_id": "ing_a1b2c3d4e5f6",
+  "query": "What excavator capacity and soil conditions are specified?"
+}
+```
+
+#### Is `query` necessary?
+
+| Answer | When |
+|--------|------|
+| **Yes (as-built)** | Call 2 remains free-form / task Q&A. Without `query` there is no question for research → graph → synthesis. |
+| **Optional only after redesign** | Server fills a **default template** when `query` is omitted, **or** product moves “get equipment recommendations” to **Call 3** (no free-form question). |
+
+#### Can the body be only `user_id` + `ingest_id` + `user_requirement_summary`?
+
+| Field set | Verdict |
+|-----------|---------|
+| `user_id` + `ingest_id` + **`query`** | **As-built correct** minimum for Q&A |
+| `user_id` + `ingest_id` + **`user_requirement_summary` only** (no `query`) | **Not** for current Q&A design — summary is not a substitute for a task/question string or for session retrieval |
+| Drop session; send **only** summary | **Avoid** — throws away indexed chunks/KG; invent risk rises |
+
+Call 1 already returns `user_requirement_summary` for portal/display. Call 2 does **not** need it as a separate request field if the session is live: tools read the upload via `ingest_id`. The summary **may** be embedded **inside** `query` (next).
+
+#### Predefined prompt + `user_requirement_summary` (**GO**)
+
+`query` **MAY** be a **fixed template** that includes Call 1’s `user_requirement_summary` (Spring composes today; FastAPI-owned default prompt is preferred later).
+
+**Allowed pattern:**
+
+```json
+{
+  "user_id": "user_demo",
+  "ingest_id": "ing_a1b2c3d4e5f6",
+  "query": "Based on the existing information uploaded earlier, this is the summary: Indoor elevated work ~8m; need scissors lift on soft clay. List equipment needs and constraints supported by the project sources only. Do not invent assets, fleet inventory, or rates."
+}
+```
+
+| Rule | Practice |
+|------|----------|
+| **Session is SoT** | Always pass `user_id` + `ingest_id` so tools hit DocumentStore + KG-1 |
+| **Summary in prompt** | Focus / instruction only — not a replacement for retrieval |
+| **No invent** | Call 2 must not invent `asset_id` or rent rates (fleet/pricing = Call 3 Workers) |
+| **Ownership** | Prefer one prompt source of truth in FastAPI (prompts module); Spring may send the same string until that lands |
+
+#### Future optional (not as-built)
+
+- Make `query` optional → server fills default template from session and/or stored/echoed summary.  
+- True “get asset recommendations” without a free-form question → **Call 3 / S7.5**, not this Q&A route.
+
 ### 1.3 Target multi-call journey
 
 ```text
 Spring saga:
-  Call 1  ingest [1–4]     → ingest_id + (TARGET) needs/dates/budget
+  Call 1  ingest [1–4]     → lean body: ingest_id + user_id + user_requirement_summary
+                             (+ later TARGET needs_summary / dates / budget)
   Call 2  Q&A [5]          → project tools over session/Pgvector + KG-1
   Call 3  recommend [5–8]  → Coordinator graph after [4] gate:
                                Worker [5] needs
@@ -205,14 +280,13 @@ Unit-heavy stages (S6 clamp math, S7.0 validation) still use TDD; phrase top-lev
 **S1 — Call 1 summary**
 
 ```text
-Scenario: Echo rental dates and stub needs after successful ingest
-  Given a project-spec fixture with start_date and end_date
-  And   need decomposer is in stub mode
-  When  the client POSTs /api/v1/recommendations/from-project-spec
-  Then  the response includes ingest_id
-  And   tentative_start_date and tentative_end_date match the request
-  And   needs_summary is non-empty from the stub
-  And   expected_budget is null with a warning when no currency is present
+Scenario: Lean Call 1 body after successful ingest
+  Given a project-spec fixture with project_text describing a scissors lift need
+  When  the client POSTs /internal/v1/recommendations/submitprojectspecification
+  Then  the response includes ingest_id starting with ing_
+  And   user_id echoes the request
+  And   user_requirement_summary is non-empty and reflects the project_text
+  And   the body does not expose documents[] or kg_* technical fields
 ```
 
 **S7.4 — Recommend synthesis**
@@ -312,7 +386,7 @@ Use **stage IDs** in PRs and test names. Every stage below that ships code has a
 | Stage ID | Name | Phase | Repo | Depends on | Default CI? |
 |----------|------|-------|------|------------|-------------|
 | **S0** | Spec freeze & D0 schema contract | 0 | shared | — | checklist |
-| **S1** | Call 1 project-spec summary | 1 | app | — | **yes** |
+| **S1** | Call 1 lean body + FR-IX-023 increments | 1 | app | — | **yes** |
 | **S2a** | Resilience C1 — FastAPI (idempotency, errors, correlation) | 2 | app | — | **yes** |
 | **S2b** | Resilience C1 — Spring client (timeouts, CB, saga) | 2 | Spring | WireMock | Spring CI |
 | **S3** | Agent indexing tool R1 + Coordinator gate **[4]** | 3 | app | — | **yes** |
@@ -364,22 +438,23 @@ Each step is sized as a reviewable PR (or small PR stack). Every phase/stage has
 
 ---
 
-### Phase 1 — Call 1: project-spec summary (this repo) — **highest ROI next**
+### Phase 1 — Call 1: lean public body + optional FR-IX-023 (this repo) — **highest ROI next**
 
-Maps to `call1-ingest-response-project-summary.md` S1–S5 and OpenSpec proposal tasks.
+Maps to [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) and OpenSpec FR-IX-023 (full TARGET later).
 
 | Step | Work | Files (expected) | Exit criteria |
 |------|------|------------------|---------------|
-| **1.1** | Extend `IngestFromProjectSpecResponse` with `needs_summary[]`, `tentative_start_date`, `tentative_end_date`, `expected_budget`, `warnings[]`; keep `ingest_id` | `app/schemas/…`, contract tests | Schema validates; OpenAPI reflects fields |
-| **1.2** | Echo request `start_date`/`end_date` when present; else extract or null + warning | `IndexingIngestService` | Dates in response when supplied |
-| **1.3** | Run need decomposer on project text **after** successful index+KG only; map to `needs_summary` | service + existing decomposer | CI uses **stub** decomposer; LLM path optional |
-| **1.4** | Budget extract: currency phrases only; **never invent**; null + warning if uncertain | extractor + tests | No hallucinated budgets in fixture tests |
-| **1.5** | Additive response first (keep technical fields); optional compact/verbose later | API | Backward compatible for clients parsing `documents[]` |
-| **1.6** | Tests + Postman + mark FR-IX-023 as-built when shipped | tests, postman, openspec | Green suite; proposal checklist done |
+| **1.0** | Routes under `/internal/v1/recommendations` (`submitprojectspecification`, `getassetrecommendations`) | `app/api/…`, tests, Postman | OpenAPI shows internal paths |
+| **1.1 S1a** | Lean `IngestFromProjectSpecResponse`: `ingest_id`, `user_id`, `user_requirement_summary`, `warnings[]` only on public body | `app/schemas/indexing.py`, `IndexingIngestService` | 200 body is lean; index+KG still run for Call 2 |
+| **1.2 S1a** | Build `user_requirement_summary` from `project_text` or extracted multipart content (deterministic; truncate + warning) | service helper + unit tests | Keywords from fixture appear in summary |
+| **1.3 S1b** | Echo request `start_date`/`end_date` when present (optional lean extension) | service | Dates in response when supplied |
+| **1.4 S1c** | `needs_summary[]` via decomposer **after** successful index+KG only | service + stub decomposer | CI stub; LLM optional |
+| **1.5 S1d** | Budget extract: currency phrases only; **never invent** | extractor + tests | No hallucinated budgets |
+| **1.6** | Tests + Postman + mark FR-IX-023 as-built when full TARGET ships | tests, postman, openspec | Green suite |
 
-**Non-goals in this phase:** ranked assets, ML rent, Call 3.
+**Non-goals in this phase:** ranked assets, ML rent, Call 3; public `documents[]` / `kg_*`.
 
-**Runtime dependency:** none beyond as-built ingest (InMemory + KG).
+**Runtime dependency:** none beyond ingest (InMemory + KG).
 
 #### Test implementation — Stage S1
 
@@ -387,11 +462,12 @@ Maps to `call1-ingest-response-project-summary.md` S1–S5 and OpenSpec proposal
 |-----------|--------|
 | **Independently testable?** | **Yes — fully in this repo’s default CI** |
 | **Does not need** | Pgvector, Neo4j, fleet mirror, Spring, multi-agent recommend, pricing |
-| **Test implementation** | (1) Pydantic schema unit tests for new fields; (2) API: POST fixture project text with dates → echoed dates + stub needs; (3) budget present / absent / never invent fixtures; (4) index/KG failure → no summary extraction; (5) existing ingest regressions green |
-| **Suggested modules** | `tests/test_ingest_from_project_spec_summary.py`, schema tests next to existing ingest tests |
-| **Fixtures / stubs** | Stub need decomposer; `tests/fixtures/project_specs/`; Postman optional |
+| **Test implementation (S1a lean)** | (1) Schema has lean fields only; (2) JSON + multipart: `ingest_id`/`user_id`/`user_requirement_summary`; (3) summary reflects project_text or file content; (4) no `documents`/`kg_built` on body; (5) Call 2 still works with returned `ingest_id`; (6) index/KG fail → 4xx, no summary success |
+| **Test implementation (S1c–d later)** | Stub needs; budget present/absent/never invent |
+| **Suggested modules** | `tests/test_recommendations_intake.py`, `tests/test_project_knowledge_api.py`, unit for summary helper |
+| **Fixtures / stubs** | Project text fixtures; Postman optional |
 | **CI job** | **default** |
-| **How later phases don’t block** | Additive fields; S7 may ignore until wired |
+| **How later phases don’t block** | Lean body is enough for Spring saga; S7 uses `ingest_id` only |
 
 ---
 
@@ -635,7 +711,7 @@ Maps to dual-plane §4.1 [5]–[8], [`multi-agent-synthesis-recommend-output.md`
 |-------|---------|
 | **Work** | **Add** public Call 3 HTTP (none today); map C/W/D orchestrator output → existing recommend response DTO (`results_by_need`); feature flag |
 | **Exit criteria** | Contract tests vs OpenAPI / schema |
-| **As-built note** | `RecommendationService` is in-process FR-010 MVP (seed + pricing_client) used in tests — **not** a public multi-agent route. Flag off keeps surface as ingest + Q&A only (or documented service-only path). |
+| **As-built note** | `RecommendationService` is in-process FR-010 MVP (seed + pricing_client) used in tests — **not** a public multi-agent route. Flag off keeps surface as ingest + Q&A only (or documented service-only path). **Do not** overload Call 2 `getassetrecommendations` (Q&A, §1.2.1) for ranked assets — that is this stage. |
 | **Test implementation** | (1) POST recommend with fixtures → 200 shape; (2) flag off → no multi-agent Call 3 / legacy service path unchanged; (3) gate fail → 4xx/structured error; (4) multi-need body matches golden |
 | **Suggested modules** | `tests/test_recommend_http_call3.py` |
 | **CI job** | **default** |
@@ -784,7 +860,7 @@ Every code-bearing PR **must** use the **PR description template** below (bare m
 
 | PR | Stage | Title | Test implementation (must ship with PR) |
 |----|-------|-------|----------------------------------------|
-| **PR-A** | S1 | Call 1 needs/dates/budget summary | Schema + API fixtures: dates, needs stub, budget null/present, KG fail skips extract; **BDD** G/W/T for summary fields |
+| **PR-A** | S1 | Call 1 lean body (`ingest_id`, `user_id`, `user_requirement_summary`) | Schema + API: summary from project_text/file; no technical fields; Call 2 still works; **BDD** G/W/T lean body |
 | **PR-B** | S2a | Ingest idempotency key | Double POST same key; different keys; **BDD** “same key → one ingest_id” |
 | **PR-C** | S5-I0 | DocumentStore factory | Factory unit; suite memory-green (**TDD** unit-first) |
 | **PR-D** | S3 | Agent indexing tool R1 + gate [4] | Tool vs service parity; flag-off unchanged; gate fail semantics; **BDD** gate refuse |
@@ -974,8 +1050,10 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | Item | Status |
 |------|--------|
 | Feasibility decisions | Complete (GO) |
-| OpenSpec TARGET for Call 1 | Written; runtime not shipped |
-| As-built ingest + Stage-1 Q&A | Live |
+| OpenSpec FR-IX-023 full Call 1 | Written TARGET; full needs/dates/budget not shipped |
+| Call 1 lean public body | Shipping contract: `ingest_id`, `user_id`, `user_requirement_summary`, `warnings` |
+| Internal recommendation routes | `/internal/v1/recommendations/...` |
+| As-built ingest + Stage-1 Q&A | Live (internal paths) |
 | Error JSON `{"error","message"}` | As-built |
 | Pricing Phase 1e | Largely as-built (`pricing_repository` + wiring); 2a + agent tool remain |
 | FR-010 service recommend (seed) | In-process / tests only — not public Call 3 |
