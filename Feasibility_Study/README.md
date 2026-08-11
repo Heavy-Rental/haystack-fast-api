@@ -35,5 +35,7 @@ These apply across studies unless a study explicitly narrows scope:
 | Document | Topic | Version |
 |----------|--------|---------|
 | [`implementation-plan.md`](./implementation-plan.md) | Stage catalog S0–S9 / S7.0–S7.7; Call 1 S1a–S1e (FR-IX-023 after S1d = free-text dates); Call 2 contract; TDD/BDD; PR template. | **3.4.0** |
+| [`phase2-s2a-haystack-implementation-plan.md`](./phase2-s2a-haystack-implementation-plan.md) | **Phase 2 / S2a only** — haystack-fast-api: `Idempotency-Key`, correlation logging, docs. | **1.0.0** |
+| [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) | **Phase 2 / S2b only** — Spring Boot: timeouts, Resilience4j, saga, runbook. | **1.0.0** |
 
 Normative product behaviour remains under [`../openspec/`](../openspec/). Pricing decision log: [`../docs/dynamic-pricing-masterplan.md`](../docs/dynamic-pricing-masterplan.md).

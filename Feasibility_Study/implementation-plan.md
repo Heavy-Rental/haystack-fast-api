@@ -501,6 +501,13 @@ S1e free-text date extract    (1.6)  ← **Done**
 
 Maps to `spring-boot-fastapi-integration-resilience.md` Phase C1.
 
+**Stage-scoped implementation plans (implementers):**
+
+| Stage | Perspective | Plan |
+|-------|-------------|------|
+| **S2a** | haystack-fast-api | [`phase2-s2a-haystack-implementation-plan.md`](./phase2-s2a-haystack-implementation-plan.md) |
+| **S2b** | Spring Boot REST API | [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) |
+
 | Step | Work | Owner | Exit criteria |
 |------|------|-------|---------------|
 | **2.1** | WebClient (or RestClient) with **per-operation timeouts** (ingest ≫ Q&A ≫ health) | Spring | Config documented |
