@@ -135,11 +135,17 @@ Read per-asset at prediction time (admin-editable via asset admin-portal tag) �
 
 **A related gap found and closed while removing that static table** (2026-08-11): the `ml-experiments` prototype's only protection against an unrecognized `category` was an *incidental* `KeyError` from its `pricing_tables.CATEGORY_BASE_RATE[category]` guardrail lookup — never a deliberate validation check. With that lookup gone (guardrails are now explicit parameters), nothing would have caught a bad `category` string at all: confirmed empirically that `feature_schema.encode_category()`'s `pd.Categorical(..., categories=CATEGORIES)` silently produces an all-zero one-hot row for an out-of-vocabulary value — no error, and the model would predict from that garbage row without complaint. `model.py`'s `predict_price(...)` now raises `ValueError` explicitly for any `category not in feature_schema.CATEGORIES`, with a hint pointing at `category_mapping.to_feature_name()` for the common case of passing a raw `AssetCategory.name` by mistake. `condition` is intentionally left as-is (an unrecognized value still raises pandas' `IntCastingNaNError` — unfriendly but real, matching the corrected prototype docstring from earlier the same day) — only the `category` gap was a genuine regression introduced by dropping the static table, so only it got a deliberate fix.
 
-### Internal quote API (added 2026-08-11)
+### Internal quote API (added 2026-08-11, implemented 2026-08-11)
 
-`POST /internal/v1/pricing/quote` — synchronous, service-to-service only (Spring Boot → Haystack), authoritative per-asset quote at checkout. Reuses this package's `predict_price(...)` — no second prediction path. Registered as its own router (`app/api/internal_pricing.py`), **not** mounted under the public `/api/v1` prefix; restrict at network/ops level, same interim posture as the manual retrain path (see Security notes) until real auth exists.
+`POST /internal/v1/pricing/quote` — synchronous, service-to-service only (Spring Boot → Haystack), authoritative per-asset quote at checkout. Reuses this package's `predict_price(...)` — no second prediction path. Registered as its own router (`app/api/internal_pricing.py`), included directly on the app in `app/main.py` (**not** via `app.api.api_router`, so it's outside the public `/api/v1` prefix); restrict at network/ops level, same interim posture as the manual retrain path (see Security notes) until real auth exists.
 
-**Hard dependency**: requires this capability's real per-asset guardrail clamping (`Asset.minDailyRate`/`maxDailyRate`) and the category-name mapping fix above to already be in place — building this against `ml-experiments/predict_price.py`'s static per-category stand-in would hand Spring Boot the wrong `min_daily_rate`/`max_daily_rate` shape it was already told to expect. Build after `feature/ml-3-pricing-service` lands (see Implementation branches).
+**Dependency (satisfied 2026-08-11)**: required this capability's real per-asset guardrail clamping (`Asset.minDailyRate`/`maxDailyRate`) and the category-name mapping fix above to already be in place — building this against `ml-experiments/predict_price.py`'s static per-category stand-in would have handed Spring Boot the wrong `min_daily_rate`/`max_daily_rate` shape it was already told to expect. Built after `feature/ml-3-pricing-service` landed. **Resequenced ahead of Phase 2b** (lean pipeline wiring) the same day — this endpoint never touches `pricing_client.py`/`predict_price_adapter.py`/`recommendations.py`, so it had no dependency on that work; see `docs/dynamic-pricing-masterplan.md` "Phase 2b/2c sequencing and lean 2b scope" (see Implementation branches).
+
+**Implementation notes (2026-08-11)**:
+- New `app/services/pricing/repository.py::get_asset_for_pricing()` (+ `AssetPricingRow` dataclass) resolves category (via `category_mapping.to_feature_name()`)/condition/capacity/platform_height/guardrail bounds from `asset_id` alone, through the same tiered `read_resilience` resolver as every other pricing read — no second fallback implementation for this read either. Returns `None` on an unresolvable `asset_id`; the endpoint turns that into a per-item error (`error: "asset_not_found"`), not a raised exception.
+- Each item resolves its own schema **twice**: once for the `get_asset_for_pricing()` guardrail read, once more inside `predict_price(...)` itself (which always does its own resolution when given `db`/`start_date`/`end_date` and has no parameter to accept a precomputed one). Both are real tiered resolutions against the same resolver — not a second implementation — just not collapsed into one call. The item's `degraded` flag ORs both outcomes so it never under-reports. A single `predict_price(...)` call's own internal reads still never mix schemas (unchanged). A `PricingSchemaUnavailable` (cold start) is deliberately **not** caught per-item — it's a systemic condition, not asset-specific, so it propagates to the global exception handler (500) rather than being reported as 1-of-N per-item errors.
+- `asset_id` is typed `int` in `app/schemas/pricing.py`, matching the real `Asset.id` primary key (`app/models/asset.py`) — one deliberate resolution of this section's JSON examples below, which use illustrative string codes (the same placeholder convention `app/pipelines/seed_fleet.py` uses for scratch fixtures, not the real schema).
+- 5 new tests: `tests/test_internal_pricing_api.py` — multi-item shape, per-item guardrail bounds from real `Asset` rows, per-item `degraded` independence, unresolvable `asset_id` per-item error, route-inventory (via `app.openapi()["paths"]`, not `app.routes` — this FastAPI version wraps `include_router()` results in an internal `_IncludedRouter` with no stable public `.path` to introspect directly).
 
 Request:
 ```json
@@ -261,11 +267,12 @@ app/services/pricing/           # Phase 2a — implemented 2026-08-11 (this capa
   model.py, train.py, feature_schema.py, pricing_tables.py, category_mapping.py,
   repository.py, read_resilience.py, artifacts/model.pkl, artifacts/current.json
 
-app/api/internal_pricing.py     # Phase 2c, NOT yet built: POST /internal/v1/pricing/quote
-                                 # (service-to-service, not under the public /api/v1 router;
-                                 # hard-depended on app/services/pricing/model.py's real
-                                 # per-asset guardrail clamping + category-name mapping,
-                                 # both now implemented and ready for this to build against)
+app/api/internal_pricing.py     # Phase 2c -- implemented 2026-08-11: POST /internal/v1/pricing/quote
+                                 # (service-to-service, registered directly on the app in
+                                 # app/main.py, not via api_router / the public /api/v1 prefix;
+                                 # reuses app/services/pricing/model.py's predict_price(...) --
+                                 # no second prediction path)
+app/schemas/pricing.py          # Phase 2c -- request/response models for the endpoint above
 
 app/services/pricing_client.py  # as-built recommend adapter — still calls the ml-experiments
                                  # prototype; production swap to app.services.pricing is
@@ -308,8 +315,8 @@ uv run pytest tests/test_pricing_feature_schema.py tests/test_pricing_model.py \
 |--------|--------|
 | `HR-87-ml-2-d-production-db-wiring-for-period-utilization` | **Done (2026-08-10)** — Phase 1e: read-only models, `pricing_repository.py`, `pricing_read_resilience.py` tiered fallback; 20 new unit tests |
 | `feature/ml-3-pricing-service` | **Done (2026-08-11)** — scaffolded package, ported schema, built `model.py`/`train.py`, real per-asset guardrail clamping, relocated Phase 1e's read models/repositories in as `repository.py`/`read_resilience.py`, fixed the category-name mismatch (`category_mapping.py`); 24 new unit tests, 144 total passing, live-verified against all 27 real assets |
-| `feature/ml-4-integration-tests` | **Not started** — wire pipeline (swap `pricing_client.py` to `app.services.pricing.model`), unit tests, manual retrain endpoint |
-| `feature/ml-6-internal-pricing-api` | **Not started** — `POST /internal/v1/pricing/quote`; its hard dependency (`feature/ml-3-pricing-service`) is now satisfied, so this is unblocked whenever picked up; can run alongside/after `feature/ml-4-integration-tests` (shares the same production `model.py`) |
+| `feature/ml-6-internal-pricing-api` | **Done (2026-08-11)** — `POST /internal/v1/pricing/quote` (`app/api/internal_pricing.py`, `app/schemas/pricing.py`, `repository.py::get_asset_for_pricing()`); 5 new unit tests, 149 total passing. Resequenced ahead of `feature/ml-4-integration-tests` (lean Phase 2b) — see "Internal quote API" above |
+| `feature/ml-4-integration-tests` | **Not started** — wire pipeline (swap `pricing_client.py` to `app.services.pricing.model`), pipeline-integration tests only (guardrail/feature-schema tests already covered), manual retrain endpoint moved to demo-prep subtask |
 
 ## N — Norms
 

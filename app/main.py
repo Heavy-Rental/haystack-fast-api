@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api import api_router
+from app.api.internal_pricing import router as internal_pricing_router
 from app.config import get_settings
 from app.core.errors import register_exception_handlers
 
@@ -50,6 +51,12 @@ def create_app() -> FastAPI:
     )
     register_exception_handlers(app)
     app.include_router(api_router)
+    # Deliberately NOT part of api_router: internal, service-to-service only
+    # (Spring Boot -> Haystack), never renter-facing -- see
+    # app/api/internal_pricing.py's module docstring and
+    # openspec/specs/dynamic-pricing/spec.md "Requirement: No renter-facing
+    # predict route".
+    app.include_router(internal_pricing_router)
     return app
 
 

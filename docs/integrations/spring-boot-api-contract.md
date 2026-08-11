@@ -1,0 +1,234 @@
+# Haystack API Contract — Spring Boot Integration
+
+| Field | Value |
+|-------|--------|
+| **Document type** | External integration contract (caller-facing — written for the Spring Boot team, not internal reasoning) |
+| **Status** | Draft — pending Spring Boot review, see "Open items" below |
+| **Audience** | Spring Boot backend engineers integrating against `haystack-fast-api` |
+| **Caller** | Spring Boot only. No route below is called directly by a browser/mobile client. |
+| **Base URL (local dev)** | `http://localhost:8000` |
+| **Auth** | **None yet** (deferred project-wide). Restrict access at network/ops level until an auth SDD exists — do not treat any route below as safe to expose publicly. |
+| **Internal reasoning (Haystack maintainers only, not required reading for integration)** | [`openspec/specs/dynamic-pricing/`](../../openspec/specs/dynamic-pricing/), [`openspec/specs/recommendation-intake/`](../../openspec/specs/recommendation-intake/), [`openspec/project.md`](../../openspec/project.md) |
+
+---
+
+## Endpoint inventory
+
+| Endpoint | Method | Purpose | Status |
+|---|---|---|---|
+| `/health` | GET | Liveness / readiness | Live |
+| `/api/v1/recommendations/from-project-spec` | POST | Ingest a project spec (text and/or file), build a knowledge graph | Live |
+| `/api/v1/recommendations/project-knowledge/query` | POST | Multi-agent Q&A over a previously ingested project | Live |
+| `/internal/v1/pricing/quote` | POST | Authoritative, guardrail-clamped price per asset at checkout | Live |
+
+---
+
+## Conventions common to every endpoint
+
+- **Content-Type**: `application/json`, except `/from-project-spec` which also accepts `multipart/form-data` (for file upload).
+- **Error shape**: every non-2xx response is `{"error": "<code>", "message": "<human-readable string>"}`.
+
+  | HTTP status | `error` code |
+  |---|---|
+  | 400 | `bad_request` (includes request validation failures) |
+  | 401 | `unauthorized` |
+  | 403 | `forbidden` |
+  | 404 | `not_found` |
+  | 409 | `conflict` |
+  | 422 | `bad_request` |
+  | 500 | `internal_error` (unexpected server-side failure — treat as retryable/alertable, not a client bug) |
+
+---
+
+## `GET /health`
+
+Liveness/readiness check. No auth, no request body.
+
+**Response `200`**
+```json
+{ "status": "ok", "database": "up" }
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `status` | `"ok" \| "degraded"` | Overall service status |
+| `database` | `"up" \| "down"` | PostgreSQL connectivity at request time |
+
+`status: "degraded"` can occur with `database: "down"` — the process is still up, but pricing/recommend routes that need DB access will fail.
+
+---
+
+## `POST /api/v1/recommendations/from-project-spec`
+
+Ingests a project description (free text and/or an uploaded file), always builds a knowledge graph on success (KG build failure fails the whole request), and returns an `ingest_id` used by the Q&A endpoint below.
+
+**Request — `application/json`**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `user_id` | string | yes | Stable identifier; tenants documents/KG artifacts by this value |
+| `user_name` | string | no | Display name only, echoed back |
+| `project_text` | string | yes | Free-text project description |
+| `start_date` | date (`YYYY-MM-DD`) | no | Rental window start |
+| `end_date` | date (`YYYY-MM-DD`) | no | Rental window end; must be ≥ `start_date` |
+| `options.include_pricing` | bool | no (default `true`) | Whether to attach pricing fields downstream |
+
+**Request — `multipart/form-data`**: same fields as form parts, plus optional `file` (binary). Either `project_text` or `file` should carry real content.
+
+**Response `200`**
+
+```json
+{
+  "ingest_id": "ing_a1b2c3d4",
+  "user_id": "user_demo",
+  "user_name": null,
+  "data_kind": "unstructured",
+  "mime_types_seen": ["text/plain"],
+  "filenames": [],
+  "structured_count": 0,
+  "unstructured_count": 1,
+  "document_count": 1,
+  "structured_document_count": 0,
+  "unstructured_document_count": 1,
+  "chunk_count": 3,
+  "documents_written": 3,
+  "documents": [
+    {"content_preview": "Requires a 20-ton excavator...", "content_length": 412, "meta": {}, "data_kind": "unstructured", "has_embedding": true}
+  ],
+  "kg_built": true,
+  "kg_node_count": 12,
+  "kg_relationship_count": 9,
+  "kg_artifact_path": "artifacts/kg/user_demo/kg_ing_a1b2c3d4.json",
+  "kg_transform_applied": false,
+  "warnings": []
+}
+```
+
+**Caveat worth knowing**: `ingest_id` and its underlying session are **process-local, in-memory** — they do not survive a Haystack restart/redeploy. A `kg_artifact_path` can reload the knowledge graph after restart, but the vector store stays empty until a fresh ingest. If Spring Boot needs to survive Haystack restarts mid-session, re-ingest rather than relying on a stale `ingest_id`.
+
+---
+
+## `POST /api/v1/recommendations/project-knowledge/query`
+
+Multi-agent Q&A (vector search + knowledge-graph query + synthesis) scoped to one prior ingest.
+
+**Request**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `user_id` | string | yes | Must match the `user_id` used at ingest |
+| `ingest_id` | string | yes | From `/from-project-spec`'s response |
+| `query` | string | yes | Natural-language question |
+| `top_k` | int (1–50) | no | Retrieval depth override |
+| `kg_artifact_path` | string | no | Reload KG-1 if the in-memory session was lost (see caveat above) |
+
+**Response `200`**
+
+```json
+{
+  "user_id": "user_demo",
+  "ingest_id": "ing_a1b2c3d4",
+  "query": "What excavator and soil conditions are specified?",
+  "answer": "The project requires a 20-ton excavator suited for soft clay...",
+  "sources_used": ["project_vector_search", "project_kg_query"],
+  "research_hits": [{"content": "...", "score": 0.83, "meta": {}}],
+  "graph_hits": [{"content": "...", "score": null, "meta": {}}],
+  "tool_traces": [{"agent": "research", "tool": "project_vector_search", "query": "excavator soil", "hit_count": 3}],
+  "research_notes": null,
+  "graph_notes": null
+}
+```
+
+**Error case**: `404 not_found` when `ingest_id` doesn't resolve to a live session (expired, wrong `user_id`, or lost to a restart — see caveat above).
+
+---
+
+## `POST /internal/v1/pricing/quote`
+
+Synchronous, authoritative, guardrail-clamped price per asset for a proposed rental window — intended for checkout, not browse/recommend (recommend-time pricing already comes back on the ingest/recommend response separately). Resolves `category`/`condition`/`capacity`/`platform_height`/rate bounds **server-side** from `asset_id` — the request never supplies them.
+
+**Request**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `rental_plan_id` | string | yes | Opaque identifier, echoed back — **not validated against Haystack's DB**; Spring Boot's own record |
+| `start_date` | date | yes | Rental window start |
+| `end_date` | date | yes | Rental window end; must be ≥ `start_date` |
+| `distance_km` | float (≥ 0) | yes | Delivery distance for the whole request (one site assumed) |
+| `items` | array | yes, ≥ 1 item | See below |
+| `items[].item_id` | string | yes | Caller-defined identifier for correlating this item in the response |
+| `items[].asset_id` | integer | yes | Real Haystack `Asset.id` primary key — **not** a string code |
+
+**Request example**
+```json
+{
+  "rental_plan_id": "plan_123",
+  "start_date": "2026-09-01",
+  "end_date": "2026-09-08",
+  "distance_km": 18.4,
+  "items": [
+    { "item_id": "item_1", "asset_id": 1 },
+    { "item_id": "item_2", "asset_id": 3 }
+  ]
+}
+```
+
+**Response `200`** (always `200` even if individual items fail — see per-item `error` below; only a systemic outage returns a non-2xx)
+
+```json
+{
+  "rental_plan_id": "plan_123",
+  "currency": "SGD",
+  "deposit_rate": 0.30,
+  "degraded": false,
+  "results": [
+    {
+      "item_id": "item_1",
+      "asset_id": 1,
+      "daily_rate": 380.0,
+      "total_price": 2660.0,
+      "was_clamped": true,
+      "min_daily_rate": 380.0,
+      "max_daily_rate": 520.0,
+      "model_version": "prod-2026-08-07",
+      "degraded": false,
+      "error": null
+    }
+  ],
+  "warnings": []
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `currency` | string | Always `"SGD"` today |
+| `deposit_rate` | float | Fixed constant (`0.30`); read from here rather than hardcoding a copy |
+| `degraded` | bool | Top-level convenience flag = OR of every item's own `degraded` — not a shared resolution |
+| `results[].daily_rate` / `total_price` | float \| null | `null` only when `error` is set |
+| `results[].was_clamped` | bool \| null | Whether the model's raw output was outside `[min_daily_rate, max_daily_rate]` and got clamped |
+| `results[].degraded` | bool \| null | This item's own read fell back to a secondary data source (still a real value, not fabricated) |
+| `results[].error` | string \| null | Set (`"asset_not_found"`, `"unrecognized_category: ..."`) when this item couldn't be priced — every other pricing field is `null` on that item, but the rest of the batch still returns normally |
+
+**Known, expected behavior — not a bug**: `was_clamped: true` is common for multi-day rentals today (a calibration characteristic being tracked internally, not a defect in this endpoint).
+
+**Failure modes**:
+- Per-item failure (bad `asset_id`, unrecognized category) → `200` with that item's `error` set, rest of the batch unaffected.
+- Systemic failure (neither Haystack data source is reachable — cold start) → `500 internal_error`, no partial response; safe to retry.
+
+---
+
+## Open items — needs Spring Boot review before this is finalized
+
+1. **Auth**: none of the routes above are authenticated yet. Confirm what network-level restriction (VPC, mTLS, IP allowlist, etc.) is protecting them in each environment until a real auth story lands.
+2. **`ingest_id` session lifetime**: currently process-local/in-memory, lost on Haystack restart. Flag if your integration needs this to survive restarts — the fix (persisting sessions) isn't built yet.
+
+**Resolved**: `results[].error` field on `/internal/v1/pricing/quote` — kept as specified (`error: string | null`, values `"asset_not_found"` / `"unrecognized_category: ..."`, every other pricing field `null` on that item). It exists to satisfy the "clear per-item error, no failed batch" requirement locked before this endpoint was built. Flag directly to us if this shape doesn't fit your DTO once you're integrating — not blocking in the meantime.
+
+---
+
+## Change log
+
+| Date | Note |
+|------|------|
+| 2026-08-11 | Initial draft, compiled from `app/schemas/*.py` and `app/api/*.py` as of `feature/ml-6-internal-pricing-api`. Covers all 4 live routes Spring Boot calls. |
+| 2026-08-11 (later) | Resolved the `results[].error` open item — kept as specified, no shape change. Dropped the Postman collection item — decided not to build one for this endpoint; the field tables and JSON examples in this doc are the integration reference. |
