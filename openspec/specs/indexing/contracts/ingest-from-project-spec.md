@@ -4,7 +4,7 @@
 |-------|--------|
 | **Capability** | [`../spec.md`](../spec.md) (indexing) |
 | **Design** | [`../design.md`](../design.md) |
-| **Status** | **as-built lean public body (S1a)** + **TARGET** full FR-IX-023 (`needs_summary[]`, dates, budget) |
+| **Status** | **as-built lean public body (S1a + S1b dates echo)** + **TARGET** full FR-IX-023 (`needs_summary[]`, free-text date extract, budget) |
 | **DTO (as-built)** | `IngestFromProjectSpecResponse` (`app/schemas/indexing.py`) |
 | **Standards** | OpenSpec behaviour · Spec-kit contract tables · OpenSPDD (prompt/spec before code) |
 
@@ -47,15 +47,19 @@ Sources: multipart file uploads are packaged as Haystack `ByteStream` with `mime
 | `ingest_id` | string | `ing_` + hex — **required handle for Call 2 / Call 3** |
 | `user_id` | string | Echo of request |
 | `user_requirement_summary` | string | Deterministic summary of `project_text` or **extracted** multipart content (not raw bytes); may be truncated |
+| `tentative_start_date` | date \| null | **S1b as-built:** echo request `start_date` when supplied; else `null` (no free-text extract yet) |
+| `tentative_end_date` | date \| null | **S1b as-built:** echo request `end_date` when supplied; else `null` |
 | `warnings` | string[] | Soft issues (e.g. truncated summary, conversion soft warnings); empty when none |
 
-### Example (as-built lean)
+### Example (as-built lean + S1b)
 
 ```json
 {
   "ingest_id": "ing_a1b2c3d4e5f6",
   "user_id": "user_demo",
   "user_requirement_summary": "Indoor elevated work ~8m; need scissors lift on soft clay.",
+  "tentative_start_date": "2026-09-01",
+  "tentative_end_date": "2026-09-12",
   "warnings": []
 }
 ```
@@ -70,7 +74,7 @@ Sources: multipart file uploads are packaged as Haystack `ByteStream` with `mime
 
 ### As-built gaps vs full FR-IX-023 TARGET
 
-No structured `needs_summary[]`, no `tentative_start_date` / `tentative_end_date`, no `expected_budget` on the live lean body yet.
+No structured `needs_summary[]`, no free-text date extraction when request omits dates, no `expected_budget` on the live lean body yet. Request date **echo** is as-built (S1b).
 
 ---
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -190,6 +191,8 @@ class IndexingIngestService:
         user_name: str | None = None,
         project_text: str | None = None,
         file_sources: list[ByteStream] | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
     ) -> IngestFromProjectSpecResponse:
         uid = (user_id or "").strip()
         if not uid:
@@ -364,6 +367,12 @@ class IndexingIngestService:
                     "kg_relationship_count": kg_relationship_count,
                     "kg_transform_applied": kg_transform_applied,
                     "user_requirement_summary": user_requirement_summary,
+                    "tentative_start_date": (
+                        start_date.isoformat() if start_date is not None else None
+                    ),
+                    "tentative_end_date": (
+                        end_date.isoformat() if end_date is not None else None
+                    ),
                 },
             )
         )
@@ -383,5 +392,7 @@ class IndexingIngestService:
             ingest_id=ingest_id,
             user_id=uid,
             user_requirement_summary=user_requirement_summary,
+            tentative_start_date=start_date,
+            tentative_end_date=end_date,
             warnings=public_warnings,
         )

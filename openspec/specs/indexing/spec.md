@@ -366,16 +366,43 @@ MUST NOT treat this as ranked fleet recommendations or ML rent prices (`results_
 - **THEN** the body includes `ingest_id`, `user_id`, and non-empty `user_requirement_summary`
 - **AND** does not include `documents`, `kg_built`, `recommendation_id`, or `results_by_need`
 
+### Requirement: Tentative dates echo on ingest response (as-built S1b)
+After successful index + mandatory KG, the live success body MUST include:
+
+1. **`tentative_start_date`** — echo request `start_date` when provided; else `null`  
+2. **`tentative_end_date`** — echo request `end_date` when provided; else `null`  
+
+MUST apply to both JSON and multipart requests.  
+MUST NOT invent dates from document text in S1b (free-text extract remains TARGET).  
+When both request dates are set, `end_date` MUST be on or after `start_date` or the request fails with **400**.  
+(Trace: partial FR-IX-023)  
+**Status:** **as-built (S1b)**.
+
+#### Scenario: Dates from request echoed
+- **GIVEN** request supplies valid `start_date` and `end_date`
+- **WHEN** `POST .../submitprojectspecification` succeeds
+- **THEN** `tentative_start_date` / `tentative_end_date` echo the request window
+
+#### Scenario: Dates omitted are null
+- **GIVEN** request omits both dates
+- **WHEN** ingest succeeds
+- **THEN** `tentative_start_date` and `tentative_end_date` are null
+
+#### Scenario: Invalid date window rejected
+- **GIVEN** request supplies `end_date` before `start_date`
+- **WHEN** ingest is attempted (JSON or multipart)
+- **THEN** the response is HTTP 400 with the shared error shape
+
 ### Requirement: Full project-spec summary on ingest response (TARGET FR-IX-023)
-After lean S1a, the live success body MAY be enriched with:
+After lean S1a + S1b date echo, the live success body MAY be enriched with:
 
 1. **`needs_summary`** — structured needs (description; optional quantity / equipment_hints / need_id).  
-2. **`tentative_start_date` / `tentative_end_date`** — from request when provided, else extracted when confidently found, else null.  
+2. **Free-text date extraction** — when request omits dates, extract from project-spec when confidently found, else null.  
 3. **`expected_budget`** — amount (+ currency when known) extracted when confidently found, else null; MUST NOT invent a budget.  
 
 MUST NOT use `options.include_pricing` as a budget amount (boolean only).  
 (Trace: FR-IX-023)  
-**Status:** **TARGET** — not as-built beyond lean `user_requirement_summary`.
+**Status:** **TARGET** — not as-built beyond lean summary + request date echo.
 
 #### Scenario: Needs summary present on target success
 - **GIVEN** target implementation and successful ingest of a project-spec that describes equipment needs
@@ -383,11 +410,11 @@ MUST NOT use `options.include_pricing` as a budget amount (boolean only).
 - **THEN** the body includes `ingest_id` and non-empty `needs_summary` (or empty list + warning if no needs could be inferred)
 - **AND** does not include `recommendation_id` or `results_by_need`
 
-#### Scenario: Dates from request preferred
-- **GIVEN** target implementation and request supplies valid `start_date` and `end_date`
+#### Scenario: Dates from document when request omits (target)
+- **GIVEN** target implementation and request omits dates but the project-spec states a rental window confidently
 - **WHEN** ingest succeeds
-- **THEN** `tentative_start_date` / `tentative_end_date` echo the request window
-- **AND** if the document also states dates, conflict MAY be noted in `warnings` (request wins unless product overrides)
+- **THEN** `tentative_*` MAY be filled from the document
+- **AND** if the document also conflicts with a future request override, request wins unless product overrides
 
 #### Scenario: Budget extracted or null
 - **GIVEN** target implementation
@@ -455,6 +482,7 @@ Sources MUST be classified according to the following normative extension / MIME
 | Version | Date | Notes |
 |---------|------|--------|
 | **0.5.0** | 2026-08-11 | **S1a lean as-built:** public body `ingest_id` + `user_id` + `user_requirement_summary` + `warnings`; internal paths `/internal/v1/recommendations/...`; full FR-IX-023 still TARGET |
+| **0.5.1** | 2026-08-11 | **S1b as-built:** echo request dates as `tentative_start_date` / `tentative_end_date` (JSON + multipart); free-text date extract still TARGET |
 
 
 | Version | Date | Notes |

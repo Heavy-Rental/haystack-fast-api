@@ -4,7 +4,14 @@ from fastapi.testclient import TestClient
 
 ENDPOINT = "/internal/v1/recommendations/submitprojectspecification"
 
-LEAN_KEYS = {"ingest_id", "user_id", "user_requirement_summary", "warnings"}
+LEAN_KEYS = {
+    "ingest_id",
+    "user_id",
+    "user_requirement_summary",
+    "tentative_start_date",
+    "tentative_end_date",
+    "warnings",
+}
 TECHNICAL_KEYS = {
     "documents",
     "kg_built",
@@ -17,7 +24,7 @@ TECHNICAL_KEYS = {
 
 
 def _assert_lean_body(body: dict) -> None:
-    assert set(body.keys()) <= LEAN_KEYS | set(body.keys())
+    assert set(body.keys()) <= LEAN_KEYS
     for key in TECHNICAL_KEYS:
         assert key not in body
     assert body["ingest_id"].startswith("ing_")
@@ -25,6 +32,8 @@ def _assert_lean_body(body: dict) -> None:
     assert isinstance(body["user_requirement_summary"], str)
     assert body["user_requirement_summary"].strip()
     assert isinstance(body["warnings"], list)
+    assert "tentative_start_date" in body
+    assert "tentative_end_date" in body
 
 
 def test_from_project_spec_json_unstructured(client: TestClient) -> None:
@@ -44,6 +53,8 @@ def test_from_project_spec_json_unstructured(client: TestClient) -> None:
     _assert_lean_body(body)
     assert body["user_id"] == "user_demo"
     assert "scissors" in body["user_requirement_summary"].lower()
+    assert body["tentative_start_date"] == "2026-09-01"
+    assert body["tentative_end_date"] == "2026-09-12"
     assert "results_by_need" not in body
 
 
@@ -100,6 +111,8 @@ def test_optional_dates_omitted(client: TestClient) -> None:
     _assert_lean_body(body)
     assert body["user_id"] == "u1"
     assert "fork" in body["user_requirement_summary"].lower()
+    assert body["tentative_start_date"] is None
+    assert body["tentative_end_date"] is None
 
 
 def test_multipart_text_file_unstructured(client: TestClient) -> None:
@@ -119,6 +132,26 @@ def test_multipart_text_file_unstructured(client: TestClient) -> None:
     _assert_lean_body(body)
     assert body["user_id"] == "u_mp"
     assert "forklift" in body["user_requirement_summary"].lower()
+    assert body["tentative_start_date"] == "2026-09-01"
+    assert body["tentative_end_date"] == "2026-09-12"
+
+
+def test_multipart_invalid_date_window_returns_400(client: TestClient) -> None:
+    response = client.post(
+        ENDPOINT,
+        data={
+            "user_id": "u1",
+            "start_date": "2026-09-12",
+            "end_date": "2026-09-01",
+        },
+        files={
+            "file": ("project.txt", b"Need excavator", "text/plain"),
+        },
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"] == "bad_request"
+    assert "end_date" in body["message"].lower() or "start_date" in body["message"].lower()
 
 
 def test_multipart_csv_structured(client: TestClient) -> None:
