@@ -28,6 +28,8 @@
 
 **Not multi-agent recommend:** Call 1 is HTTP **ingest response** enrichment (service path, or Coordinator **[4]** gate when agent-fronted). It is **not** Coordinator synthesis **[8]**, not fleet/pricing **Workers**, and not Call 3 `results_by_need`.
 
+**Not multi-agent recommend:** Call 1 is HTTP **ingest response** enrichment (service path, or Coordinator **[4]** gate when agent-fronted). It is **not** Coordinator synthesis **[8]**, not fleet/pricing **Workers**, and not the same as Call 3 `results_by_need`.
+
 ---
 
 ## 2. Shipping lean body vs full TARGET
