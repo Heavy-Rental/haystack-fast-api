@@ -23,7 +23,10 @@ from app.core.exceptions import BadRequestError
 from app.pipelines.indexing.embedder_factory import build_document_embedder
 from app.pipelines.indexing.mime_map import MIME_TEXT_PLAIN, guess_mime_from_filename
 from app.pipelines.indexing.pipeline import build_indexing_pipeline, run_indexing_pipeline
-from app.schemas.indexing import IngestFromProjectSpecResponse
+from app.schemas.indexing import IngestFromProjectSpecResponse, NeedSummaryItem
+from app.schemas.recommendations import DecomposedNeed
+from app.services.need_decomposer import NeedDecomposer
+from app.services.need_decomposer_factory import create_need_decomposer
 from app.services.project_knowledge_session import (
     ProjectKnowledgeSession,
     get_project_knowledge_registry,
@@ -140,6 +143,26 @@ def _extract_text_from_documents(documents: list[Document]) -> str:
     return "\n\n".join(parts)
 
 
+def _needs_summary_from_decomposed(
+    needs: list[DecomposedNeed],
+) -> list[NeedSummaryItem]:
+    """Map internal DecomposedNeed rows to public Call 1 need summary items."""
+    items: list[NeedSummaryItem] = []
+    for need in needs:
+        description = (need.description or "").strip()
+        if not description:
+            continue
+        items.append(
+            NeedSummaryItem(
+                need_id=need.need_id or None,
+                description=description,
+                equipment_hints=list(need.equipment_hints or []),
+                quantity=need.quantity if need.quantity is not None else None,
+            )
+        )
+    return items
+
+
 def _build_pipeline_for_store(document_store: InMemoryDocumentStore) -> Pipeline:
     settings = get_settings()
     mode = str(settings.indexing_embedder or "mock").strip().lower()
@@ -179,10 +202,12 @@ class IndexingIngestService:
         *,
         pipeline: Pipeline | None = None,
         document_store: InMemoryDocumentStore | None = None,
+        need_decomposer: NeedDecomposer | None = None,
     ) -> None:
         # Prefer an explicit pipeline (tests). Otherwise build per-ingest store.
         self._pipeline = pipeline
         self._document_store = document_store
+        self._need_decomposer = need_decomposer
 
     def ingest_from_project_spec(
         self,
@@ -349,6 +374,18 @@ class IndexingIngestService:
         )
         public_warnings.extend(summary_warnings)
 
+        # S1c: structured needs after successful index+KG (stub decomposer in CI).
+        decomposer = self._need_decomposer or create_need_decomposer()
+        try:
+            decomposed = decomposer.decompose(summary_source)
+        except Exception as exc:  # noqa: BLE001 — soft-fail needs; ingest still OK
+            logger.warning("need decomposer failed: %s", exc)
+            decomposed = []
+            public_warnings.append("needs_summary unavailable (decomposer error)")
+        needs_summary = _needs_summary_from_decomposed(list(decomposed or []))
+        if not needs_summary:
+            public_warnings.append("needs_summary empty")
+
         # Register dual knowledge sources for Stage-1 multi-agent tools.
         get_project_knowledge_registry().put(
             ProjectKnowledgeSession(
@@ -373,19 +410,21 @@ class IndexingIngestService:
                     "tentative_end_date": (
                         end_date.isoformat() if end_date is not None else None
                     ),
+                    "needs_summary": [item.model_dump() for item in needs_summary],
                 },
             )
         )
 
         logger.info(
             "indexing_ingest ingest_id=%s user_id=%s data_kind=%s chunks=%s "
-            "written=%s kg_built=%s",
+            "written=%s kg_built=%s needs=%s",
             ingest_id,
             uid,
             data_kind,
             chunk_count,
             documents_written,
             kg_built,
+            len(needs_summary),
         )
 
         return IngestFromProjectSpecResponse(
@@ -394,5 +433,6 @@ class IndexingIngestService:
             user_requirement_summary=user_requirement_summary,
             tentative_start_date=start_date,
             tentative_end_date=end_date,
+            needs_summary=needs_summary,
             warnings=public_warnings,
         )

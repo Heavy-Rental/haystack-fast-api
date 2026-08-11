@@ -399,21 +399,33 @@ After S1a + S1b, complete FR-IX-023 in this **implementation order** (see [`Feas
 
 | Order | Stage | Work | Status |
 |-------|-------|------|--------|
-| 1 | **S1c** | `needs_summary[]` via decomposer after index+KG | TARGET |
+| 1 | **S1c** | `needs_summary[]` via decomposer after index+KG | **as-built** |
 | 2 | **S1d** | `expected_budget` extract; never invent | TARGET |
 | 3 | **S1e** | Free-text / file date extract when request omits dates | TARGET |
-| 4 | **1.7** | Mark FR-IX-023 as-built when S1c+S1d+S1e green | TARGET |
+| 4 | **1.7** | Mark full FR-IX-023 as-built when S1c+S1d+S1e green | TARGET |
 
 MUST NOT use `options.include_pricing` as a budget amount (boolean only).  
 MUST NOT treat summary as ranked fleet recommendations or ML rent (`results_by_need` / Call 3).  
 (Trace: FR-IX-023)  
-**Status:** **TARGET** until S1c + S1d + S1e ship; **S1e MUST run after S1d** in the plan.
+**Status:** **partial as-built** (S1a–S1c); full FR-IX-023 after S1d + S1e; **S1e MUST run after S1d**.
 
-#### Scenario: Needs summary present (S1c target)
-- **GIVEN** S1c implementation and successful ingest of a project-spec that describes equipment needs
+### Requirement: Needs summary on ingest response (as-built S1c)
+After successful index + mandatory KG, the live success body MUST include **`needs_summary`** (array), produced by the configured need decomposer (`NEED_DECOMPOSER=stub|llm`) on project text or extracted file content.  
+Empty list + warning is allowed when no needs can be inferred; MUST NOT invent fleet inventory or rates.  
+(Trace: partial FR-IX-023 / S1c)  
+**Status:** **as-built (S1c)**.
+
+#### Scenario: Needs summary present (S1c as-built)
+- **GIVEN** successful ingest of a project-spec with non-empty content and stub decomposer
 - **WHEN** `POST .../submitprojectspecification` succeeds
-- **THEN** the body includes `ingest_id` and non-empty `needs_summary` (or empty list + warning if no needs could be inferred)
+- **THEN** the body includes non-empty `needs_summary` with at least `description`
 - **AND** does not include `recommendation_id` or `results_by_need`
+
+#### Scenario: Needs summary empty with warning
+- **GIVEN** decomposer returns no needs
+- **WHEN** ingest succeeds
+- **THEN** `needs_summary` is an empty array
+- **AND** `warnings` MAY mention that needs_summary is empty
 
 #### Scenario: Budget extracted or null (S1d target)
 - **GIVEN** S1d implementation
@@ -490,6 +502,7 @@ Sources MUST be classified according to the following normative extension / MIME
 | **0.5.0** | 2026-08-11 | **S1a lean as-built:** public body `ingest_id` + `user_id` + `user_requirement_summary` + `warnings`; internal paths `/internal/v1/recommendations/...`; full FR-IX-023 still TARGET |
 | **0.5.1** | 2026-08-11 | **S1b as-built:** echo request dates as `tentative_start_date` / `tentative_end_date` (JSON + multipart); free-text date extract still TARGET |
 | **0.5.2** | 2026-08-11 | FR-IX-023 delivery order: S1c needs → S1d budget → **S1e free-text dates** (after S1d) → 1.7 as-built; aligns with implementation-plan Phase 1 |
+| **0.5.3** | 2026-08-11 | **S1c as-built:** `needs_summary[]` via need decomposer after index+KG; S1d/S1e still TARGET |
 
 
 | Version | Date | Notes |

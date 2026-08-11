@@ -38,11 +38,12 @@ POST /internal/v1/recommendations/submitprojectspecification
 └─────────────────────────────────────────────────────────────┘
   │
   ▼
-IngestFromProjectSpecResponse (lean public body — S1a + S1b)
+IngestFromProjectSpecResponse (lean public body — S1a + S1b + S1c)
   as-built: ingest_id, user_id, user_requirement_summary,
-            tentative_start/end_date (echo request when supplied), warnings[]
-  TARGET (FR-IX-023): + needs_summary, free-text date extract,
-                      expected_budget (not ranked assets / ML rent)
+            tentative_start/end_date (echo request when supplied),
+            needs_summary[], warnings[]
+  TARGET (FR-IX-023 remainder): expected_budget (S1d), free-text dates (S1e)
+                                (not ranked assets / ML rent)
   Technical documents[] / kg_* stay internal (session meta)
 
   │  optional Stage-1 Q&A (Call 2)

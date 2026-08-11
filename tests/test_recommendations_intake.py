@@ -10,6 +10,7 @@ LEAN_KEYS = {
     "user_requirement_summary",
     "tentative_start_date",
     "tentative_end_date",
+    "needs_summary",
     "warnings",
 }
 TECHNICAL_KEYS = {
@@ -34,6 +35,7 @@ def _assert_lean_body(body: dict) -> None:
     assert isinstance(body["warnings"], list)
     assert "tentative_start_date" in body
     assert "tentative_end_date" in body
+    assert isinstance(body.get("needs_summary"), list)
 
 
 def test_from_project_spec_json_unstructured(client: TestClient) -> None:
@@ -55,6 +57,10 @@ def test_from_project_spec_json_unstructured(client: TestClient) -> None:
     assert "scissors" in body["user_requirement_summary"].lower()
     assert body["tentative_start_date"] == "2026-09-01"
     assert body["tentative_end_date"] == "2026-09-12"
+    assert body["needs_summary"]
+    assert body["needs_summary"][0]["need_id"] == "need_1"
+    assert "scissors" in body["needs_summary"][0]["description"].lower()
+    assert body["needs_summary"][0]["quantity"] == 1
     assert "results_by_need" not in body
 
 
@@ -134,6 +140,39 @@ def test_multipart_text_file_unstructured(client: TestClient) -> None:
     assert "forklift" in body["user_requirement_summary"].lower()
     assert body["tentative_start_date"] == "2026-09-01"
     assert body["tentative_end_date"] == "2026-09-12"
+    assert body["needs_summary"]
+    assert "forklift" in body["needs_summary"][0]["description"].lower()
+
+
+def test_needs_summary_empty_when_decomposer_returns_none(
+    client: TestClient, monkeypatch: object
+) -> None:
+    """Inject empty decomposer via service factory path is harder on HTTP;
+    assert stub path still produces needs — empty path covered in unit-style service test.
+    """
+    from app.pipelines.indexing.embedder_factory import build_document_embedder
+    from app.pipelines.indexing.pipeline import build_indexing_pipeline
+    from app.services.indexing import IndexingIngestService
+    from haystack.document_stores.in_memory import InMemoryDocumentStore
+
+    class _EmptyDecomposer:
+        def decompose(self, source_text: str) -> list:
+            return []
+
+    store = InMemoryDocumentStore()
+    result = IndexingIngestService(
+        pipeline=build_indexing_pipeline(
+            document_store=store,
+            embedder=build_document_embedder(mode="mock", dimension=8),
+        ),
+        document_store=store,
+        need_decomposer=_EmptyDecomposer(),
+    ).ingest_from_project_spec(
+        user_id="u_empty",
+        project_text="Some project text about equipment",
+    )
+    assert result.needs_summary == []
+    assert any("needs_summary empty" in w for w in result.warnings)
 
 
 def test_multipart_invalid_date_window_returns_400(client: TestClient) -> None:

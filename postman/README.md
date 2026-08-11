@@ -122,11 +122,19 @@ Knowledge graph is **mandatory** on successful ingest. Artifacts land under `art
   "user_requirement_summary": "Indoor elevated work ~8m; need scissors lift…",
   "tentative_start_date": "2026-09-01",
   "tentative_end_date": "2026-09-12",
+  "needs_summary": [
+    {
+      "need_id": "need_1",
+      "description": "Indoor elevated work ~8m; need scissors lift…",
+      "equipment_hints": [],
+      "quantity": 1
+    }
+  ],
   "warnings": []
 }
 ```
 
-(`tentative_*` are `null` when request omits dates.)
+(`tentative_*` are `null` when request omits dates. Stub decomposer yields one need from project text.)
 
 **Not present on public body:** `documents[]`, `kg_*`, counts, `data_kind` (still run internally for Call 2).  
 **Not present** (old recommend API): `recommendation_id`, `results_by_need`.

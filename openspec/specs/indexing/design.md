@@ -42,14 +42,14 @@ Aligned with Packt Ch. 4 indexing flowchart
   IngestFromProjectSpecResponse (lean public body)
        │  as-built S1a: ingest_id, user_id, user_requirement_summary, warnings
        │  as-built S1b: tentative_* echo request dates
+       │  as-built S1c: needs_summary[] via need decomposer (stub/LLM)
        │
        │  TARGET FR-IX-023 remainder (implementation-plan order):
-       │    S1c needs_summary[] → S1d expected_budget → S1e free-text dates
-       │    → 1.7 mark FR-IX-023 as-built
+       │    S1d expected_budget → S1e free-text dates → 1.7 as-built mark
        ▼
   project-spec summary enrichment (after successful index + KG only)
-       • needs_summary (decomposer / LLM / KG-assisted)     [S1c]
-       • expected_budget (extract or null; never invent)      [S1d]
+       • needs_summary (decomposer / LLM)                     [S1c as-built]
+       • expected_budget (extract or null; never invent)      [S1d TARGET]
        • tentative_* free-text/file extract if request omits  [S1e after S1d]
 
        │
