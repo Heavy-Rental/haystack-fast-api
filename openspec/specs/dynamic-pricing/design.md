@@ -60,7 +60,29 @@ Target: `price_per_day` (training-time only; not part of the prediction input).
 
 Pricing needs read access to `asset_categories.name`, `assets.category_id`/`capacity`/`condition`/`platform_height`/`min_daily_rate`/`max_daily_rate`, `bookings.start_date`/`end_date`/`status`, and `booking_items.asset_id`/`booking_id`. **`Booking` has no `asset_id` column in the real schema** — the booking↔asset link exists only via `BookingItem`, so `period_utilization`'s overlap query (below) joins `booking_items → bookings`, not a direct `Booking.asset_id` this design originally assumed. Spring Boot owns schema/migrations; Python maps onto existing tables (no Alembic, no new tables).
 
-**Pricing's database access is read-only (2026-08-10, agreed in principle — pending confirmation from the Spring Boot side).** This design previously listed "plus write access to `recommendation_items.ml_predicted_price`" here for Phase 2; that write is no longer planned. `predict_price(...)` returns the prediction on the recommendation response instead, and Spring Boot persists it to `RecommendationItem.mlPredictedPrice` — a JPA-mapped field on a Spring Boot entity, in a schema Spring Boot already owns. Once confirmed, pricing's Postgres role can be granted `SELECT` only; no code path in this service writes to Postgres. Two topology facts make that more than a naming convention: (1) writing `public.recommendation_items` gets overwritten by the sync job's merge-upsert, which sets every shared non-key column to `EXCLUDED` each cycle, including to `NULL`; (2) the `primary_snapshot` foreign tables are writable (`pg_relation_is_updatable = 28`) and point at the Spring Boot production database directly, so a stray SQLAlchemy autoflush on a mutated instance could otherwise write upstream. Full rationale: `docs/dynamic-pricing-masterplan.md` change log, 2026-08-10. Rests on every prediction happening inside a synchronous Spring Boot → Haystack request — re-check if a batch/offline re-pricing path is ever planned.
+### Category name mapping (found + scoped 2026-08-11)
+
+`AssetCategory.name` in the real DB is the Spring-Boot canonical business name: `Excavator`, `Scissors Lift`, `Boom Lift`, `Fork Lift`. `feature_schema.CATEGORIES` — baked into the trained model's one-hot columns, and used as the `category` string everywhere in pricing code (`pricing_tables.py` keys, `spec_band()`, today's `seed_fleet.py` candidate fixtures) — uses a different convention: `excavator`, `scissor lift`, `boom lift`, `forklift`. These never coincide, not even case-insensitively (`Fork Lift` vs. `forklift` differs by more than case).
+
+**Confirmed live** (2026-08-11, against `postgres-haystack`/`heavy_rental`): `pricing_repository.compute_period_utilization()`'s `.where(AssetCategory.name == category)` join returns zero rows for every real category when called with a `feature_schema`-style `category` string — it silently falls through to `pt.CATEGORY_UTILIZATION.get(category, 0.0)`, the static per-category constant, with no error and no degraded flag. Called with a DB-style name instead, `feature_schema.spec_band()` raises `ValueError` (it only recognizes the `feature_schema.CATEGORIES` spelling). Either direction is broken. `tests/test_pricing_repository.py` didn't catch this because its `_session_returning()` helper mocks `session.execute` directly — the mocked return value never passes through the real `WHERE` clause, so a mismatched filter can't fail a test built that way.
+
+**Fix (Phase 2a scope, folded into the Phase 1e→`app/services/pricing/` relocation, not a separate task)**: a single shared mapping, applied once at the read boundary where an `AssetCategory` row's `name` is consumed —
+
+```python
+# DB canonical name -> feature_schema.CATEGORIES slug
+DB_NAME_TO_FEATURE_NAME = {
+    "Excavator": "excavator",
+    "Scissors Lift": "scissor lift",
+    "Boom Lift": "boom lift",
+    "Fork Lift": "forklift",
+}
+```
+
+Applied where `AssetCategory.name` is read out of a row (so every downstream `category` string — including what's passed into `spec_band()`, `compute_period_utilization()`'s own join, and `resolve_effective_capacity()`) is always in `feature_schema` convention from that point on. The join itself (`AssetCategory.name == category`) still needs the DB-style name on its left side — so `compute_period_utilization()` inverts the mapping (or queries by `category_id` via a small lookup) rather than comparing a `feature_schema`-style string against the DB column directly. Direction matters: **DB name is the source of truth**, ML slug is the derived form — don't rename `AssetCategory.name` values to match the model; the model's one-hot columns adapt via this mapping, not the other way around.
+
+Test coverage gap this closes: at least one test must exercise the real `WHERE` clause with real DB-shaped names (e.g. an in-process test DB, or asserting on the compiled SQL/bound params), not only a fully mocked `session.execute` — see spec.md Verification.
+
+**Pricing's database access is read-only (2026-08-10, locked 2026-08-11).** This design previously listed "plus write access to `recommendation_items.ml_predicted_price`" here for Phase 2; that write is no longer planned. `predict_price(...)` returns the prediction on the recommendation response instead, and Spring Boot persists it to `RecommendationItem.mlPredictedPrice` — a JPA-mapped field on a Spring Boot entity, in a schema Spring Boot already owns. Now that this is locked, pricing's Postgres role can be granted `SELECT` only; no code path in this service writes to Postgres. Two topology facts make that more than a naming convention: (1) writing `public.recommendation_items` gets overwritten by the sync job's merge-upsert, which sets every shared non-key column to `EXCLUDED` each cycle, including to `NULL`; (2) the `primary_snapshot` foreign tables are writable (`pg_relation_is_updatable = 28`) and point at the Spring Boot production database directly, so a stray SQLAlchemy autoflush on a mutated instance could otherwise write upstream. Full rationale: `docs/dynamic-pricing-masterplan.md` change log, 2026-08-10. Rests on every prediction happening inside a synchronous Spring Boot → Haystack request — re-check if a batch/offline re-pricing path is ever planned.
 
 All open items are resolved:
 
@@ -160,7 +182,12 @@ app/services/pricing_client.py  # as-built recommend adapter → ml-experiments 
 app/models/asset_category.py, asset.py, booking.py, booking_item.py  # Phase 1e read-only models
 app/repositories/pricing_repository.py         # Phase 1e: live period_utilization query
 app/repositories/pricing_read_resilience.py    # Phase 1e: primary_snapshot/public tiered fallback
+                                                # Phase 2a also adds: DB_NAME_TO_FEATURE_NAME mapping
+                                                # (category name normalization, see "Category name
+                                                # mapping" above) — lands in this same repository move
 ```
+
+External dependency (different repo, tracked for coordination): `openspec/specs/domain-seed-data/` — Spring Boot seed data richness, not built here.
 
 ## O — Operations
 
@@ -183,7 +210,7 @@ uv run python ml-experiments/shap_review.py
 | Branch | Scope |
 |--------|--------|
 | `HR-87-ml-2-d-production-db-wiring-for-period-utilization` | **Done (2026-08-10)** — Phase 1e: read-only models, `pricing_repository.py`, `pricing_read_resilience.py` tiered fallback; 20 new unit tests |
-| `feature/ml-3-pricing-service` | Scaffold package, port schema, model/train, guardrails, **relocate** (don't rebuild) Phase 1e's read models/repositories |
+| `feature/ml-3-pricing-service` | Scaffold package, port schema, model/train, guardrails, **relocate** (don't rebuild) Phase 1e's read models/repositories, **fix category-name mismatch** (`DB_NAME_TO_FEATURE_NAME`, found 2026-08-11) |
 | `feature/ml-4-integration-tests` | Wire pipeline, unit tests, manual retrain endpoint |
 
 ## N — Norms
@@ -202,6 +229,9 @@ uv run python ml-experiments/shap_review.py
 - Do not "fix" low period_utilization early-booking prices.
 - Do not add booking_month, fuel price, or purchaseYear without a new decision + this capability update.
 - Do not register public retrain without auth SDD.
+- Do not compare `AssetCategory.name` against `feature_schema.CATEGORIES` (or vice versa) without going through `DB_NAME_TO_FEATURE_NAME` — a silent zero-row match degrades to the static fallback with no error, the exact bug found 2026-08-11.
+- Do not "fix" the category mismatch by renaming `asset_categories.name` values in the DB — see "Category name mapping" above for why the mapping lives in Haystack code, not seed data.
+- Do not write a test for category-name-dependent code paths using a fully mocked `session.execute()` only — it can't catch a filter-clause mismatch; assert against real DB-shaped names too.
 
 ## Key decisions
 
@@ -217,3 +247,5 @@ See [`spec.md`](./spec.md) Key decisions / non-goals table (mirrored here for RE
 | Manual retrain now | Demo safety net; APScheduler Phase 3 |
 | Spec-band + period_utilization | Correct scarcity signal |
 | booking_month / fuel not added | Superseded / rejected |
+| Category-name mapping fixed in code, not DB data | `AssetCategory.name` is Spring-Boot canonical; `feature_schema.CATEGORIES` is the derived ML slug baked into trained artifacts |
+| `mlPredictedPrice` non-persistence: **locked**, not pending | Confirmed 2026-08-11 — see spec.md Change control 2.2.0 |
