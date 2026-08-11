@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from haystack import component
+from sqlalchemy.orm import Session
 
 from app.services.pricing_client import predict_price_for_asset
+
+
+def _parse_date(value: Any) -> date | None:
+    if value is None or isinstance(value, date):
+        return value
+    text = str(value).strip()
+    return date.fromisoformat(text) if text else None
 
 
 @component
@@ -23,6 +32,9 @@ class PredictPriceAdapter:
         duration_days: float = 7.0,
         include_pricing: bool = True,
         distance_km: float | None = None,
+        start_date: date | str | None = None,
+        end_date: date | str | None = None,
+        db: Session | None = None,
     ) -> dict[str, list]:
         pool = list(candidates or [])
         if not pool:
@@ -30,19 +42,25 @@ class PredictPriceAdapter:
 
         dist = float(distance_km if distance_km is not None else self._distance_km)
         days = max(1.0, float(duration_days or 7.0))
+        parsed_start = _parse_date(start_date)
+        parsed_end = _parse_date(end_date)
         priced: list[dict[str, Any]] = []
 
         for raw in pool:
             candidate = dict(raw)
             if include_pricing:
                 height = candidate.get("platform_height")
+                capacity = candidate.get("capacity")
                 price = predict_price_for_asset(
                     category=str(candidate.get("category") or "forklift"),
                     condition=str(candidate.get("condition") or "GOOD"),
                     duration_days=days,
-                    capacity=float(candidate.get("capacity") or 0.0),
+                    capacity=None if capacity is None else float(capacity),
                     distance_km=dist,
                     platform_height=None if height is None else float(height),
+                    db=db,
+                    start_date=parsed_start,
+                    end_date=parsed_end,
                 )
                 candidate["pricing"] = {
                     "daily_rate": price.daily_rate,

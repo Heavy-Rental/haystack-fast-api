@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     app_env: str = Field(default="local", alias="APP_ENV")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
-    postgres_hostname: str = Field(default="postgres_haystack", alias="POSTGRES_HOSTNAME")
+    postgres_hostname: str = Field(default="postgres-haystack", alias="POSTGRES_HOSTNAME")
     postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
     postgres_db: str = Field(default="heavy_rental", alias="POSTGRES_DB")
     postgres_user: str = Field(default="postgres", alias="POSTGRES_USER")

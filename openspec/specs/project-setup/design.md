@@ -2,7 +2,7 @@
 
 ## R — Requirements
 
-See [`spec.md`](./spec.md) Purpose and Requirements. Outcomes: feature SDDs do not restate full stack; Postgres on `postgres_haystack` (DB `heavy_rental`); uv-centric install; thin routers; sync DB default until explicit async SDD.
+See [`spec.md`](./spec.md) Purpose and Requirements. Outcomes: feature SDDs do not restate full stack; Postgres on `postgres-haystack` (DB `heavy_rental`); uv-centric install; thin routers; sync DB default until explicit async SDD.
 
 ## E — Entities
 
@@ -14,7 +14,7 @@ See [`spec.md`](./spec.md) Purpose and Requirements. Outcomes: feature SDDs do n
 
 ## A — Approach
 
-Co-locate SDD under `openspec/` next to the uv app. External shared Postgres (host `postgres_haystack`, DB `heavy_rental`) avoids Compose. Dual drivers installed (psycopg primary, asyncpg ready) without forcing async migration.
+Co-locate SDD under `openspec/` next to the uv app. External shared Postgres (host `postgres-haystack`, DB `heavy_rental`) avoids Compose. Dual drivers installed (psycopg primary, asyncpg ready) without forcing async migration.
 
 ## S — Structure
 
@@ -94,7 +94,7 @@ curl -s http://localhost:8000/health
 
 | Mode | Default construction | Used today? |
 |------|----------------------|-------------|
-| Sync | `postgresql+psycopg://…@postgres_haystack:5432/heavy_rental` | **Yes** |
+| Sync | `postgresql+psycopg://…@postgres-haystack:5432/heavy_rental` | **Yes** |
 | Async | `postgresql+asyncpg://…` | No (future SDD) |
 
 `Settings.database_url` (and `_normalize_database_url` in `app/config.py`) owns the effective URL passed to `create_engine`. Bare container-style overrides are rewritten so SQLAlchemy loads **psycopg** v3, not the default **psycopg2** dialect:
@@ -126,7 +126,7 @@ Forbidden without dedicated SDD + constitution update:
 
 | Decision | Rationale |
 |----------|-----------|
-| External Postgres on `postgres_haystack` / `heavy_rental` | Shared network already provides DB |
+| External Postgres on `postgres-haystack` / `heavy_rental` | Shared network already provides DB |
 | uv | Fast lockfile workflow |
 | FastAPI + Uvicorn | Framework + ASGI server |
 | Specs under app module | Co-located agent context |

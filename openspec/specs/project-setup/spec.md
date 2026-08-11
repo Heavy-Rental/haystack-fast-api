@@ -7,7 +7,7 @@
 
 ## Purpose
 
-Capture normative environment and setup contracts so feature work reuses PostgreSQL on host `postgres_haystack` (DB `heavy_rental`), uv packaging, layering, shared errors, and env-backed configuration—without each capability restating the full stack.
+Capture normative environment and setup contracts so feature work reuses PostgreSQL on host `postgres-haystack` (DB `heavy_rental`), uv packaging, layering, shared errors, and env-backed configuration—without each capability restating the full stack.
 
 ## User Scenarios & Testing
 
@@ -19,7 +19,7 @@ An engineer clones the app module, syncs with uv, runs the API, and sees health 
 
 **Acceptance Scenarios:**
 
-1. **Given** Postgres on `postgres_haystack` is up, **When** `GET /health`, **Then** `{"status":"ok","database":"up"}`.
+1. **Given** Postgres on `postgres-haystack` is up, **When** `GET /health`, **Then** `{"status":"ok","database":"up"}`.
 2. **Given** Postgres is unreachable, **When** `GET /health`, **Then** HTTP 200 with `status=degraded` and `database=down`.
 
 ## Requirements
@@ -39,15 +39,15 @@ The service SHALL run on Python **≥ 3.12**, expose **FastAPI** as the ASGI app
 - **WHEN** the API is started for development
 - **THEN** `uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload` is a valid invocation
 
-### Requirement: PostgreSQL on host postgres_haystack
-The API SHALL use the project’s existing **PostgreSQL** on hostname **`postgres_haystack`**. Default database name is **`heavy_rental`**; default credentials are user/password `postgres` unless overridden via `POSTGRES_*` or `DATABASE_URL`.  
+### Requirement: PostgreSQL on host postgres-haystack
+The API SHALL use the project’s existing **PostgreSQL** on hostname **`postgres-haystack`** (hyphen — confirmed via DNS on 2026-08-10; hostname `db` is ambiguous on this Docker network and resolves to either `postgres-haystack` or the Spring Boot primary depending on the connection, and MUST NOT be used). Default database name is **`heavy_rental`**; default credentials are user/password `postgres` unless overridden via `POSTGRES_*` or `DATABASE_URL`.  
 Sync SQLAlchemy + **psycopg** (v3) is the running default; the default constructed URL SHALL use scheme **`postgresql+psycopg://`**. **asyncpg** MAY be installed but SHALL NOT be primary without an explicit SDD.
 
 When `DATABASE_URL` is set with a bare scheme (`postgresql://` or `postgres://`), settings SHALL normalize it to **`postgresql+psycopg://`** before engine creation. Explicit SQLAlchemy dialects (`+psycopg`, `+asyncpg`, `+psycopg2`, and other `+driver` forms) SHALL be left unchanged. Bare `postgresql://` maps to SQLAlchemy’s legacy **psycopg2** dialect; this project depends on **psycopg** v3 only and SHALL NOT require `psycopg2` as a workaround for bare URLs.
 
 #### Scenario: Connectivity host
 - **WHEN** the app builds its default database URL
-- **THEN** the host is `postgres_haystack`, the database is `heavy_rental` (or `DATABASE_URL` override), and the scheme matches engine type (`+psycopg` sync)
+- **THEN** the host is `postgres-haystack`, the database is `heavy_rental` (or `DATABASE_URL` override), and the scheme matches engine type (`+psycopg` sync)
 
 #### Scenario: Bare DATABASE_URL uses psycopg v3
 - **WHEN** `DATABASE_URL` is `postgresql://user:pass@host:5432/db` (or `postgres://…`)
@@ -123,3 +123,4 @@ The normative stack SHALL include: FastAPI, Uvicorn, haystack-ai, langgraph, SQL
 | 1.0.0–1.9.0 | 2026-08-03…04 | Historical versions from SPEC-project-setup (stack, health, uv, SHAP, sklearn) |
 | 2.0.0 | 2026-08-10 | Migrated to OpenSpec Requirement/Scenario + OpenSPDD Norms/Safeguards; runbooks → design.md |
 | 2.0.1 | 2026-08-10 | Document bare `DATABASE_URL` → `postgresql+psycopg` normalization (psycopg v3) |
+| 2.0.2 | 2026-08-10 | Corrected hostname throughout: **`postgres-haystack`** (hyphen), not `postgres_haystack` (underscore) — confirmed via DNS on `HR-87-ml-2-d-production-db-wiring-for-period-utilization` (legacy `specification/SPEC-project-setup.md`, before it was stubbed to point here); `db` is ambiguous on this network and MUST NOT be used. `.env.example`/`app/config.py` `POSTGRES_HOSTNAME` default updated to match. |

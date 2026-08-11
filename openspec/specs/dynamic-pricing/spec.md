@@ -14,12 +14,14 @@
 **Read** [`../../project.md`](../../project.md) and [`../project-setup/spec.md`](../project-setup/spec.md) before this document.
 
 > **Phase 1c note (2026-08-05):** `ml-experiments/predict_price.py` prototypes this capability’s `predict_price(...)` contract early — guardrail clamping included — so the in-development agent prototype can call it before Phase 2 lands. It remains `ml-experiments/` scratch code, out of SDD scope like the rest of Phase 1, and its guardrail bounds are a **static per-category stand-in** (`pricing_tables.CATEGORY_BASE_RATE`), not the real per-asset `Asset.minDailyRate`/`maxDailyRate` this spec requires. It is fully superseded once this capability is implemented — do not treat it as satisfying any requirement below.
+>
+> **Persistence note (2026-08-10, agreed in principle — pending confirmation from the Spring Boot side):** Haystack does not persist `ml_predicted_price`. `predict_price(...)` returns the price on the recommendation response (`item.pricing.daily_rate`); Spring Boot persists it to `RecommendationItem.mlPredictedPrice` on its side. Pricing's database access is **read-only** — no code path in this service writes to Postgres. Full rationale: `docs/dynamic-pricing-masterplan.md` change log, 2026-08-10. This rests on every prediction happening inside a synchronous Spring Boot → Haystack request (so a response always exists to carry the value back) — re-check this premise if a batch/offline re-pricing path is ever planned.
 
 ---
 
 ## Purpose
 
-Phase 1 (`ml-experiments/`) produced and validated a baseline XGBoost model that predicts `price_per_day` for equipment rentals from `category`, `condition`, `duration_days`, `capacity`, `distance_km`, and `platform_height`. Phase 1d added two real-time features — `period_utilization` and `lead_time_days` — so the model responds to live supply/demand rather than asset attributes alone. This capability defines how that model and its feature schema get **productionized** into `app/services/pricing/` so the agentic recommendation pipeline can call it in-process and persist a data-driven price suggestion, without duplicating the decision log in `docs/dynamic-pricing-masterplan.md`.
+Phase 1 (`ml-experiments/`) produced and validated a baseline XGBoost model that predicts `price_per_day` for equipment rentals from `category`, `condition`, `duration_days`, `capacity`, `distance_km`, and `platform_height`. Phase 1d added two real-time features — `period_utilization` and `lead_time_days` — so the model responds to live supply/demand rather than asset attributes alone. This capability defines how that model and its feature schema get **productionized** into `app/services/pricing/` so the agentic recommendation pipeline can call it in-process and return a data-driven price suggestion on the recommendation response, without duplicating the decision log in `docs/dynamic-pricing-masterplan.md`.
 
 ---
 
@@ -28,7 +30,7 @@ Phase 1 (`ml-experiments/`) produced and validated a baseline XGBoost model that
 When this capability is implemented:
 
 - `app.pipelines` (or wherever the agentic recommendation step lives) can call a single in-process function to get a guardrail-clamped price prediction for a given asset/booking combination.
-- The model output is **price per day** for a given duration window. There is **no** public `/predict-price` renter route (in-process only). The recommendation pipeline may surface structured pricing on `item.pricing` for the portal mockup: **`daily_rate`** (duration-scoped prediction) and app-layer **`total_price` = `daily_rate × duration_days`** — not a fabricated weekly rate. Persistence field `RecommendationItem.mlPredictedPrice` remains the production landing place when Spring-backed models exist.
+- The model output is **price per day** for a given duration window. There is **no** public `/predict-price` renter route (in-process only). The recommendation pipeline may surface structured pricing on `item.pricing` for the portal mockup: **`daily_rate`** (duration-scoped prediction) and app-layer **`total_price` = `daily_rate × duration_days`** — not a fabricated weekly rate. Haystack does not persist this value: `predict_price(...)` returns it on the response only, and Spring Boot persists it to `RecommendationItem.mlPredictedPrice` on its side (agreed in principle, pending confirmation from the Spring Boot side — see `docs/dynamic-pricing-masterplan.md` change log, 2026-08-10).
 - A manual "retrain now" path exists as a demo safety net, without requiring the full APScheduler-based scheduled retrain (Phase 3).
 - The feature schema, encoding rules, and artifact format match what Phase 1b already validated — no silent re-derivation of decisions already locked in the masterplan.
 
@@ -42,7 +44,7 @@ When this capability is implemented:
 - Guardrail clamping of the raw model output to `Asset.minDailyRate`/`Asset.maxDailyRate`.
 - An in-process `predict_price(...)` function, called directly from the pipeline — not an HTTP route.
 - A manual "retrain now" endpoint (internal/ops use, not renter-facing).
-- Minimal SQLAlchemy read models for exactly the columns pricing touches — mapped onto the existing Spring-Boot-owned schema, no new tables, no Alembic. Includes `Booking.startDate`/`endDate`/`status` and `Asset.category_id`/`capacity`/`platform_height`, needed for `period_utilization`'s live query (Phase 1e).
+- Minimal SQLAlchemy read models for exactly the columns pricing touches — mapped onto the existing Spring-Boot-owned schema, no new tables, no Alembic. Includes `Booking.startDate`/`endDate`/`status`, `BookingItem.assetId` (the actual booking↔asset link), and `Asset.category_id`/`capacity`/`platform_height`, needed for `period_utilization`'s live query. **Implemented** (2026-08-10, Phase 1e): `app/models/asset_category.py`/`asset.py`/`booking.py`/`booking_item.py`; `app/repositories/pricing_repository.py`; `app/repositories/pricing_read_resilience.py` (tiered fallback, see [`design.md`](./design.md)).
 - Unit tests: feature schema transforms, guardrail clamping, prediction shape.
 
 ### Out of scope (this capability)
@@ -79,6 +81,12 @@ As the agentic recommendation pipeline, when I have a candidate asset and a prop
 5. **Given** a proposed `start_date`, **When** `predict_price(...)` is called, **Then** `lead_time_days = start_date − today` is computed and passed as a feature; no new persisted column is required.
 
 6. **Given** a rental window that no other booking currently overlaps, **When** `period_utilization` is computed, **Then** a low value (and often a lower predicted price) is the **correct, intended** result — airline/hotel-style scarcity pricing; not an early-bird bug to "fix."
+
+7. **Given** `primary_snapshot` is transiently unavailable (mid-recreate), **When** `predict_price(...)` reads it, **Then** the read is retried with a short bounded backoff before falling back further, and a prediction is still returned undegraded once the retry succeeds.
+
+8. **Given** `primary_snapshot` is unavailable beyond that retry window (a failed sync cycle, not a brief mid-recreate gap), **When** `predict_price(...)` reads any `primary_snapshot`-sourced value, **Then** all reads for that call consistently fall back to `public` instead, and the resulting price is marked degraded rather than presented as equivalent to a live-source prediction.
+
+9. **Given** neither `primary_snapshot` nor `public` has the needed schema/relation (cold start), **When** `predict_price(...)` is called, **Then** it fails loud (raises) rather than returning a fabricated price.
 
 ### User Story 2 - Manual retrain as a demo safety net (Priority: P2)
 
@@ -164,7 +172,7 @@ Pricing predictions SHALL NOT be exposed through any renter-facing route. Invoca
 
 ### Requirement: Surface pricing on recommend items (app-layer)
 
-When recommend surfaces pricing, expose **`daily_rate`** (duration-scoped) and **`total_price` = `daily_rate × duration_days`**. MUST NOT fabricate **`weekly_rate`**. Model still predicts per-day only. Persistence: `RecommendationItem.mlPredictedPrice` when Spring-backed models exist.
+When recommend surfaces pricing, expose **`daily_rate`** (duration-scoped) and **`total_price` = `daily_rate × duration_days`**. MUST NOT fabricate **`weekly_rate`**. Model still predicts per-day only. Persistence of `RecommendationItem.mlPredictedPrice` is Spring Boot's responsibility, not this service's — Haystack returns the predicted price in the response and does not write it (agreed in principle, pending confirmation from the Spring Boot side; see `docs/dynamic-pricing-masterplan.md` change log, 2026-08-10).
 
 #### Scenario: Recommend pricing fields
 - **WHEN** recommend attaches pricing to a selected item
@@ -194,6 +202,25 @@ Pricing data access SHALL use sync SQLAlchemy + psycopg (project-setup default);
 - **WHEN** pricing repositories query Postgres
 - **THEN** they use the project sync engine path
 
+### Requirement: Tiered read resilience against primary_snapshot
+
+Every pricing DB read against `primary_snapshot` SHALL share one 3-tier fallback (retry on transient mid-recreate failure → degrade to reading `public` on sustained failure, marked degraded → fail loud on cold start), decided once per `predict_price(...)` call and applied to every read in that call — not resolved independently per query. Full design: [`design.md`](./design.md) "Read resilience: tiered fallback".
+
+#### Scenario: Transient failure recovers
+- **GIVEN** `primary_snapshot` is mid-recreate
+- **WHEN** a read hits `UndefinedTable`
+- **THEN** it retries with bounded backoff and returns an undegraded prediction on success
+
+#### Scenario: Sustained failure degrades to public
+- **GIVEN** `primary_snapshot` stays unavailable beyond the retry budget
+- **WHEN** `predict_price(...)` reads pricing data
+- **THEN** all reads for that call fall back to `public` and the result is marked degraded
+
+#### Scenario: Cold start fails loud
+- **GIVEN** neither `primary_snapshot` nor `public` has the needed relation
+- **WHEN** `predict_price(...)` is called
+- **THEN** it raises rather than returning a fabricated price
+
 ---
 
 ## Verification
@@ -203,6 +230,7 @@ Pricing data access SHALL use sync SQLAlchemy + psycopg (project-setup default);
 - Illustrative, non-exhaustive: `ml-experiments/demo_scenarios.py` — condition-effect and duration-effect scenario pairs, raw vs. guardrail-clamped output side by side. Not a substitute for unit tests or `shap_review.py`.
 - Manual retrain smoke: invoke retrain path, confirm `artifacts/current.json` `trained_at` updates and subsequent prediction reflects the new model.
 - Regression check: re-run `ml-experiments/category_metrics.py`-equivalent logic against the productionized model periodically; flag if any category's MAE/R² drifts materially from reference metrics in design.
+- Read-resilience unit tests: mock the session/engine to raise `UndefinedTable` on demand. Cover all three tiers: (1) transient failure that clears within the retry budget still returns an undegraded prediction, (2) sustained failure falls back to `public` and the returned `PriceResult` is marked degraded, (3) both schemas unavailable raises rather than returning a price. Also cover that a single call never mixes sources across its reads.
 
 ---
 
@@ -210,8 +238,9 @@ Pricing data access SHALL use sync SQLAlchemy + psycopg (project-setup default);
 
 Maps to `docs/dynamic-pricing-execution-plan.md` Day 4–5 subtasks:
 
-1. `feature/ml-3-pricing-service` (Day 4): scaffold `app/services/pricing/`, port `feature_schema.py` (includes `period_utilization`/`lead_time_days`/`spec_band()` from Phase 1d), implement `model.py`/`train.py`, guardrail clamping, minimal SQLAlchemy read models (confirm schema first; relocates, doesn't rebuild, Phase 1e's `pricing_repository.py`).
-2. `feature/ml-4-integration-tests` (Day 5 AM): wire `predict_price(...)` into `app.pipelines` → persist `RecommendationItem.mlPredictedPrice`; unit tests per Verification; manual retrain endpoint.
+0. **Phase 1e — done (2026-08-10)**, on `HR-87-ml-2-d-production-db-wiring-for-period-utilization`: `app/models/asset_category.py`/`asset.py`/`booking.py`/`booking_item.py`, `app/repositories/pricing_repository.py`, `app/repositories/pricing_read_resilience.py`, wired through `pricing_client.py` → `predict_price_adapter.py` → `recommendations.py`. Not wired into `app/api/recommendations.py` — no route calls `RecommendationService` yet (tests only); `RecommendationService.__init__`'s new `db` param is ready for when that route lands. 20 new unit tests.
+1. `feature/ml-3-pricing-service` (Day 4): scaffold `app/services/pricing/`, port `feature_schema.py` (includes `period_utilization`/`lead_time_days`/`spec_band()` from Phase 1d), implement `model.py`/`train.py`, guardrail clamping, **relocate** (don't rebuild) Phase 1e's read models/`pricing_repository.py`/`pricing_read_resilience.py` into this package — the guardrail-bound `Asset` read must go through the same resolver, not a second fallback implementation.
+2. `feature/ml-4-integration-tests` (Day 5 AM): wire `predict_price(...)` into `app.pipelines` → return the prediction in the recommendation response (`item.pricing.daily_rate`); no DB write — Spring Boot persists `RecommendationItem.mlPredictedPrice` on its side (agreed in principle, pending Spring Boot confirmation; see masterplan). Unit tests per Verification; manual retrain endpoint.
 
 ---
 
@@ -225,6 +254,7 @@ Full rationale: `docs/dynamic-pricing-masterplan.md`. Summary for implementers:
 | Guardrails via `Asset.minDailyRate`/`maxDailyRate`, not a config table | Already admin-editable per asset; matches how training data itself was clamped |
 | `platform_height` as native NaN, not imputed | Correct tool for "structurally not applicable"; XGBoost missing-value routing |
 | No Alembic / no new tables | Spring Boot owns schema; Python maps onto existing tables only |
+| Pricing does not persist `mlPredictedPrice` — returns it in the response instead (agreed in principle, pending Spring Boot confirmation) | `mlPredictedPrice` is a JPA-mapped field Spring Boot already owns; a second writer risks being clobbered by either the entity's own flush or the sync job's merge-upsert. Makes pricing's DB access read-only. |
 | Sync SQLAlchemy + psycopg only | Matches project-setup environment default |
 | Manual retrain now, full APScheduler later | Demo safety net now; scheduled retrain is Phase 3 |
 | `period_utilization`/`lead_time_days` both kept, despite correlation | Answer different questions; SHAP compares which the model leans on |
@@ -249,5 +279,6 @@ Full rationale: `docs/dynamic-pricing-masterplan.md`. Summary for implementers:
 | 1.3.1 | 2026-08-07 | Spec-band boundaries implementation decision; demo_scenarios.py verification pointer. |
 | 1.3.2 | 2026-08-07 | Phase 1d verified; final metrics MAE 10.68 / R² 0.974 overall; condensed prose — full reasoning in masterplan. |
 | 2.0.0 | 2026-08-10 | Migrated to OpenSpec Requirement/Scenario + design REASONS under `openspec/specs/dynamic-pricing/` |
+| 2.1.0 | 2026-08-10 | Ported forward Phase 1e work from `HR-87-ml-2-d-production-db-wiring-for-period-utilization` (developed on the legacy `specification/SPEC-dynamic-pricing.md` before it was stubbed to point here): confirmed real schema (snake_case, `BookingItem.assetId` as the actual booking↔asset link, `primary_snapshot`/`public` schema split), `condition`/`capacity` null fallbacks, and the 3-tier read-resilience design for `primary_snapshot` reads (retry → degrade to `public` → fail loud on cold start). Added corresponding US-1 acceptance scenarios, a Read Resilience requirement, verification cases, and Phase 1e implementation task. No prior content changed. |
 
 **Design / feature schema / artifacts / Phase 3 cutover:** [`design.md`](./design.md)

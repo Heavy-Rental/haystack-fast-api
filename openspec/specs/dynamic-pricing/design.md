@@ -40,9 +40,9 @@ Ports `ml-experiments/feature_schema.py` directly — same `CATEGORIES`, `CONDIT
 | Feature | Encoding | Notes |
 |---|---|---|
 | `category` | one-hot, fixed `CATEGORIES` order | via `AssetCategory.name`; never encode the raw FK |
-| `condition` | ordinal, `NEEDS_REPAIR=0…EXCELLENT=3` | `Asset.condition` |
+| `condition` | ordinal, `NEEDS_REPAIR=0…EXCELLENT=3`; **falls back to `"GOOD"` when null** | `Asset.condition`; nullable in the real schema — `encode_condition()`'s ordinal cast can't take NaN anyway |
 | `duration_days` | numeric passthrough | `Booking.endDate − Booking.startDate` |
-| `capacity` | numeric passthrough | `Asset.capacity` |
+| `capacity` | numeric passthrough; **falls back to `pricing_tables.CATEGORY_CAPACITY_KG` per-category midpoint when null** (not NaN — a data gap, not a structural absence like `platform_height`) | `Asset.capacity`; nullable in the real schema, currently unset for non-forklift seed rows |
 | `distance_km` | numeric passthrough | Phase 1/2: still a sampled proxy, not geocoded |
 | `platform_height` | numeric, **NaN for forklift/excavator** | `Asset.platform_height`; native missing for XGBoost, not imputed |
 | `period_utilization` | numeric passthrough, `[0,1]` | Live aggregate over same `category` + spec-band; status `CONFIRMED`/`PENDING`, non-cancelled; at prediction time — **Phase 1d/1e** |
@@ -56,19 +56,35 @@ Target: `price_per_day` (training-time only; not part of the prediction input).
 
 `booking_month`/seasonality: resolved **not added** — `period_utilization` already captures realized seasonality.
 
-### Data access (open item — confirm before implementing)
+### Data access (confirmed against the real schema, 2026-08-09/10)
 
-Pricing needs read access to `AssetCategory.name`, `Asset.category_id`/`capacity`/`condition`/`platform_height`/`minDailyRate`/`maxDailyRate`, and `Booking.startDate`/`endDate`/`status`, plus write access to `RecommendationItem.mlPredictedPrice`. **`app/models/` currently has no concrete models** — just a `Base` re-export placeholder. Spring Boot owns schema/migrations; Python maps existing tables (no Alembic, no new tables).
+Pricing needs read access to `asset_categories.name`, `assets.category_id`/`capacity`/`condition`/`platform_height`/`min_daily_rate`/`max_daily_rate`, `bookings.start_date`/`end_date`/`status`, and `booking_items.asset_id`/`booking_id`. **`Booking` has no `asset_id` column in the real schema** — the booking↔asset link exists only via `BookingItem`, so `period_utilization`'s overlap query (below) joins `booking_items → bookings`, not a direct `Booking.asset_id` this design originally assumed. Spring Boot owns schema/migrations; Python maps onto existing tables (no Alembic, no new tables).
 
-Before implementing `model.py`, confirm against the actual Spring Boot schema:
+**Pricing's database access is read-only (2026-08-10, agreed in principle — pending confirmation from the Spring Boot side).** This design previously listed "plus write access to `recommendation_items.ml_predicted_price`" here for Phase 2; that write is no longer planned. `predict_price(...)` returns the prediction on the recommendation response instead, and Spring Boot persists it to `RecommendationItem.mlPredictedPrice` — a JPA-mapped field on a Spring Boot entity, in a schema Spring Boot already owns. Once confirmed, pricing's Postgres role can be granted `SELECT` only; no code path in this service writes to Postgres. Two topology facts make that more than a naming convention: (1) writing `public.recommendation_items` gets overwritten by the sync job's merge-upsert, which sets every shared non-key column to `EXCLUDED` each cycle, including to `NULL`; (2) the `primary_snapshot` foreign tables are writable (`pg_relation_is_updatable = 28`) and point at the Spring Boot production database directly, so a stray SQLAlchemy autoflush on a mutated instance could otherwise write upstream. Full rationale: `docs/dynamic-pricing-masterplan.md` change log, 2026-08-10. Rests on every prediction happening inside a synchronous Spring Boot → Haystack request — re-check if a batch/offline re-pricing path is ever planned.
 
-- Exact table/column names and casing (diagram-sourced camelCase vs real snake_case).
-- Whether `Asset.platform_height` exists as a real column yet.
-- Whether `BookingStatus` has a `CONFIRMED` member — only `PENDING`/`CANCELLED` named in this repo, but period_utilization requires `CONFIRMED`/`PENDING`, non-cancelled.
+All open items are resolved:
 
-Introduce only minimal SQLAlchemy declarative models pricing actually reads/writes.
+- **Column names/casing: snake_case throughout**, not camelCase.
+- `Asset.platform_height` exists as a real, nullable column. `Asset.min_daily_rate`/`max_daily_rate` are `NOT NULL`.
+- `period_utilization`'s status filter counts bookings in `{PENDING_DEPOSIT, PENDING_CONFIRMED, CONFIRMED, MOBILISED}` — excludes `COMPLETED` (already returned) and `CANCELLED` (releases the hold) — overlap is inclusive on both boundaries (matching `BookingAvailabilityFilter`, no same-day turnover).
 
-**Phase 1e**: `period_utilization`'s live query is pulled forward ahead of this package — `app/repositories/pricing_repository.py`, first-ever read-only SQLAlchemy models, wired into existing `pricing_client.py` → `predict_price.py`. This package **relocates**, not rebuilds, that logic when built.
+**Schema targeting**: `postgres-haystack`'s `heavy_rental` database exposes two schemas — `primary_snapshot` (`postgres_fdw` foreign tables reading live from `postgres-primary`'s real `public` schema — the actual Spring-Boot-owned data) and `public` (a separate local table set, merge-upserted from upstream on a periodic external job, so at most one sync cycle stale — not an independently-drifting fork). **All pricing SQLAlchemy models must set `schema="primary_snapshot"`** — SQLAlchemy's default search path resolves to `public`, which would silently read the stale copy otherwise.
+
+Introduce only the minimal SQLAlchemy declarative models pricing actually reads/writes (not a full domain model set).
+
+**Phase 1e — implemented (2026-08-10)** on `HR-87-ml-2-d-production-db-wiring-for-period-utilization`: `app/models/asset_category.py`/`asset.py`/`booking.py`/`booking_item.py` (first-ever read-only SQLAlchemy models), `app/repositories/pricing_repository.py` (`period_utilization`'s live query), `app/repositories/pricing_read_resilience.py` (see below), wired into the existing `pricing_client.py` → `predict_price.py` call path. This package **relocates**, not rebuilds, that logic when Phase 2 is built — the guardrail-bound `Asset` read must go through the same resolver, not a second fallback implementation. Not wired into `app/api/recommendations.py` yet — no route calls `RecommendationService` yet (tests only).
+
+### Read resilience: tiered fallback (2026-08-10)
+
+Every pricing DB read against `primary_snapshot` — guardrail bounds + category join, and `period_utilization`'s overlap query — shares **one** fallback resolution, decided once per `predict_price(...)` call and applied to every read in that call. A single prediction must not mix `primary_snapshot` and `public` across its reads.
+
+Three tiers, attempted in order:
+
+1. **Transient (mid-recreate, seconds-scale).** A read can hit `UndefinedTable` in the narrow window between the sync cycle's `DROP SCHEMA`/`CREATE SCHEMA` committing and its `IMPORT FOREIGN SCHEMA` completing. Catch specifically `UndefinedTable`/relation-missing errors — never a blanket exception — and retry with a short bounded backoff. Most cycles resolve here.
+2. **Sustained (a failed cycle — hours, up to the ~24h sync interval).** If tier 1's retries exhaust, re-issue the same read(s) against `public` instead — a real value, at most one sync cycle stale, not a fabricated default. Mark the resulting `PriceResult` as degraded using `pricing_client.py`'s existing "model unavailable" pattern (`model_version`, `explanation`).
+3. **Cold start (neither schema exists).** A container that has never completed a sync. `predict_price(...)` fails loud (raises) rather than returning a fabricated price.
+
+**Implementation shape**: `app/repositories/pricing_read_resilience.py`'s `resolve_pricing_schema(session) -> PricingSchemaResolution` — called once per `predict_price_for_asset()` call, its `.execution_options` (SQLAlchemy's `schema_translate_map`, `{}` when reading `primary_snapshot` unmodified) threaded into every subsequent `session.execute(...)` in that call. This avoids declaring a second set of models pointed at `public` — the same `AssetCategory`/`Asset`/`Booking`/`BookingItem` classes (declared with `schema="primary_snapshot"`) serve both tiers; `schema_translate_map` redirects the table name at query time.
 
 ### Guardrail clamping
 
@@ -141,7 +157,9 @@ app/services/pricing/           # Phase 2 target (this capability)
   model.py, train.py, feature_schema.py, artifacts/
 
 app/services/pricing_client.py  # as-built recommend adapter → ml-experiments / future production
-app/repositories/pricing_repository.py  # Phase 1e target for live utilization query
+app/models/asset_category.py, asset.py, booking.py, booking_item.py  # Phase 1e read-only models
+app/repositories/pricing_repository.py         # Phase 1e: live period_utilization query
+app/repositories/pricing_read_resilience.py    # Phase 1e: primary_snapshot/public tiered fallback
 ```
 
 ## O — Operations
@@ -164,7 +182,8 @@ uv run python ml-experiments/shap_review.py
 
 | Branch | Scope |
 |--------|--------|
-| `feature/ml-3-pricing-service` | Scaffold package, port schema, model/train, guardrails, minimal ORM |
+| `HR-87-ml-2-d-production-db-wiring-for-period-utilization` | **Done (2026-08-10)** — Phase 1e: read-only models, `pricing_repository.py`, `pricing_read_resilience.py` tiered fallback; 20 new unit tests |
+| `feature/ml-3-pricing-service` | Scaffold package, port schema, model/train, guardrails, **relocate** (don't rebuild) Phase 1e's read models/repositories |
 | `feature/ml-4-integration-tests` | Wire pipeline, unit tests, manual retrain endpoint |
 
 ## N — Norms
