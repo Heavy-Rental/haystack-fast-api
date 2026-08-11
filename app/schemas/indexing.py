@@ -55,11 +55,17 @@ class IngestFromProjectSpecResponse(BaseModel):
     )
     tentative_start_date: date | None = Field(
         default=None,
-        description="Echo of request start_date when supplied (S1b); null if omitted",
+        description=(
+            "Rental window start: request start_date preferred (S1b); "
+            "else free-text/file extract when confident (S1e); null if unknown"
+        ),
     )
     tentative_end_date: date | None = Field(
         default=None,
-        description="Echo of request end_date when supplied (S1b); null if omitted",
+        description=(
+            "Rental window end: request end_date preferred (S1b); "
+            "else free-text/file extract when confident (S1e); null if unknown"
+        ),
     )
     needs_summary: list[NeedSummaryItem] = Field(
         default_factory=list,

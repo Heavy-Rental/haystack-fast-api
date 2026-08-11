@@ -113,7 +113,7 @@ All ingest requests must include **`user_id`** (JSON or form-data). Optional: **
 
 Knowledge graph is **mandatory** on successful ingest. Artifacts land under `artifacts/kg/{user_id}/kg_{ingest_id}.json`. Full Ragas transforms only if `KG_APPLY_TRANSFORMS=true` (runs inside `KnowledgeGraphGenerator`). KG failure fails the request.
 
-## Success body checklist — ingest (S1a lean)
+## Success body checklist — ingest (FR-IX-023 as-built S1a–S1e)
 
 ```json
 {
@@ -139,7 +139,7 @@ Knowledge graph is **mandatory** on successful ingest. Artifacts land under `art
 }
 ```
 
-(`tentative_*` are `null` when request omits dates. Stub decomposer yields one need from project text. `expected_budget` is `null` + warning when no confident budget phrase is found.)
+(`tentative_*`: request dates preferred; else free-text extract e.g. `from 2026-09-01 to 2026-09-14`; else `null` + warning. Stub decomposer yields one need from project text. `expected_budget` is `null` + warning when no confident budget phrase is found.)
 
 **Not present on public body:** `documents[]`, `kg_*`, counts, `data_kind` (still run internally for Call 2).  
 **Not present** (old recommend API): `recommendation_id`, `results_by_need`.

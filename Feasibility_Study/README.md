@@ -22,13 +22,13 @@ These apply across studies unless a study explicitly narrows scope:
 
 | Study | Topic | Version |
 |-------|--------|---------|
-| [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane: fleet sync primary→Haystack PG→Neo4j; post-[4] recommend via **in-process tools**; C/W/D-aligned graph; Pgvector; Call 1 lean + FR-IX-023 TARGET. Hosts **`postgres_haystack`** + sync **`postgres_haystack_sync`**. | **2.7.2** |
+| [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane: fleet sync primary→Haystack PG→Neo4j; post-[4] recommend via **in-process tools**; C/W/D-aligned graph; Pgvector; Call 1 lean + FR-IX-023 **as-built**. Hosts **`postgres_haystack`** + sync **`postgres_haystack_sync`**. | **2.7.3** |
 | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) | Spring ↔ FastAPI wire; multi-call saga; internal `/internal/v1/recommendations` routes; C/W/D internal to FastAPI. | **1.3.1** |
 | [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) | ML pricing as **in-process** agent tool; pricing **Worker** fan-out per need; Phase 1e/2a. | **1.2.0** |
 | [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) | Synthesis **[8]** (Coordinator) → recommended assets + predicted rent prices. | **1.4.1** |
 | [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) | C/W/D role vocabulary; **[4]** forced non-agent gate; explicit Delegator router; fan-out Workers per need; **§10 A–L templates** (seq/par + workflow; haystack←primary). | **2.1.0** |
 | [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) | Indexing Pipeline → Haystack SuperComponent (optional packaging for Coordinator gate **[4]**). | **1.2.1** |
-| [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) | Call 1 lean body; S1b date echo; FR-IX-023 order S1c→S1d→S1e; not Call 3. | **1.1.1** |
+| [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) | Call 1 lean body; FR-IX-023 **as-built** S1a–S1e (needs, budget, free-text dates); not Call 3. | **1.2.0** |
 
 ### Implementation plan
 

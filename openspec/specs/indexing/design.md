@@ -44,14 +44,13 @@ Aligned with Packt Ch. 4 indexing flowchart
        │  as-built S1b: tentative_* echo request dates
        │  as-built S1c: needs_summary[] via need decomposer (stub/LLM)
        │  as-built S1d: expected_budget extract-only (never invent)
-       │
-       │  TARGET FR-IX-023 remainder (implementation-plan order):
-       │    S1e free-text dates → 1.7 as-built mark
+       │  as-built S1e: free-text/file dates if request omits (request preferred)
+       │  FR-IX-023 Call 1 summary: as-built (Phase 1.7)
        ▼
   project-spec summary enrichment (after successful index + KG only)
-       • needs_summary (decomposer / LLM)                     [S1c as-built]
-       • expected_budget (extract or null; never invent)      [S1d as-built]
-       • tentative_* free-text/file extract if request omits  [S1e TARGET]
+       • needs_summary (decomposer / LLM)                     [S1c]
+       • expected_budget (extract or null; never invent)      [S1d]
+       • tentative_* free-text/file extract if request omits  [S1e]
 
        │
        ▼
@@ -77,21 +76,23 @@ Default embedder is CI-safe (`MockDocumentEmbedder`); optional `openai` / `sente
 | `app/pipelines/kg/*` | Mandatory KG (HR-76) |
 | `app/services/indexing.py` | Index + mandatory KG (hard-fail) |
 | `app/api/recommendations.py` | Thin HTTP |
-| `app/schemas/indexing.py` | Response DTO (as-built); TARGET summary fields |
-| `app/services/need_decomposer.py` / LLM | TARGET: needs_summary from project text |
+| `app/schemas/indexing.py` | Response DTO — FR-IX-023 as-built (S1a–S1e) |
+| `app/services/need_decomposer.py` / LLM | **as-built S1c:** needs_summary from project text |
+| `app/services/project_spec_budget.py` | **as-built S1d:** expected_budget extract |
+| `app/services/project_spec_dates.py` | **as-built S1e:** resolve_rental_dates (request preferred) |
 | `app/config.py` | `INDEXING_*`, `KG_*` |
 | `postman/` | Live collection |
 
-### TARGET extraction notes (FR-IX-023)
+### As-built extraction notes (FR-IX-023 / Phase 1.7)
 
 | Output | Source precedence |
 |--------|-------------------|
 | `needs_summary` | Decompose resolved project text (and/or KG-1 nodes); stub decomposer for CI |
-| `tentative_*` dates | Request `start_date`/`end_date` if set; else extract from text; else null |
+| `tentative_*` dates | Request `start_date`/`end_date` if set; else extract from text/file; else null |
 | `expected_budget` | Extract currency/amount phrases from text; else null + warning — **not** `include_pricing` |
 | Still after index | Summary MUST NOT run if index/KG hard-fail |
 
-Compact response: portal may only need identity + summary; retain technical fields for ops/debug (`verbose` or nested `indexing`).
+Compact response: portal may only need identity + summary; technical index/KG fields stay in session `meta` (not public body).
 
 ### Package notes under `app/pipelines/indexing/`
 
@@ -115,7 +116,9 @@ Compact response: portal may only need identity + summary; retain technical fiel
 | Area | Modules / notes |
 |------|-----------------|
 | Component + pipeline | `tests/test_indexing_*.py` (router, converters, dual-branch, write path) |
-| HTTP ingest fields | `tests/test_recommendations_intake.py` (ingest response, not recommend envelope) |
+| HTTP ingest fields | `tests/test_recommendations_intake.py` (FR-IX-023 lean body, not recommend envelope) |
+| Date extract (S1e) | `tests/test_project_spec_dates.py` + intake free-text date cases |
+| Budget extract (S1d) | `tests/test_project_spec_budget.py` + intake budget cases |
 | Mandatory KG | `tests/test_knowledge_graph.py`; hard-fail and Stage-1 Q&A see knowledge-graph **Testing** |
 | Recommend unit tests | Service-level only; not bound to this HTTP route |
 

@@ -294,9 +294,9 @@ When `include_pricing` is true and a match is selected, `item.pricing` MUST expo
 - **WHEN** live `POST .../submitprojectspecification` succeeds
 - **THEN** the body is ingest-shaped and does not require `results_by_need`
 
-### Requirement: Project-spec summary is not recommend (FR-I-016) — TARGET alignment
+### Requirement: Project-spec summary is not recommend (FR-I-016) — as-built alignment
 
-When indexing implements FR-IX-023, Call 1 MAY return `needs_summary`, `tentative_start_date` / `tentative_end_date`, and `expected_budget` from the project-spec (and/or request dates). That summary MUST NOT be treated as FR-I-007 `results_by_need` (ranked assets + predicted rent). Client **budget** MUST NOT be encoded as `options.include_pricing` (boolean only).
+Indexing **as-built** FR-IX-023 returns `needs_summary`, `tentative_start_date` / `tentative_end_date`, and `expected_budget` from the project-spec (and/or request dates). That summary MUST NOT be treated as FR-I-007 `results_by_need` (ranked assets + predicted rent). Client **budget** MUST NOT be encoded as `options.include_pricing` (boolean only).
 
 #### Scenario: Summary vs recommend envelope
 - **WHEN** Call 1 returns a project-spec summary under FR-IX-023
@@ -508,6 +508,7 @@ Automated live HTTP: `tests/test_recommendations_intake.py`. Recommend service: 
 | **0.5.0** | 2026-08-07 | Sequential map; live requires `user_id`; mandatory KG fields |
 | **1.0.0** | 2026-08-10 | Migrated to OpenSpec Requirement/Scenario under `openspec/specs/recommendation-intake/` |
 | **1.1.0** | 2026-08-10 | **FR-I-016 TARGET:** Call 1 project-spec summary ≠ recommend; budget ≠ `include_pricing` |
+| **1.1.1** | 2026-08-11 | **FR-I-016 as-built alignment:** FR-IX-023 Call 1 summary shipped; still ≠ recommend / `include_pricing` |
 
 When the **live** public contract changes, update **indexing + knowledge-graph** first, then this file’s pointers.
 

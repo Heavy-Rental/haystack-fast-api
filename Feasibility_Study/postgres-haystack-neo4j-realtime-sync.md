@@ -5,7 +5,7 @@
 | **Document type** | Architecture / infrastructure feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 2.7.2 |
+| **Version** | 2.7.3 |
 | **Application** | `haystack-fast-api` |
 | **Related specs** | `openspec/specs/project-setup/`, `indexing/`, `knowledge-graph/`, `recommendation-pipeline/`, `dynamic-pricing/`, `equipment-recommendation/` |
 | **Related studies** | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) · [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) · [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) · [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) · [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) · [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) |
@@ -110,7 +110,7 @@ haystack-fast-api             (Haystack pipelines, agents, DocumentStore, KG)
 
 | Call | Typical route / payload | Latency profile (today / target) | Uses which plane? |
 |------|---------------------------|----------------------------------|-------------------|
-| **1. Ingest** | `POST /internal/v1/recommendations/submitprojectspecification` — multipart file or JSON text + `user_id` | Seconds–tens of seconds (index + KG + optional agent orchestration) | **Plane B** (§4): indexing → DocumentStore + KG-1; **lean public body** `ingest_id` + `user_id` + `user_requirement_summary`; full FR-IX-023 needs/dates/budget **TARGET** — see [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) |
+| **1. Ingest** | `POST /internal/v1/recommendations/submitprojectspecification` — multipart file or JSON text + `user_id` | Seconds–tens of seconds (index + KG + optional agent orchestration) | **Plane B** (§4): indexing → DocumentStore + KG-1; **lean public body** + FR-IX-023 **as-built** (`ingest_id`, `user_id`, `user_requirement_summary`, `tentative_*`, `needs_summary[]`, `expected_budget`) — see [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) |
 | **2. Q&A** | `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` — `user_id`, `ingest_id`, `query` | Seconds if LLM; fast if stub | **Plane B** session tools over store + KG-1 from call 1 (path is Spring-facing; behaviour is Q&A markdown, not Call 3 assets) |
 | **3. Recommend** | Future HTTP — needs, dates, options (or continue after ingest) | Seconds–tens; multi unit-need loop | **Plane B orchestrator after [4]** + **in-process tools** → Plane A fleet/Neo4j + **ML pricing** + project context |
 | **Health** | `GET /health` | Milliseconds | Ops / resilience probes |
@@ -1073,6 +1073,7 @@ SOURCE_HOST: postgres-primary
 | **2.7.0** | 2026-08-11 | §4.1.1: agent A–K workflow optimization pointer |
 | **2.7.1** | 2026-08-11 | §4.1.1: agent A–L sequential/parallel processing pointer |
 | **2.7.2** | 2026-08-11 | Call 1 lean body + full internal route paths; FR-IX-023 full TARGET remains |
+| **2.7.3** | 2026-08-11 | Call 1 FR-IX-023 **as-built** (S1a–S1e / Phase 1.7); free-text dates + needs + budget on lean body |
 
 ---
 
@@ -1092,8 +1093,8 @@ SOURCE_HOST: postgres-primary
 | **Indexing DocumentStore cutover** | **Yes — I1: pipeline writes PgvectorDocumentStore** |
 | Multi-user project files | **Pgvector + user_id/ingest_id filters + TTL** |
 | Durable store default | **Pgvector in Indexing Pipeline only** (InMemory for CI) |
-| **Call 1 lean public body?** | **GO (shipping)** — `ingest_id` + `user_id` + `user_requirement_summary` (+ warnings); no technical dump |
-| **Call 1 full needs/dates/budget?** | **GO (TARGET)** — FR-IX-023 later; not Call 3 recommend |
+| **Call 1 lean public body?** | **GO (shipping)** — FR-IX-023 as-built lean envelope; no technical dump |
+| **Call 1 full needs/dates/budget?** | **GO (as-built)** — FR-IX-023 S1a–S1e; not Call 3 recommend |
 | **Multi-Agent after [4]** | **GO** — Coordinator + Delegator + Workers run **in-process tools**; Coordinator synthesizes |
 | **Synthesis outputs assets + rent price?** | **GO (target)** — merge only; see [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) |
 | Recommend data sources via tools | **Postgres-Haystack** + **Neo4j KG-2** + **ML pricing** + project Pgvector/KG-1 |

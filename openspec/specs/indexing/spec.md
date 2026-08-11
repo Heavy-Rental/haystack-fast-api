@@ -31,10 +31,9 @@ When behaviour here and the codebase diverge, update them in the **same change s
 
 **Conflict rule:** Live route → **this capability wins here**. Optional / full KG rules → [`../knowledge-graph/spec.md`](../knowledge-graph/spec.md). Recommend envelope without a “deferred” label loses to this capability.
 
-**As-built vs parent FR-040:** live public response is a **lean ingest envelope** (`ingest_id`, `user_id`, `user_requirement_summary`, `warnings[]`), not ranked `results_by_need`. Index/KG technical detail runs internally (session meta).
+**As-built vs parent FR-040:** live public response is a **lean ingest envelope** with **FR-IX-023 as-built** fields (`ingest_id`, `user_id`, `user_requirement_summary`, `tentative_*`, `needs_summary[]`, `expected_budget` | null, `warnings[]`), not ranked `results_by_need`. Index/KG technical detail runs internally (session meta).
 
-**As-built (S1a):** lean body with deterministic `user_requirement_summary`.  
-**Target (FR-IX-023 remainder):** structured `needs_summary[]`, tentative dates, expected budget. MUST NOT become FR-010 `results_by_need` without recommend reattach.
+**As-built (S1a–S1e / Phase 1.7):** full Call 1 project-spec summary. MUST NOT become FR-010 `results_by_need` without recommend reattach.
 
 ---
 
@@ -373,8 +372,8 @@ After successful index + mandatory KG, the live success body MUST include:
 2. **`tentative_end_date`** — echo request `end_date` when provided; else `null`  
 
 MUST apply to both JSON and multipart requests.  
-MUST NOT invent dates from document text in S1b (free-text extract remains TARGET).  
 When both request dates are set, `end_date` MUST be on or after `start_date` or the request fails with **400**.  
+Free-text extract when request omits dates is specified under S1e (as-built).  
 (Trace: partial FR-IX-023)  
 **Status:** **as-built (S1b)**.
 
@@ -383,31 +382,32 @@ When both request dates are set, `end_date` MUST be on or after `start_date` or 
 - **WHEN** `POST .../submitprojectspecification` succeeds
 - **THEN** `tentative_start_date` / `tentative_end_date` echo the request window
 
-#### Scenario: Dates omitted are null
-- **GIVEN** request omits both dates
+#### Scenario: Dates omitted and text has no window
+- **GIVEN** request omits both dates **and** project text has no confident rental window
 - **WHEN** ingest succeeds
 - **THEN** `tentative_start_date` and `tentative_end_date` are null
+- **AND** a warning MAY state that rental dates were not found (S1e)
 
 #### Scenario: Invalid date window rejected
 - **GIVEN** request supplies `end_date` before `start_date`
 - **WHEN** ingest is attempted (JSON or multipart)
 - **THEN** the response is HTTP 400 with the shared error shape
 
-### Requirement: Full project-spec summary on ingest response (TARGET FR-IX-023)
+### Requirement: Full project-spec summary on ingest response (as-built FR-IX-023)
 
-After S1a + S1b, complete FR-IX-023 in this **implementation order** (see [`Feasibility_Study/implementation-plan.md`](../../../Feasibility_Study/implementation-plan.md) Phase 1):
+FR-IX-023 Call 1 project-spec summary is **complete** after S1a–S1e (see [`Feasibility_Study/implementation-plan.md`](../../../Feasibility_Study/implementation-plan.md) Phase 1):
 
 | Order | Stage | Work | Status |
 |-------|-------|------|--------|
 | 1 | **S1c** | `needs_summary[]` via decomposer after index+KG | **as-built** |
 | 2 | **S1d** | `expected_budget` extract; never invent | **as-built** |
-| 3 | **S1e** | Free-text / file date extract when request omits dates | TARGET |
-| 4 | **1.7** | Mark full FR-IX-023 as-built when S1c+S1d+S1e green | TARGET |
+| 3 | **S1e** | Free-text / file date extract when request omits dates | **as-built** |
+| 4 | **1.7** | Mark full FR-IX-023 as-built when S1c+S1d+S1e green | **as-built** |
 
 MUST NOT use `options.include_pricing` as a budget amount (boolean only).  
 MUST NOT treat summary as ranked fleet recommendations or ML rent (`results_by_need` / Call 3).  
 (Trace: FR-IX-023)  
-**Status:** **partial as-built** (S1a–S1d); full FR-IX-023 after **S1e**; **S1e MUST run after S1d**.
+**Status:** **as-built** for Call 1 project-spec summary (S1a–S1e).
 
 ### Requirement: Needs summary on ingest response (as-built S1c)
 After successful index + mandatory KG, the live success body MUST include **`needs_summary`** (array), produced by the configured need decomposer (`NEED_DECOMPOSER=stub|llm`) on project text or extracted file content.  
@@ -443,8 +443,15 @@ MUST NOT invent a budget. MUST NOT treat `options.include_pricing` as a budget a
 - **WHEN** the project-spec states a budget confidently (e.g. `SGD 15000`)
 - **THEN** `expected_budget` includes amount (and currency when known) with a source marker (e.g. extracted)
 
-#### Scenario: Dates from document when request omits (S1e target — after S1d)
-- **GIVEN** S1e implementation and request omits dates but the project-spec states a rental window confidently
+### Requirement: Free-text rental dates on ingest response (as-built S1e)
+After successful index + mandatory KG, when request omits `start_date` and/or `end_date`, the service MUST attempt deterministic extract from project text / extracted file content.  
+Request values MUST win over extract when present.  
+When no confident dates exist, fields MUST be null (warning MAY state dates not found). MUST NOT invent dates.  
+(Trace: partial FR-IX-023 / S1e)  
+**Status:** **as-built (S1e)**.
+
+#### Scenario: Dates from document when request omits (S1e as-built)
+- **GIVEN** request omits dates but the project-spec states a rental window confidently (e.g. from 2026-09-01 to 2026-09-14)
 - **WHEN** ingest succeeds
 - **THEN** `tentative_start_date` / `tentative_end_date` are filled from the document when confident
 - **AND** when request also supplies dates, request values win over extract
@@ -513,6 +520,7 @@ Sources MUST be classified according to the following normative extension / MIME
 | **0.5.2** | 2026-08-11 | FR-IX-023 delivery order: S1c needs → S1d budget → **S1e free-text dates** (after S1d) → 1.7 as-built; aligns with implementation-plan Phase 1 |
 | **0.5.3** | 2026-08-11 | **S1c as-built:** `needs_summary[]` via need decomposer after index+KG; S1d/S1e still TARGET |
 | **0.5.4** | 2026-08-11 | **S1d as-built:** `expected_budget` extract-only (never invent); S1e free-text dates still TARGET |
+| **0.6.0** | 2026-08-11 | **S1e + 1.7:** free-text date extract as-built; **FR-IX-023 Call 1 summary fully as-built** (S1a–S1e) |
 
 
 | Version | Date | Notes |
