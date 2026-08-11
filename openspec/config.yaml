@@ -21,11 +21,12 @@ context: |
   Live HTTP path: POST /internal/v1/recommendations/submitprojectspecification (user_id required)
     → dual-branch index → DocumentStore + mandatory KG
     → lean response: ingest_id, user_id, user_requirement_summary,
-      tentative_start/end_date (echo request when supplied), warnings[]
+      tentative_start/end_date (echo request when supplied), needs_summary[],
+      warnings[]
     → optional Call 2 POST .../project-knowledge/getassetrecommendations multi-agent Q&A
   Deferred: FR-010 recommend HTTP results_by_need (service-level only today);
-    FR-IX-023 remainder after S1b: S1c needs → S1d budget → S1e free-text dates
-    (S1e after S1d) → mark as-built (impl-plan Phase 1.7)
+    FR-IX-023 remainder: S1d budget → S1e free-text dates (after S1d)
+    → mark full FR-IX-023 as-built (impl-plan Phase 1.7)
 
 rules:
   specs: |

@@ -4,7 +4,7 @@
 |-------|--------|
 | **Capability** | [`../spec.md`](../spec.md) (indexing) |
 | **Design** | [`../design.md`](../design.md) |
-| **Status** | **as-built lean public body (S1a + S1b dates echo)** + **TARGET** full FR-IX-023 (`needs_summary[]`, free-text date extract, budget) |
+| **Status** | **as-built lean public body (S1a + S1b + S1c needs_summary)** + **TARGET** FR-IX-023 remainder (S1d budget, S1e free-text dates) |
 | **DTO (as-built)** | `IngestFromProjectSpecResponse` (`app/schemas/indexing.py`) |
 | **Standards** | OpenSpec behaviour · Spec-kit contract tables · OpenSPDD (prompt/spec before code) |
 
@@ -49,9 +49,14 @@ Sources: multipart file uploads are packaged as Haystack `ByteStream` with `mime
 | `user_requirement_summary` | string | Deterministic summary of `project_text` or **extracted** multipart content (not raw bytes); may be truncated |
 | `tentative_start_date` | date \| null | **S1b as-built:** echo request `start_date` when supplied; else `null` (no free-text extract yet) |
 | `tentative_end_date` | date \| null | **S1b as-built:** echo request `end_date` when supplied; else `null` |
-| `warnings` | string[] | Soft issues (e.g. truncated summary, conversion soft warnings); empty when none |
+| `needs_summary` | array | **S1c as-built:** structured needs after index+KG via need decomposer (stub default in CI) |
+| `needs_summary[].need_id` | string \| null | Optional stable id (e.g. `need_1`) |
+| `needs_summary[].description` | string | Human-readable need |
+| `needs_summary[].equipment_hints` | string[] | Optional category/type hints |
+| `needs_summary[].quantity` | int \| null | Optional |
+| `warnings` | string[] | Soft issues (e.g. truncated summary, empty needs); empty when none |
 
-### Example (as-built lean + S1b)
+### Example (as-built lean + S1b + S1c)
 
 ```json
 {
@@ -60,6 +65,14 @@ Sources: multipart file uploads are packaged as Haystack `ByteStream` with `mime
   "user_requirement_summary": "Indoor elevated work ~8m; need scissors lift on soft clay.",
   "tentative_start_date": "2026-09-01",
   "tentative_end_date": "2026-09-12",
+  "needs_summary": [
+    {
+      "need_id": "need_1",
+      "description": "Indoor elevated work ~8m; need scissors lift on soft clay.",
+      "equipment_hints": [],
+      "quantity": 1
+    }
+  ],
   "warnings": []
 }
 ```
@@ -74,13 +87,13 @@ Sources: multipart file uploads are packaged as Haystack `ByteStream` with `mime
 
 ### As-built gaps vs full FR-IX-023 TARGET
 
-No structured `needs_summary[]`, no free-text date extraction when request omits dates, no `expected_budget` on the live lean body yet. Request date **echo** is as-built (S1b).
+`needs_summary[]` is **as-built (S1c)**. Still missing: free-text date extraction when request omits dates (**S1e**), `expected_budget` (**S1d**). Request date **echo** is as-built (S1b).
 
 **Implementation order** (normative — [`Feasibility_Study/implementation-plan.md`](../../../../Feasibility_Study/implementation-plan.md) Phase 1):
 
-1. **S1c** — `needs_summary[]`  
-2. **S1d** — `expected_budget`  
-3. **S1e** — free-text / file date extract (when request omits dates) — **after S1d**  
+1. **S1c** — `needs_summary[]` — **as-built**  
+2. **S1d** — `expected_budget` — TARGET  
+3. **S1e** — free-text / file date extract (when request omits dates) — TARGET **after S1d**  
 4. **1.7** — mark FR-IX-023 as-built in OpenSpec when S1c+S1d+S1e green  
 
 ---
@@ -91,12 +104,12 @@ Additive enrichment of lean body. Default **SHOULD** stay compact (no public `do
 
 | Field | Type | Notes | Plan step |
 |-------|------|--------|-----------|
-| `needs_summary[]` | array | Project-spec implied needs | **S1c** |
+| `needs_summary[]` | array | Project-spec implied needs | **S1c as-built** |
 | `needs_summary[].description` | string | Human-readable need | S1c |
 | `needs_summary[].equipment_hints` | string[] | Optional | S1c |
 | `needs_summary[].quantity` | int \| null | Optional | S1c |
 | `needs_summary[].need_id` | string \| null | Optional stable id for Call 3 | S1c |
-| `expected_budget` | object \| null | Extract only; **never invent** | **S1d** |
+| `expected_budget` | object \| null | Extract only; **never invent** | **S1d TARGET** |
 | `expected_budget.amount` | number | When known | S1d |
 | `expected_budget.currency` | string \| null | e.g. `SGD` | S1d |
 | `expected_budget.source` | string | e.g. `extracted` | S1d |

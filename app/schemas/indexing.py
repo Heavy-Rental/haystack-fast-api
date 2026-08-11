@@ -5,6 +5,24 @@ from datetime import date
 from pydantic import BaseModel, Field
 
 
+class NeedSummaryItem(BaseModel):
+    """One structured need inferred from the project-spec (FR-IX-023 / S1c)."""
+
+    need_id: str | None = Field(
+        default=None,
+        description="Optional stable id for Call 3 (e.g. need_1)",
+    )
+    description: str = Field(..., min_length=1, description="Human-readable need")
+    equipment_hints: list[str] = Field(
+        default_factory=list,
+        description="Optional category/type hints",
+    )
+    quantity: int | None = Field(
+        default=None,
+        description="Optional quantity when known",
+    )
+
+
 class IngestFromProjectSpecResponse(BaseModel):
     """Lean success response for POST .../submitprojectspecification.
 
@@ -28,6 +46,13 @@ class IngestFromProjectSpecResponse(BaseModel):
     tentative_end_date: date | None = Field(
         default=None,
         description="Echo of request end_date when supplied (S1b); null if omitted",
+    )
+    needs_summary: list[NeedSummaryItem] = Field(
+        default_factory=list,
+        description=(
+            "Structured needs from need decomposer after successful index+KG (S1c); "
+            "empty list + warning when none inferred"
+        ),
     )
     warnings: list[str] = Field(
         default_factory=list,
