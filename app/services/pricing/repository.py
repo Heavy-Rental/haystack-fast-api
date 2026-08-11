@@ -26,6 +26,7 @@ full incident writeup.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
 
 from sqlalchemy import select
@@ -59,6 +60,68 @@ def resolve_effective_capacity(category: str, capacity: float | None) -> float |
     if bounds is None:
         return None
     return (bounds["min"] + bounds["max"]) / 2
+
+
+@dataclass(frozen=True)
+class AssetPricingRow:
+    """Real per-asset attributes needed to call ``model.predict_price(...)``.
+
+    ``category`` is already converted to ``feature_schema`` convention (via
+    ``category_mapping.to_feature_name()``) -- callers must not convert it
+    again. Used by the internal quote endpoint (Phase 2c) to resolve
+    category/condition/capacity/platform_height and the real guardrail
+    bounds from an ``asset_id`` alone -- see
+    openspec/specs/dynamic-pricing/design.md "Internal quote API".
+    """
+
+    id: int
+    category: str
+    condition: str | None
+    capacity: float | None
+    platform_height: float | None
+    min_daily_rate: float
+    max_daily_rate: float
+
+
+def get_asset_for_pricing(
+    session: Session,
+    resolution: PricingSchemaResolution,
+    asset_id: int,
+) -> AssetPricingRow | None:
+    """Resolve one asset's pricing attributes server-side, by primary key.
+
+    Returns ``None`` when no such asset exists -- the caller (the internal
+    quote endpoint) turns that into a per-item error rather than raising,
+    per spec.md US-4 Scenario "unresolvable asset_id". Goes through the same
+    tiered ``resolution`` as every other pricing read in this package (no
+    second fallback implementation for the guardrail-bound read).
+
+    Raises:
+        KeyError: ``AssetCategory.name`` isn't a recognized DB category name
+            (``category_mapping.to_feature_name()``) -- a genuinely new
+            category the mapping doesn't know about yet. Left to the caller
+            to turn into a per-item error, same treatment as "not found".
+    """
+    row = session.execute(
+        select(Asset, AssetCategory.name)
+        .join(AssetCategory, Asset.category_id == AssetCategory.id)
+        .where(Asset.id == asset_id),
+        execution_options=resolution.execution_options,
+    ).first()
+    if row is None:
+        return None
+    asset, db_category_name = row
+    return AssetPricingRow(
+        id=asset.id,
+        category=category_mapping.to_feature_name(db_category_name),
+        condition=asset.condition,
+        capacity=(float(asset.capacity) if asset.capacity is not None else None),
+        platform_height=(
+            float(asset.platform_height) if asset.platform_height is not None else None
+        ),
+        min_daily_rate=float(asset.min_daily_rate),
+        max_daily_rate=float(asset.max_daily_rate),
+    )
 
 
 def compute_lead_time_days(start_date: date, *, today: date | None = None) -> int:
