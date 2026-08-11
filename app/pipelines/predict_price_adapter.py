@@ -20,7 +20,7 @@ def _parse_date(value: Any) -> date | None:
 
 @component
 class PredictPriceAdapter:
-    """Call experimental predict_price (or fallback) for each available candidate."""
+    """Call the production predict_price() for each available candidate."""
 
     def __init__(self, default_distance_km: float = 15.0) -> None:
         self._distance_km = default_distance_km
@@ -58,6 +58,8 @@ class PredictPriceAdapter:
                     capacity=None if capacity is None else float(capacity),
                     distance_km=dist,
                     platform_height=None if height is None else float(height),
+                    min_daily_rate=float(candidate["min_daily_rate"]),
+                    max_daily_rate=float(candidate["max_daily_rate"]),
                     db=db,
                     start_date=parsed_start,
                     end_date=parsed_end,

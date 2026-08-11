@@ -74,6 +74,8 @@ def test_price_adapter_attaches_pricing() -> None:
             "condition": "GOOD",
             "capacity": 300.0,
             "platform_height": 10.0,
+            "min_daily_rate": 120.0,
+            "max_daily_rate": 280.0,
         }
     ]
     duration_days = 7.0
