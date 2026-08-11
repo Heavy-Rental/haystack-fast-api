@@ -5,10 +5,10 @@
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
 | **Date** | 2026-08-11 |
-| **Version** | 3.3.1 |
+| **Version** | 3.4.0 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.3.1** Call 2 request contract (`query` required; predefined prompt + `user_requirement_summary` allowed); **3.3.0** Call 1 lean body + internal routes; **3.2.1** accuracy validation; **3.2.0** PR template; **3.1.0** TDD/BDD; **3.0.0** stage catalog |
+| **Revision notes** | **3.4.0** Phase 1 FR-IX-023 order: S1c needs → S1d budget → **S1e free-text dates** → 1.7 as-built mark; **3.3.1** Call 2 request contract; **3.3.0** Call 1 lean body; **3.2.x** PR template / accuracy; **3.1.0** TDD/BDD; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -52,7 +52,7 @@ Call 1: POST /internal/v1/recommendations/submitprojectspecification
   → lean public body (shipping contract):
        ingest_id, user_id, user_requirement_summary, warnings[]
   → technical indexing/KG fields NOT on public body (still run internally)
-  → full FR-IX-023 needs_summary[] / dates / budget — not yet
+  → FR-IX-023 remainder planned: S1c needs → S1d budget → S1e free-text dates → 1.7 as-built
 
 Call 2: POST /internal/v1/recommendations/project-knowledge/getassetrecommendations
   → requires user_id + ingest_id from Call 1 + query
@@ -386,7 +386,7 @@ Use **stage IDs** in PRs and test names. Every stage below that ships code has a
 | Stage ID | Name | Phase | Repo | Depends on | Default CI? |
 |----------|------|-------|------|------------|-------------|
 | **S0** | Spec freeze & D0 schema contract | 0 | shared | — | checklist |
-| **S1** | Call 1 lean body + FR-IX-023 increments | 1 | app | — | **yes** |
+| **S1** | Call 1 lean body + FR-IX-023 increments (**S1a–S1e**) | 1 | app | — | **yes** |
 | **S2a** | Resilience C1 — FastAPI (idempotency, errors, correlation) | 2 | app | — | **yes** |
 | **S2b** | Resilience C1 — Spring client (timeouts, CB, saga) | 2 | Spring | WireMock | Spring CI |
 | **S3** | Agent indexing tool R1 + Coordinator gate **[4]** | 3 | app | — | **yes** |
@@ -438,19 +438,43 @@ Each step is sized as a reviewable PR (or small PR stack). Every phase/stage has
 
 ---
 
-### Phase 1 — Call 1: lean public body + optional FR-IX-023 (this repo) — **highest ROI next**
+### Phase 1 — Call 1: lean public body + FR-IX-023 increments (this repo)
 
-Maps to [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) and OpenSpec FR-IX-023 (full TARGET later).
+Maps to [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) and OpenSpec **FR-IX-023**.
 
-| Step | Work | Files (expected) | Exit criteria |
-|------|------|------------------|---------------|
-| **1.0** | Routes under `/internal/v1/recommendations` (`submitprojectspecification`, `getassetrecommendations`) | `app/api/…`, tests, Postman | OpenAPI shows internal paths |
-| **1.1 S1a** | Lean `IngestFromProjectSpecResponse`: `ingest_id`, `user_id`, `user_requirement_summary`, `warnings[]` only on public body | `app/schemas/indexing.py`, `IndexingIngestService` | 200 body is lean; index+KG still run for Call 2 |
-| **1.2 S1a** | Build `user_requirement_summary` from `project_text` or extracted multipart content (deterministic; truncate + warning) | service helper + unit tests | Keywords from fixture appear in summary |
-| **1.3 S1b** | Echo request `start_date`/`end_date` when present (optional lean extension) | service | Dates in response when supplied |
-| **1.4 S1c** | `needs_summary[]` via decomposer **after** successful index+KG only | service + stub decomposer | CI stub; LLM optional |
-| **1.5 S1d** | Budget extract: currency phrases only; **never invent** | extractor + tests | No hallucinated budgets |
-| **1.6** | Tests + Postman + mark FR-IX-023 as-built when full TARGET ships | tests, postman, openspec | Green suite |
+| Step | Work | Files (expected) | Exit criteria | Status |
+|------|------|------------------|---------------|--------|
+| **1.0** | Routes under `/internal/v1/recommendations` (`submitprojectspecification`, `getassetrecommendations`) | `app/api/…`, tests, Postman | OpenAPI shows internal paths | **Done** |
+| **1.1 S1a** | Lean `IngestFromProjectSpecResponse`: `ingest_id`, `user_id`, `user_requirement_summary`, `warnings[]` | `app/schemas/indexing.py`, `IndexingIngestService` | 200 body is lean; index+KG still run for Call 2 | **Done** |
+| **1.2 S1a** | Build `user_requirement_summary` from `project_text` or extracted multipart content (deterministic; truncate + warning) | service helper + unit tests | Keywords from fixture appear in summary | **Done** |
+| **1.3 S1b** | Echo request `start_date`/`end_date` as `tentative_start_date` / `tentative_end_date` when present | service + API | Dates in response when supplied; null when omitted | **Done** |
+| **1.4 S1c** | `needs_summary[]` via decomposer **after** successful index+KG only | service + stub decomposer | CI stub; LLM optional | Planned |
+| **1.5 S1d** | `expected_budget` extract: currency phrases only; **never invent** | extractor + tests | No hallucinated budgets | Planned |
+| **1.6 S1e** | **FR-IX-023 free-text date extract:** when request omits dates, extract rental window from project text / extracted file content when confident; **request dates still preferred**; else null + warning; **never invent** | extractor + API fixtures | Text/file with clear dates fills `tentative_*` without request dates; request overrides extract | Planned (**after S1d**) |
+| **1.7** | Converge FR-IX-023: full tests + Postman; **mark FR-IX-023 as-built** in OpenSpec when **S1c + S1d + S1e** are green | tests, postman, openspec | Full Call 1 project-spec summary as-built | Planned (**after S1e**) |
+
+**FR-IX-023 completion order (normative for implementers):**
+
+```text
+S1a lean + summary string     (done)
+S1b request date echo         (done)
+    │
+    ▼
+S1c needs_summary[]           (1.4)
+    │
+    ▼
+S1d expected_budget           (1.5)
+    │
+    ▼
+S1e free-text date extract    (1.6)  ← remaining date half of FR-IX-023
+    │
+    ▼
+1.7 mark FR-IX-023 as-built   (OpenSpec + Postman + regression)
+```
+
+- **FR-IX-023 is complete only after S1c + S1d + S1e.**  
+- **S1b** stays request-echo only; **S1e** adds document/text extract when the request omits dates.  
+- Do not mark FR-IX-023 as-built at 1.7 until free-text dates (S1e) ship.
 
 **Non-goals in this phase:** ranked assets, ML rent, Call 3; public `documents[]` / `kg_*`.
 
@@ -462,12 +486,15 @@ Maps to [`call1-ingest-response-project-summary.md`](./call1-ingest-response-pro
 |-----------|--------|
 | **Independently testable?** | **Yes — fully in this repo’s default CI** |
 | **Does not need** | Pgvector, Neo4j, fleet mirror, Spring, multi-agent recommend, pricing |
-| **Test implementation (S1a lean)** | (1) Schema has lean fields only; (2) JSON + multipart: `ingest_id`/`user_id`/`user_requirement_summary`; (3) summary reflects project_text or file content; (4) no `documents`/`kg_built` on body; (5) Call 2 still works with returned `ingest_id`; (6) index/KG fail → 4xx, no summary success |
-| **Test implementation (S1c–d later)** | Stub needs; budget present/absent/never invent |
-| **Suggested modules** | `tests/test_recommendations_intake.py`, `tests/test_project_knowledge_api.py`, unit for summary helper |
-| **Fixtures / stubs** | Project text fixtures; Postman optional |
+| **Test implementation (S1a lean — done)** | (1) Lean fields; (2) summary from project_text/file; (3) no `documents`/`kg_built`; (4) Call 2 with `ingest_id` |
+| **Test implementation (S1b — done)** | Request dates echoed; omitted → null; invalid window → 400 |
+| **Test implementation (S1c–d)** | Stub needs shape; budget present / absent / never invent |
+| **Test implementation (S1e free-text dates)** | (1) Request omits dates + text has clear window → `tentative_*` set; (2) no dates in text → null + warning; (3) request dates override extracted dates; (4) end ≥ start when both resolved |
+| **Test implementation (1.7)** | Checklist: OpenSpec FR-IX-023 status as-built; Postman example full summary body; full S1 regression green |
+| **Suggested modules** | `tests/test_recommendations_intake.py`, `tests/test_project_knowledge_api.py`, unit for summary / date / budget extractors |
+| **Fixtures / stubs** | Project text fixtures with/without dates and budget; Postman optional |
 | **CI job** | **default** |
-| **How later phases don’t block** | Lean body is enough for Spring saga; S7 uses `ingest_id` only |
+| **How later phases don’t block** | Lean S1a/S1b is enough for Spring saga; S7 uses `ingest_id` only |
 
 ---
 
@@ -1050,8 +1077,8 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | Item | Status |
 |------|--------|
 | Feasibility decisions | Complete (GO) |
-| OpenSpec FR-IX-023 full Call 1 | Written TARGET; full needs/dates/budget not shipped |
-| Call 1 lean public body | Shipping contract: `ingest_id`, `user_id`, `user_requirement_summary`, `warnings` |
+| OpenSpec FR-IX-023 full Call 1 | Partial as-built (S1a/S1b); remainder **S1c → S1d → S1e** then **1.7** as-built mark |
+| Call 1 lean public body | Shipping: `ingest_id`, `user_id`, `user_requirement_summary`, `tentative_*` echo, `warnings` |
 | Internal recommendation routes | `/internal/v1/recommendations/...` |
 | As-built ingest + Stage-1 Q&A | Live (internal paths) |
 | Error JSON `{"error","message"}` | As-built |

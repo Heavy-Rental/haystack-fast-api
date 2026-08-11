@@ -39,15 +39,19 @@ Aligned with Packt Ch. 4 indexing flowchart
        └─► post-join chunks → KG (mandatory; see knowledge-graph SPEC)
        │
        ▼
-  IngestFromProjectSpecResponse
+  IngestFromProjectSpecResponse (lean public body)
+       │  as-built S1a: ingest_id, user_id, user_requirement_summary, warnings
+       │  as-built S1b: tentative_* echo request dates
        │
-       │  TARGET (FR-IX-023) after successful index + KG:
+       │  TARGET FR-IX-023 remainder (implementation-plan order):
+       │    S1c needs_summary[] → S1d expected_budget → S1e free-text dates
+       │    → 1.7 mark FR-IX-023 as-built
        ▼
-  project-spec summary extraction
-       • needs_summary (decomposer / LLM / KG-assisted)
-       • tentative_start_date / tentative_end_date
-         (request dates preferred; else document extract)
-       • expected_budget (extract or null; never invent)
+  project-spec summary enrichment (after successful index + KG only)
+       • needs_summary (decomposer / LLM / KG-assisted)     [S1c]
+       • expected_budget (extract or null; never invent)      [S1d]
+       • tentative_* free-text/file extract if request omits  [S1e after S1d]
+
        │
        ▼
   enriched response (still not results_by_need)

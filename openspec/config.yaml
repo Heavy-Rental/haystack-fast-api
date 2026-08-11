@@ -24,7 +24,8 @@ context: |
       tentative_start/end_date (echo request when supplied), warnings[]
     → optional Call 2 POST .../project-knowledge/getassetrecommendations multi-agent Q&A
   Deferred: FR-010 recommend HTTP results_by_need (service-level only today);
-    full FR-IX-023 needs_summary / free-text dates / budget beyond S1a+S1b
+    FR-IX-023 remainder after S1b: S1c needs → S1d budget → S1e free-text dates
+    (S1e after S1d) → mark as-built (impl-plan Phase 1.7)
 
 rules:
   specs: |

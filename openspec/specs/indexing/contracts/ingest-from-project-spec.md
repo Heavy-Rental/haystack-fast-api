@@ -76,21 +76,31 @@ Sources: multipart file uploads are packaged as Haystack `ByteStream` with `mime
 
 No structured `needs_summary[]`, no free-text date extraction when request omits dates, no `expected_budget` on the live lean body yet. Request date **echo** is as-built (S1b).
 
+**Implementation order** (normative — [`Feasibility_Study/implementation-plan.md`](../../../../Feasibility_Study/implementation-plan.md) Phase 1):
+
+1. **S1c** — `needs_summary[]`  
+2. **S1d** — `expected_budget`  
+3. **S1e** — free-text / file date extract (when request omits dates) — **after S1d**  
+4. **1.7** — mark FR-IX-023 as-built in OpenSpec when S1c+S1d+S1e green  
+
 ---
 
-## Success response `200` — TARGET full FR-IX-023 (later)
+## Success response `200` — TARGET full FR-IX-023 (S1c → S1d → S1e)
 
-Additive enrichment of lean body (or superseding structured fields). Default **SHOULD** stay compact.
+Additive enrichment of lean body. Default **SHOULD** stay compact (no public `documents[]` / `kg_*`).
 
-| Field | Type | Notes |
-|-------|------|--------|
-| `needs_summary[]` | array | Project-spec implied needs |
-| `needs_summary[].description` | string | Human-readable need |
-| `needs_summary[].equipment_hints` | string[] | Optional |
-| `needs_summary[].quantity` | int \| null | Optional |
-| `needs_summary[].need_id` | string \| null | Optional stable id for Call 3 |
-| `tentative_start_date` / `tentative_end_date` | date \| null | Request preferred, else extract |
-| `expected_budget` | object \| null | Extract only; **never invent** |
+| Field | Type | Notes | Plan step |
+|-------|------|--------|-----------|
+| `needs_summary[]` | array | Project-spec implied needs | **S1c** |
+| `needs_summary[].description` | string | Human-readable need | S1c |
+| `needs_summary[].equipment_hints` | string[] | Optional | S1c |
+| `needs_summary[].quantity` | int \| null | Optional | S1c |
+| `needs_summary[].need_id` | string \| null | Optional stable id for Call 3 | S1c |
+| `expected_budget` | object \| null | Extract only; **never invent** | **S1d** |
+| `expected_budget.amount` | number | When known | S1d |
+| `expected_budget.currency` | string \| null | e.g. `SGD` | S1d |
+| `expected_budget.source` | string | e.g. `extracted` | S1d |
+| `tentative_start_date` / `tentative_end_date` | date \| null | Request preferred; **else free-text/file extract** when confident; else null | **S1b echo** + **S1e extract** |
 
 ### Still not on Call 1 (default path)
 
