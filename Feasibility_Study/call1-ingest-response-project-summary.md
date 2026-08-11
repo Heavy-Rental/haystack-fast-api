@@ -5,11 +5,11 @@
 | **Document type** | API / product feasibility study |
 | **Status** | Complete (study only — **not implemented**) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.0.0 |
+| **Version** | 1.0.1 |
 | **Endpoint** | `POST /api/v1/recommendations/from-project-spec` |
 | **Question** | Can the response body be **simplified** to a **summary of needs**, **tentative start/end dates**, and **expected budget** from the uploaded project-spec? |
 | **OpenSpec** | FR-IX-023 TARGET · contract `openspec/specs/indexing/contracts/ingest-from-project-spec.md` · proposal `openspec/changes/2026-08-10-call1-project-spec-summary/` |
-| **Related** | Dual-plane §2.1 Call 1 · multi-agent synthesis (Call 3) · ml-pricing |
+| **Related** | Dual-plane §2.1 Call 1 · multi-agent synthesis (Call 3) · ml-pricing · C/W/D roles (Call 3 only) |
 
 ---
 
@@ -24,6 +24,8 @@
 | `include_pricing` as budget? | **No** (boolean only) |
 
 **Overall:** **GO** to enrich Call 1 with a **client-facing project-spec summary** after successful index + KG. Specs updated as **TARGET** (FR-IX-023); runtime not shipped.
+
+**Not multi-agent recommend:** Call 1 is HTTP **ingest response** enrichment (service path, or Coordinator **[4]** gate when agent-fronted). It is **not** Coordinator synthesis **[8]**, not fleet/pricing **Workers**, and not the same as Call 3 `results_by_need`.
 
 ---
 
@@ -124,6 +126,7 @@ Skipping Call 2 after Call 1 remains valid once Call 3 is reattached.
 | Version | Date | Notes |
 |---------|------|--------|
 | **1.0.0** | 2026-08-10 | Initial GO for simplified Call 1 summary; linked OpenSpec FR-IX-023 |
+| **1.0.1** | 2026-08-11 | Clarify Call 1 ≠ multi-agent recommend synthesis / Workers |
 
 ---
 

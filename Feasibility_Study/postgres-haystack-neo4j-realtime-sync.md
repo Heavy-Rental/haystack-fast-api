@@ -5,10 +5,10 @@
 | **Document type** | Architecture / infrastructure feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 2.5.0 |
+| **Version** | 2.7.1 |
 | **Application** | `haystack-fast-api` |
 | **Related specs** | `openspec/specs/project-setup/`, `indexing/`, `knowledge-graph/`, `recommendation-pipeline/`, `dynamic-pricing/`, `equipment-recommendation/` |
-| **Related studies** | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) · [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) · [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) · [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) · [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) |
+| **Related studies** | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) · [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) · [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) · [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) · [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) · [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) |
 | **Cloud focus** | DigitalOcean |
 
 ---
@@ -191,12 +191,15 @@ Use **eventual consistency** with lag SLOs (`primary_to_haystack_seconds`, `hays
       • Package file bytes → Haystack ByteStream (MIME from extension)
       • run_in_threadpool( MultiAgentOrchestrator.run(payload, file_sources) )
 
-[3] Multi-Agent Orchestrator invoked (LangGraph)
-      Role: **policy, sequencing, synthesis only** — does not own SQL/Cypher/pricing math
+[3] Multi-Agent Orchestrator invoked (LangGraph)  — **Coordinator** role
+      Role: **policy, gates, state, synthesis only** — does not own SQL/Cypher/pricing math
       state = { request_payload, file_sources, ingest_id?, session?, tool_traces[], recommendation? }
       Tool backend (target): **in-process tool module** (LangGraph nodes call Python tools directly)
+      Role vocabulary: [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md)
 
-[4] Tool: run_indexing_pipeline  (pass request body fields + file_sources)
+[4] FORCED NON-AGENT TOOL EDGE (Coordinator gate — **not** an LLM Worker)
+      Tool: run_indexing_pipeline / run_indexing_from_request
+            (pass request body fields + file_sources)
       • FileTypeRouter dual-branch (structured vs unstructured by type)
       • convert → clean/split → final_doc_joiner
       • Branch A: embed → write → DocumentStore
@@ -205,27 +208,37 @@ Use **eventual consistency** with lag SLOs (`primary_to_haystack_seconds`, `hays
             meta: user_id, ingest_id (multi-user isolation)
       • Branch B: mandatory KG-1 (+ JSON artifact) + ProjectKnowledgeSession
       • return ingest_id, kg_*, documents_written
-      **Gate:** no recommend / fleet tools until [4] succeeds
+      **Gate:** no recommend / fleet tools until [4] succeeds; no raw files in LLM context
 
 ### After step [4] — Multi-Agent uses in-process tools to recommend
 
-Target model: orchestrator agents **only invoke allowlisted in-process tools** (shared tool module). They **do not** embed ad-hoc SQL/Cypher or pricing weights inside node code — tools own those backends.
+Target model: **Workers** **only invoke allowlisted in-process tools** (shared tool module). They **do not** embed ad-hoc SQL/Cypher or pricing weights inside node code — tools own those backends. An explicit **Delegator** (router node) sequences Workers and expands **per-need fan-out** — not free ReAct.
 
-[5] Project-context agents (optional Q&A or recommend prep) — AFTER [4]
+[5] Project-context Worker (optional Q&A or recommend prep) — AFTER [4]
+      role=worker  (shared / once per run)
       In-process tools:
         • project_vector_search   → Pgvector (I1) / session store
         • project_kg_query        → KG-1 (session / shared load path)
+        • decompose_project_needs → unit needs[] for fan-out
       Output: needs, constraints, site/project facts for ranking
 
-[6] Fleet + graph context agents — AFTER [4] (and Plane A data available)
+[5b] Delegator (explicit router node) — AFTER needs known
+      role=delegator
+      • Allowlisted branches only (not free-form planner)
+      • Expand work items per need_id for [6] and [7]
+      • May skip optional backends (e.g. Neo4j empty → no graph tool)
+
+[6] Fleet + graph Workers — AFTER [4] (and Plane A data available)
+      role=worker  **fan-out per need_id** ([6]×N)
       In-process tools:
         • retrieve_fleet_assets / filter_fleet_candidates  → **Postgres-Haystack**
         • check_booking_availability                      → **Postgres-Haystack** bookings
         • neo4j_cypher_read                               → **Neo4j KG-2** fleet relationships
-        • trigger_neo4j_populate (ops)                    → job from Postgres-Haystack (async)
-      Output: candidate assets, graph-neighbor context, availability
+        • trigger_neo4j_populate (ops)                    → **job** from Postgres-Haystack (async)
+      Output: candidate assets, graph-neighbor context, availability (per need)
 
-[7] Pricing agent — AFTER candidates exist
+[7] Pricing Workers — AFTER candidates exist for that need
+      role=worker  **fan-out per need_id** ([7]×N); within need: after [6]
       In-process tool:
         • predict_asset_price  → **ML pricing model** (`predict_price_for_asset` / model artifacts)
       Feature row (from docs/dynamic-pricing + fleet tools):
@@ -235,15 +248,16 @@ Target model: orchestrator agents **only invoke allowlisted in-process tools** (
       Fallback: category table if model missing — never silent zeros
       Full contract: [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md)
 
-[8] Recommendation synthesis (stays in Multi-Agent Orchestrator — not a tool)
-      • Merge: project context [5] + fleet/Neo4j [6] + prices [7]
+[8] Recommendation synthesis (Coordinator — not a tool, not a Worker)
+      role=coordinator.synthesis
+      • Merge: project context [5] + fleet/Neo4j [6]×N + prices [7]×N
       • Output: **recommended assets** + **predicted rent prices** (structured DTO)
         — align `results_by_need` / `RecommendationItem` / `PricingPayload`
       • Synthesis is **tool-free**: must not invent asset_id or daily_rate
       • Project-spec grounds needs via [4]+[5]; fleet+price tools ground offers
       • As-built Stage-1 synthesis is Q&A-only — target extend for recommend
       • Full study: [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md)
-      • Record tool_traces (tool name, args summary, hit counts)
+      • Record tool_traces (tool name, args summary, hit counts, **role**, **need_id**)
 
 [9] HTTP response to Spring
       • Ingest-only path: return after [4] (ingest_id, kg_*, documents_written)
@@ -260,6 +274,8 @@ Spring multi-call alignment (§2.1):
 
 ### 4.1.1 Multi-Agent Orchestrator vs tools (recommend-ready target)
 
+**Role vocabulary (alias layer):** Coordinator / Worker / Delegator map onto this orchestrator design without changing tool ownership — see [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md). In that vocabulary: **[4]** is a **forced non-agent tool edge** under the Coordinator (not a Worker); domain steps **[5]–[7]** are Workers (fleet/pricing **fan-out per need**); routing is an **explicit Delegator** node; synthesis **[8]** stays Coordinator-owned and tool-free. **Agent instruction templates** (**A–L**, incl. **sequential/parallel processing**) for every agent role: C/W/D **§10**. Must-seq gate & fleet→price; may-par across needs; fleet LTM = **`postgres_haystack`←`postgres-primary`** — C/W/D §10.0.1–§10.0.11.
+
 | Layer | Responsibility | Does **not** |
 |-------|----------------|--------------|
 | **Multi-Agent Orchestrator** (LangGraph in app) | Choose agents/order; call tools; synthesize recommendation text/JSON | Own fleet DB as SoT; run free SQL/Cypher; train models |
@@ -269,12 +285,21 @@ Spring multi-call alignment (§2.1):
 | **ML pricing model** | Price predictions via `predict_asset_price` tool | Ranking policy (orchestrator) |
 
 ```text
-                    AFTER successful [4] indexing
 ┌─────────────────────────────────────────────────────────────┐
 │ Multi-Agent Orchestrator (LangGraph)                        │
-│  research / fleet / pricing / rank agents                   │
-│       │  only in-process tool invocations                      │
+│  Coordinator: policy · [4] gate · state · synthesis [8]     │
+│                                                             │
+│  [4] forced non-agent index tool edge  (not a Worker)       │
+│       │ success only                                        │
 │       ▼                                                     │
+│  Worker [5] project / needs                                 │
+│       │                                                     │
+│       ▼                                                     │
+│  Delegator (explicit router) → work items per need_id       │
+│       │                                                     │
+│       ├─ Worker [6]×N fleet / Neo4j   ─┐                    │
+│       └─ Worker [7]×N pricing         ─┤ in-process tools   │
+│                                         ▼                   │
 │  Tool module (in-process)                                    │
 │    ├─ project_*     → Pgvector / KG-1                       │
 │    ├─ retrieve_*    → Postgres-Haystack (fleet)             │
@@ -282,7 +307,7 @@ Spring multi-call alignment (§2.1):
 │    └─ predict_*     → ML pricing model                      │
 │       │                                                     │
 │       ▼                                                     │
-│  synthesis node → Recommendation response                   │
+│  Coordinator synthesis [8] → Recommendation response        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -475,7 +500,7 @@ Tools the **Multi-Agent Orchestrator** invokes **after [4]**. Orchestrator **syn
 - **Now / R1–R2:** Stage-1 Q&A tools in-process; recommend still service/seed path.  
 - **I1:** Indexing → **Pgvector**.  
 - **D1+/T1/T3:** fleet SQL + Neo4j projection ready for tools.  
-- **R5 / recommend agents:** after [4], orchestrator runs **[5]–[8]** with in-process tools including **`predict_asset_price`** + Postgres-Haystack + Neo4j → **recommendation**.
+- **R5 / recommend agents:** after **[4]** gate, Coordinator runs **[5]** → **Delegator** → **[6]×N / [7]×N** Workers (fan-out per need) with in-process tools including **`predict_asset_price`** + Postgres-Haystack + Neo4j → Coordinator **[8]** recommendation.
 
 #### 4.6.5 Feasibility summary
 
@@ -534,13 +559,18 @@ Neo4j available to multi-agent fleet tools
 
 | Concern | As-built today | Proposed (target) |
 |---------|----------------|-------------------|
-| Who calls indexing? | FastAPI → `IndexingIngestService` directly | Multi-Agent tool **[4]** (flag); then tools for recommend |
+| Who calls indexing? | FastAPI → `IndexingIngestService` directly | Multi-Agent **Coordinator gate [4]** (flag; forced non-agent tool); then recommend Workers |
 | Indexing graph packaging | `build_indexing_pipeline` + `run_*` | Optional **SuperComponent** wrapper (no KG inside) |
-| Orchestrator role | Stage-1 Q&A graph only | **Recommend orchestrator**: agents + in-process tools after [4] |
+| Orchestrator role | Stage-1 Q&A graph only | **Recommend orchestrator**: Coordinator + Delegator + Workers + in-process tools after [4] |
+| Role vocabulary | Informal agent names | **Coordinator / Worker / Delegator** alias layer (dedicated study) |
+| **[4] as LLM Worker?** | N/A (service path) | **No** — forced non-agent tool edge |
+| Delegator | Fixed sequential edges only | **Explicit router node** (allowlisted branches) |
+| Multi-need recommend | N/A / service loop | **Fan-out Workers per need** for fleet **[6]** and pricing **[7]** |
 | Tool host | In-process `ProjectTool` | Expanded **in-process** tool module (fleet, Neo4j, pricing) |
 | When do agents run? | **After** ingest, Q&A route | After **[4]** for Q&A **and** recommend (**[5]–[8]**) |
 | DocumentStore | InMemory session | **Pgvector** (I1) on Postgres-Haystack |
 | Fleet / Neo4j / price | Seed fleet; service pricing path | In-process tools: SQL + Neo4j + **`predict_asset_price`** |
+| Observability | Basic tool_traces | tool_traces + **`role`** + **`need_id`** on fan-out |
 | Spring caller | HTTP multi-call | Same REST; call 3 = recommend graph |
 
 ---
@@ -549,10 +579,10 @@ Neo4j available to multi-agent fleet tools
 
 | Area | As-built | Implication |
 |------|----------|-------------|
-| App Postgres | Host `db`; SQLAlchemy sync | Can grow into Postgres-Haystack client |
+| App Postgres | Host `postgres_haystack`; SQLAlchemy sync | Can grow into Postgres-Haystack client |
 | DocumentStore | **InMemoryDocumentStore** | **Target cutover:** Indexing → **PgvectorDocumentStore** (§4.5) |
 | KG-1 | Ragas + JSON + session | Matches indexing outputs in §4.4 |
-| Agents | Fixed sequential Q&A **after** ingest | Target: orchestrator **after [4]** recommends via **in-process** tools |
+| Agents | Fixed sequential Q&A **after** ingest | Target: Coordinator + Delegator + Workers **after [4]**; fan-out per need; **in-process** tools |
 | Tool packaging | In-process Stage-1 tools | Expand tool module (no separate MCP server) |
 | Pricing | Service / seed path | In-process `predict_asset_price` for recommend agents |
 | Asset/Booking | Seed fleet | Needs Track D for production accuracy |
@@ -731,9 +761,9 @@ Key paths:
 
 | Path | Role |
 |------|------|
-| `.devcontainer/docker-compose.yml` | Services: app, `db` (postgres-haystack), `db-sync`, `neo4j` |
+| `.devcontainer/docker-compose.yml` | Services: app, `postgres_haystack`, `postgres_haystack_sync`, `neo4j` |
 | `.devcontainer/devcontainer.json` | Ports 5434 / 7474 / 7687; PG connection profiles; postCreate (uv, neo4j-haystack) |
-| `.devcontainer/scripts/sync-from-primary.sh` | FDW + merge-upsert from `postgres-primary` → `db` |
+| `.devcontainer/scripts/sync-from-primary.sh` | FDW + merge-upsert from `postgres-primary` → `postgres_haystack` |
 | `specs/001-haystack-postgres-merge-sync/` | Merge-sync contract |
 | `specs/002-haystack-neo4j/` | Neo4j DocumentStore path |
 
@@ -745,43 +775,46 @@ Docker network: heavy-rental-network  (external: true)
   postgres-primary          ◄── Spring / REST API stack (other compose)
   (host name on shared network)
            │
-           │  service db-sync  (postgres-haystack-sync)
+           │  service postgres_haystack_sync  (sync worker → postgres_haystack)
            │  scripts/sync-from-primary.sh
-           │  SYNC_INTERVAL_SECONDS=86400  (daily — NOT real-time)
+           │  SYNC_INTERVAL_SECONDS=60  (near-RT poll — NOT CDC)
            │  SYNC_MODE=merge  (FDW staging → UPSERT by PK/unique)
-           │  restart: "no"   (halt if primary missing)
+           │  restart: unless-stopped
+           │  HALT_ON_PRIMARY_UNAVAILABLE=false  (skip+sleep if primary missing)
            ▼
-  db  (container_name: postgres-haystack)
+  postgres_haystack  (compose service / DNS host; app POSTGRES_HOSTNAME)
   image: postgres:17
   DB: heavy_rental   host port 5434→5432
            ▲
-           │  POSTGRES_HOSTNAME=db / DATABASE_URL → db
+           │  POSTGRES_HOSTNAME=postgres_haystack / DATABASE_URL → postgres_haystack
   haystack-fast-api  (dev workspace, sleep infinity)
 
   neo4j  (container_name: neo4j-haystack)
   image: neo4j:5   Browser :7474  Bolt :7687
   NEO4J_* env for neo4j-haystack DocumentStore
-  ⚠ no job yet that populates fleet graph FROM db after sync
+  ⚠ no job yet that populates fleet graph FROM postgres_haystack after sync
 ```
+
+**Naming note:** This study uses underscore service keys (`postgres_haystack`, `postgres_haystack_sync`) aligned with app `POSTGRES_HOSTNAME` / OpenSpec. The config-repo compose on `develop` currently uses hyphenated keys (`postgres-haystack`, `postgres-haystack-sync`) with the same roles — treat them as the same services when operating compose.
 
 **VS Code profiles already distinguish:**
 
 | Profile | Host | Meaning |
 |---------|------|---------|
-| Haystack Local (R/W) | `db` | Postgres-Haystack |
+| Haystack Local (R/W) | `postgres_haystack` | Postgres-Haystack |
 | REST API Primary (source) | `postgres-primary` | Spring / primary OLTP |
 
 ### 11.2 Gap analysis vs this feasibility study
 
 | Study target | Current devcontainer | Gap |
 |--------------|----------------------|-----|
-| **D1** Poll ETL primary → Haystack PG | **`db-sync` + FDW merge** | **Done** (interval is 24h) |
-| **D2** Near-real-time sync | Interval **86400s**; one-shot-friendly `restart: "no"` | **Need shorter cycle or true CDC** |
-| **D3** Neo4j projection from Haystack PG | Neo4j **service exists**; env for DocumentStore | **No populate-from-`db` job** |
+| **D1** Poll ETL primary → Haystack PG | **`postgres_haystack_sync` + FDW merge** | **Done** |
+| **D2** Near-real-time sync | Interval **60s**; `restart: unless-stopped` (config repo `develop`) | **Mostly done** (poll near-RT); true CDC/outbox still optional |
+| **D3** Neo4j projection from Haystack PG | Neo4j **service exists**; env for DocumentStore | **No populate-from-`postgres_haystack` job** |
 | **D4 / I1** pgvector for indexing | Plain `postgres:17` | **No vector extension bootstrap** |
 | External primary | Assumed on `heavy-rental-network` | Ops: ensure REST API compose attaches primary |
 
-**Important:** Daily merge is a solid **D1** implementation. Calling it “real-time” without changing interval/mechanism would be incorrect.
+**Important:** Config-repo compose on `develop` already runs **60s poll merge** (**D1 + T1-ish**). Calling that “CDC real-time” would still be incorrect — it is **poll ETL**, not logical replication or Debezium.
 
 ### 11.3 Target topology (local after transition)
 
@@ -792,7 +825,7 @@ heavy-rental-network
         │  near-real-time domain sync
         │  (short-interval merge and/or logical rep / outbox)
         ▼
-  db (postgres-haystack)  [optional: pgvector image + CREATE EXTENSION vector]
+  postgres_haystack  [optional: pgvector image + CREATE EXTENSION vector]
         │
         │  after successful sync (or on trigger)
         │  neo4j-populate: SQL domain tables → Cypher MERGE
@@ -801,27 +834,27 @@ heavy-rental-network
         ├── :Asset / :Booking / …   (fleet KG-2 projection)
         └── (optional) DocumentStore labels — keep namespaced
 
-  haystack-fast-api → reads/writes db; Bolt to neo4j as needed
+  haystack-fast-api → reads/writes postgres_haystack; Bolt to neo4j as needed
 ```
 
 ### 11.4 Transition phases (T0–T5)
 
 | Phase | Name | Devcontainer / script changes | Maps to | Exit criteria |
 |-------|------|------------------------------|---------|---------------|
-| **T0** | Baseline & docs | Confirm `postgres-primary` on shared network; document runbook; one successful merge when primary up; halt when down (`HALT_ON_PRIMARY_UNAVAILABLE=true`) | **D1** as-is | Logs show merge success; local tables updated |
-| **T1** | Near-real-time domain sync | Set `SYNC_INTERVAL_SECONDS` to **30–120** (dev SLA); set `db-sync` **`restart: unless-stopped`**; log cycle lag; optional healthcheck | **D1→D2** | With primary online, changes appear on `db` within chosen SLA |
+| **T0** | Baseline & docs | Confirm `postgres-primary` on shared network; document runbook; one successful merge when primary up; skip/sleep when down (`HALT_ON_PRIMARY_UNAVAILABLE=false` in current compose) | **D1** as-is | Logs show merge success; local tables updated |
+| **T1** | Near-real-time domain sync | **Largely done on `develop`:** `SYNC_INTERVAL_SECONDS=60`, `postgres_haystack_sync` `restart: unless-stopped`; remaining: lag logging/metrics, optional healthcheck | **D1→D2** | With primary online, changes appear on `postgres_haystack` within ~60s SLA |
 | **T2** | Sync hardening | Table **allowlist** (Asset, Booking, …) if full public merge is heavy; document `merge` vs `mirror`; optional logical replication design; fail cycle alerts | **D2** | Deterministic table set; predictable lag metrics |
-| **T3** | Neo4j populate from Haystack PG | **New** script `populate-neo4j-from-haystack.sh` (or Python job) + Compose service `neo4j-populate`; read from `TARGET_HOST=db`; MERGE fleet nodes/rels; **namespace labels** vs DocumentStore | **D3** | After write on primary + sync, Neo4j Browser shows fleet graph |
+| **T3** | Neo4j populate from Haystack PG | **New** script `populate-neo4j-from-haystack.sh` (or Python job) + Compose service `neo4j-populate`; read from `TARGET_HOST=postgres_haystack`; MERGE fleet nodes/rels; **namespace labels** vs DocumentStore | **D3** | After write on primary + sync, Neo4j Browser shows fleet graph |
 | **T4** | Triggered populate | On **successful** `run_merge` in `sync-from-primary.sh`, invoke populate (or compose `depends_on` + shared volume signal); later: admin HTTP | **D3 continuous** | Each successful sync refreshes graph (or incremental upsert) |
-| **T5** | pgvector (parallel) | Switch `db` image to **`pgvector/pgvector:pg17`** (or init container `CREATE EXTENSION vector`); app env for `PgvectorDocumentStore` | **D4 / I1** | Extension present; indexing smoke write |
+| **T5** | pgvector (parallel) | Switch `postgres_haystack` image to **`pgvector/pgvector:pg17`** (or init container `CREATE EXTENSION vector`); app env for `PgvectorDocumentStore` | **D4 / I1** | Extension present; indexing smoke write |
 
 ### 11.5 Real-time options ranked for *this* compose
 
-| Option | How it fits current `db-sync` | Effort | Recommendation |
+| Option | How it fits current `postgres_haystack_sync` | Effort | Recommendation |
 |--------|------------------------------|--------|-----------------|
 | **A. Shorten poll interval** | Change `SYNC_INTERVAL_SECONDS` only; reuse FDW merge script | **Low** | **T1 default** |
-| **B. Manual / one-shot trigger** | `docker compose run db-sync` after Spring seed | Low | Dev convenience |
-| **C. Logical replication** primary→`db` | Needs `wal_level`, publication on primary; subscription on haystack | Medium | When FDW lag/load insufficient |
+| **B. Manual / one-shot trigger** | `docker compose run postgres_haystack_sync` after Spring seed | Low | Dev convenience |
+| **C. Logical replication** primary→`postgres_haystack` | Needs `wal_level`, publication on primary; subscription on haystack | Medium | When FDW lag/load insufficient |
 | **D. Spring outbox + consumer container** | New service; prod-like | Medium–High | Best long-term fidelity |
 | **E. Debezium + Kafka in devcontainer** | Extra brokers/connectors | High | **Avoid** for local unless platform-standard |
 
@@ -834,7 +867,7 @@ Current comments wire Neo4j for **neo4j-haystack DocumentStore**. Fleet populati
 | Use | Labels / isolation | Writer |
 |-----|-------------------|--------|
 | Project / doc graph (optional DocumentStore) | e.g. `:Document`, store-specific props | haystack app / neo4j-haystack |
-| Fleet projection from `db` | e.g. `:Asset`, `:Booking`, `:Category` | **`neo4j-populate` job only** |
+| Fleet projection from `postgres_haystack` | e.g. `:Asset`, `:Booking`, `:Category` | **`neo4j-populate` job only** |
 
 **Do not** drop entire Neo4j database on each populate if DocumentStore data must survive. Prefer:
 
@@ -846,9 +879,9 @@ Current comments wire Neo4j for **neo4j-haystack DocumentStore**. Fleet populati
 
 | File | Actions |
 |------|---------|
-| `.devcontainer/docker-compose.yml` | (T1) `SYNC_INTERVAL_SECONDS`, `restart: unless-stopped` on `db-sync`; (T3) add `neo4j-populate` service; (T5) optional pgvector image for `db` |
+| `.devcontainer/docker-compose.yml` | (T1) `SYNC_INTERVAL_SECONDS`, `restart: unless-stopped` on `postgres_haystack_sync`; (T3) add `neo4j-populate` service; (T5) optional pgvector image for `postgres_haystack` |
 | `.devcontainer/scripts/sync-from-primary.sh` | (T1) lag logging; (T4) call populate on success |
-| `.devcontainer/scripts/populate-neo4j-from-haystack.sh` | **New (T3)** — env: `PGHOST=db`, `NEO4J_URI=bolt://neo4j:7687`, table→graph mapping |
+| `.devcontainer/scripts/populate-neo4j-from-haystack.sh` | **New (T3)** — env: `PGHOST=postgres_haystack`, `NEO4J_URI=bolt://neo4j:7687`, table→graph mapping |
 | `.devcontainer/devcontainer.json` | Document sync SLA; Neo4j UI connection remains bolt://neo4j:7687 |
 | `specs/001-haystack-postgres-merge-sync/` | Amend: near-real-time interval options; allowlist |
 | `specs/002-haystack-neo4j/` | Split DocumentStore vs **fleet projection** requirements |
@@ -856,47 +889,49 @@ Current comments wire Neo4j for **neo4j-haystack DocumentStore**. Fleet populati
 **Example env deltas (illustrative — not applied here):**
 
 ```yaml
-# db-sync (near-real-time poll)
+# postgres_haystack_sync (near-real-time poll — matches config repo develop)
 SYNC_INTERVAL_SECONDS: "60"
-HALT_ON_PRIMARY_UNAVAILABLE: "true"
+HALT_ON_PRIMARY_UNAVAILABLE: "false"  # skip+sleep when primary missing
 restart: unless-stopped
+TARGET_HOST: postgres_haystack
+SOURCE_HOST: postgres-primary
 
 # neo4j-populate (new service sketch)
 # image: postgres:17 or python:3.12-slim + neo4j driver
-# depends_on: [db, neo4j]
+# depends_on: [postgres_haystack, neo4j]
 # NEO4J_URI: bolt://neo4j:7687
-# PGHOST: db
+# PGHOST: postgres_haystack
 ```
 
 ### 11.8 Prerequisites & runbook notes
 
 1. Create/use external network: `docker network create heavy-rental-network` (if missing).  
 2. Start **REST API / Spring** stack so **`postgres-primary`** is resolvable on that network.  
-3. Start Haystack-Fast-API devcontainer compose (`db`, `neo4j`, app; then `db-sync`).  
+3. Start Haystack-Fast-API devcontainer compose (`postgres_haystack`, `neo4j`, app; then `postgres_haystack_sync`).  
 4. Verify: VS Code “REST API Primary” vs “Haystack Local”; Neo4j Browser `http://localhost:7474`.  
-5. With primary down, current script **halts without mutating local tables** — keep that safety during T1 unless intentionally changed.
+5. With primary down, current compose uses **`HALT_ON_PRIMARY_UNAVAILABLE=false`**: skip cycle + sleep (no wipe of local tables). Prefer this over halt+restart storms under `unless-stopped`.
 
 ### 11.9 Risks specific to this transition
 
 | Risk | Mitigation |
 |------|------------|
-| Treating 24h sync as real-time | Publish SLA; implement T1 |
+| Treating poll sync as CDC real-time | Publish lag SLA; keep poll vs CDC distinction |
 | FDW full-public merge expensive | T2 allowlist high-value tables |
 | Populate overwrites DocumentStore graph | Label/database isolation (§11.6) |
-| `restart: "no"` stops continuous cycles | T1 → `unless-stopped` |
+| Halt+restart storms when primary down | Prefer `HALT_ON_PRIMARY_UNAVAILABLE=false` + skip/sleep under `unless-stopped` |
 | Primary not on network | Document dependency on Spring compose |
-| App writes OLTP to primary | Keep FastAPI on **`db` only** for domain R/W sandbox |
+| App writes OLTP to primary | Keep FastAPI on **`postgres_haystack` only** for domain R/W sandbox |
 | Extra local ANN packages in config repo | Not part of target architecture; durable vectors = Pgvector only |
 
 ### 11.10 Mapping T-phases → study Track D / first-ship
 
 | First-ship / Track D | Devcontainer transition |
 |----------------------|-------------------------|
-| D1 poll ETL | **Already T0** (`db-sync` + script) |
-| D2 near-real-time | **T1–T2** |
+| D1 poll ETL | **Already T0** (`postgres_haystack_sync` + script) |
+| D2 near-real-time | **T1 largely done** (60s + `unless-stopped` on `develop`); **T2** hardening |
 | D3 Neo4j from Haystack PG | **T3–T4** |
-| D4 / I1 pgvector | **T5** (parallel once `db` stable) |
-| R1 agent indexing | App code; uses `db` when I1 done — independent of T3 |
+| D4 / I1 pgvector | **T5** (parallel once `postgres_haystack` stable) |
+| R1 agent indexing | App code; uses `postgres_haystack` when I1 done — independent of T3 |
 
 **Suggested local order:** **T0 → T1 → T3 → T4 → T2 (as needed) → T5**.
 
@@ -922,12 +957,12 @@ restart: unless-stopped
 
 ### Devcontainer (Track T — §11)
 
-1. With primary online: one merge cycle; compare row counts primary vs `db`.  
-2. Set `SYNC_INTERVAL_SECONDS=60`; change a row on primary; measure time-to-visible on `db`.  
+1. With primary online: one merge cycle; compare row counts primary vs `postgres_haystack`.  
+2. Set `SYNC_INTERVAL_SECONDS=60`; change a row on primary; measure time-to-visible on `postgres_haystack`.  
 3. Prototype `populate-neo4j-from-haystack.sh` for one table (e.g. Asset) → Neo4j Browser.  
 4. Confirm DocumentStore nodes (if any) are not deleted by fleet reload.  
 5. Optional: `pgvector/pgvector:pg17` image swap + `CREATE EXTENSION vector`.  
-6. Optional: in-process fleet tool stub against `db`.
+6. Optional: in-process fleet tool stub against `postgres_haystack`.
 
 ### Request / agent (Track R)
 
@@ -982,8 +1017,8 @@ restart: unless-stopped
 ### Devcontainer (Heavy-Rental)
 
 - [Haystack-Fast-API on `develop`](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API)  
-- `.devcontainer/docker-compose.yml` — `db` (postgres-haystack), `db-sync`, `neo4j`  
-- `.devcontainer/scripts/sync-from-primary.sh` — FDW merge (default 24h)  
+- `.devcontainer/docker-compose.yml` — `postgres_haystack`, `postgres_haystack_sync`, `neo4j`  
+- `.devcontainer/scripts/sync-from-primary.sh` — FDW merge (default **60s** poll on config-repo `develop`)  
 - `specs/001-haystack-postgres-merge-sync`, `002-haystack-neo4j`  
 
 ### DigitalOcean
@@ -1022,6 +1057,21 @@ restart: unless-stopped
 | **2.3.0** | 2026-08-10 | **[8] synthesis** assets+prices; link synthesis + MCP server/pyproject/config-repo studies |
 | **2.4.0** | 2026-08-10 | Call 1 **TARGET** simplified response (needs/dates/budget); link FR-IX-023 study |
 | **2.5.0** | 2026-08-10 | **Remove FastMCP/MCP server** from architecture; in-process tools only |
+| **2.5.1** | 2026-08-10 | Align Haystack Postgres **service hostname** to **`postgres_haystack`** (match app `POSTGRES_HOSTNAME` / OpenSpec project-setup); was documented as compose `db` / `postgres-haystack` |
+| **2.5.2** | 2026-08-10 | Rename sync service **`db-sync` → `postgres_haystack_sync`**; align §11 with config-repo compose (`SYNC_INTERVAL_SECONDS=60`, `unless-stopped`) |
+| **2.5.3** | 2026-08-11 | §4.1.1 cross-link **Coordinator / Worker / Delegator** vocabulary study |
+| **2.6.0** | 2026-08-11 | Folder alignment: §4.1 roles ([4] non-agent gate, Delegator, fan-out ×N); diagram; §4.9/§5/§16 C/W/D rows |
+| **2.6.1** | 2026-08-11 | §4.1.1 pointer to C/W/D §10 agent A/B instruction templates |
+| **2.6.2** | 2026-08-11 | §4.1.1: agent A+B+C + `heavy_rental` table contextual awareness pointer |
+| **2.6.3** | 2026-08-11 | §4.1.1: agent A+B+C+D state space pointer |
+| **2.6.4** | 2026-08-11 | §4.1.1: agent A+B+C+D+E environment modeling pointer |
+| **2.6.5** | 2026-08-11 | §4.1.1: agent A–F integration patterns (events + validation) pointer |
+| **2.6.6** | 2026-08-11 | §4.1.1: agent A–G monitoring and adaptation pointer |
+| **2.6.7** | 2026-08-11 | §4.1.1: agent A–H memory; fleet LTM = haystack←primary sync |
+| **2.6.8** | 2026-08-11 | §4.1.1: agent A–I context management pointer |
+| **2.6.9** | 2026-08-11 | §4.1.1: agent A–J decision integration pointer |
+| **2.7.0** | 2026-08-11 | §4.1.1: agent A–K workflow optimization pointer |
+| **2.7.1** | 2026-08-11 | §4.1.1: agent A–L sequential/parallel processing pointer |
 
 ---
 
@@ -1031,13 +1081,18 @@ restart: unless-stopped
 |----------|----------------|
 | Build fleet sync + Neo4j? | **Yes, Track D phased** |
 | Build agent-first indexing? | **Yes, Track R1** (flag; forced index tool **[4]**) |
+| **[4] as LLM Worker agent?** | **No** — **Coordinator gate** (forced non-agent tool edge) |
+| Coordinator / Worker / Delegator vocabulary? | **Yes** — alias layer; see C/W/D study |
+| Delegator shape | **Explicit router** (allowlisted); not free ReAct |
+| Fleet / pricing multi-need | **Fan-out Workers per need** ([6]×N / [7]×N) |
+| C/W/D labels in logs / tool_traces? | **Yes** (`role`, `need_id`) |
 | Indexing as Haystack **SuperComponent**? | **GO** optional — wrap dual-branch pipeline; KG remains service-side ([study](./indexing-pipeline-supercomponent.md)) |
 | Indexing outputs (as-built) | **InMemory + KG-1** |
 | **Indexing DocumentStore cutover** | **Yes — I1: pipeline writes PgvectorDocumentStore** |
 | Multi-user project files | **Pgvector + user_id/ingest_id filters + TTL** |
 | Durable store default | **Pgvector in Indexing Pipeline only** (InMemory for CI) |
 | **Call 1 simplified body (needs/dates/budget)?** | **GO (TARGET)** — FR-IX-023; keep `ingest_id`; not Call 3 recommend |
-| **Multi-Agent after [4]** | **GO** — agents run **in-process tools** then synthesize recommendation |
+| **Multi-Agent after [4]** | **GO** — Coordinator + Delegator + Workers run **in-process tools**; Coordinator synthesizes |
 | **Synthesis outputs assets + rent price?** | **GO (target)** — merge only; see [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) |
 | Recommend data sources via tools | **Postgres-Haystack** + **Neo4j KG-2** + **ML pricing** + project Pgvector/KG-1 |
 | **ML pricing detail** | See [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md); `price_per_day` + clamp; not public HTTP |
@@ -1045,8 +1100,8 @@ restart: unless-stopped
 | Recommend tools | Postgres-Haystack SQL + Neo4j + `predict_asset_price` after [4] |
 | Neo4j populate | **Job trigger** after D3/T3 on new primary data; not per-request full rebuild by default |
 | DigitalOcean | **Suitable**; Neo4j self-managed or Aura; pgvector on Managed PG |
-| **Devcontainer today** | **D1 done** (`db-sync` 24h FDW merge); Neo4j up but **no fleet populate from `db`** |
-| **Devcontainer next** | **T1** shorten sync interval + restart policy; **T3–T4** neo4j-populate from Haystack PG |
+| **Devcontainer today** | **D1 + ~60s poll** (`postgres_haystack_sync` FDW merge); Neo4j up but **no fleet populate from `postgres_haystack`** |
+| **Devcontainer next** | **T2** allowlist/metrics if needed; **T3–T4** neo4j-populate from Haystack PG; CDC only if poll SLA insufficient |
 | Original phase spine | **Keep** as Track D; parallel **Track I** + Track R + **Track T** (§11) |
 | First ship | **R1 + D0–D1**, then **I1**; local: **T0→T1→T3→T4**; not Kafka + free ReAct all at once |
 | Avoid | Dual-write; Neo4j as SoT; SQL-only fleet “vector sync”; free agent MIME routing; blocking ingest on Neo4j; unfiltered multi-tenant retrieve; wiping DocumentStore graph on fleet reload; secondary ANN stores outside Pgvector |
