@@ -117,6 +117,70 @@ clamped = min(max(predicted, asset.minDailyRate), asset.maxDailyRate)
 
 Read per-asset at prediction time (admin-editable via asset admin-portal tag) — no separate config table or env var.
 
+### Internal quote API (added 2026-08-11)
+
+`POST /internal/v1/pricing/quote` — synchronous, service-to-service only (Spring Boot → Haystack), authoritative per-asset quote at checkout. Reuses this package's `predict_price(...)` — no second prediction path. Registered as its own router (`app/api/internal_pricing.py`), **not** mounted under the public `/api/v1` prefix; restrict at network/ops level, same interim posture as the manual retrain path (see Security notes) until real auth exists.
+
+**Hard dependency**: requires this capability's real per-asset guardrail clamping (`Asset.minDailyRate`/`maxDailyRate`) and the category-name mapping fix above to already be in place — building this against `ml-experiments/predict_price.py`'s static per-category stand-in would hand Spring Boot the wrong `min_daily_rate`/`max_daily_rate` shape it was already told to expect. Build after `feature/ml-3-pricing-service` lands (see Implementation branches).
+
+Request:
+```json
+{
+  "rental_plan_id": "plan_123",
+  "start_date": "2026-09-01",
+  "end_date": "2026-09-12",
+  "distance_km": 18.4,
+  "items": [
+    { "item_id": "item_1", "asset_id": "AST-EXC-004" },
+    { "item_id": "item_2", "asset_id": "AST-SL-011" }
+  ]
+}
+```
+
+Response (200):
+```json
+{
+  "rental_plan_id": "plan_123",
+  "currency": "SGD",
+  "deposit_rate": 0.30,
+  "degraded": false,
+  "results": [
+    {
+      "item_id": "item_1",
+      "asset_id": "AST-EXC-004",
+      "daily_rate": 182.40,
+      "total_price": 2189.60,
+      "was_clamped": true,
+      "min_daily_rate": 120.00,
+      "max_daily_rate": 260.00,
+      "model_version": "prod-2026-08-01",
+      "degraded": false
+    },
+    {
+      "item_id": "item_2",
+      "asset_id": "AST-SL-011",
+      "daily_rate": 150.00,
+      "total_price": 1800.00,
+      "was_clamped": false,
+      "min_daily_rate": 90.00,
+      "max_daily_rate": 220.00,
+      "model_version": "prod-2026-08-01",
+      "degraded": false
+    }
+  ],
+  "warnings": []
+}
+```
+
+Notes:
+- `category`/`condition`/`capacity`/`platform_height` are never in the request — resolved server-side per `asset_id` through the same `Asset`/`AssetCategory` read + `DB_NAME_TO_FEATURE_NAME` mapping used elsewhere in this package. Spring Boot does not need to know the ML naming convention.
+- `distance_km` is a single value applied to the whole request (one delivery site assumed). Spring Boot computes it (postal-code based) and sends it — Haystack does not geocode. Open follow-up: sanity-check real computed values against the synthetic training distribution (`ml-experiments/generate_synthetic_data.py`) before trusting prediction quality, since the model was trained on a sampled proxy, not real distances. Revisit the single-value assumption if a multi-site quote is ever needed.
+- Per-item `degraded`/`model_version` are independent, not request-wide — `resolve_pricing_schema()` runs once per item (per `predict_price_for_asset()` call), not once per request, so one item can degrade to `public` while another doesn't. The top-level `degraded` is a convenience OR-of-all-items flag, not a separate resolution.
+- `deposit_rate` is a fixed constant (0.30), sourced from one place in this package (e.g. alongside `pricing_tables.py`, not re-hardcoded per consumer) and returned in the response rather than accepted as a request parameter. Downstream (Spring Boot, frontend) should read it from here instead of maintaining independent copies.
+- No `raw_price` in the response — deliberately excluded from Spring Boot's audit persistence (see Key decisions in spec.md); `model_version` + `was_clamped` are persisted there, `raw_price` is not.
+- No `POST /internal/v1/pricing/estimate` — browse/detail page pricing is a flat, non-ML base price on Spring Boot's side (e.g. `Asset.baseDailyRate`, no Haystack call); live ML pricing only happens at quote/checkout via this endpoint.
+- Price consistency between an earlier `recommend`-surfaced price and this endpoint's quote is intentionally **not** reconciled — `period_utilization`/`lead_time_days` are live, so drift is possible and expected; open item, not yet resolved.
+
 ### Artifact contract
 
 `current.json` shape already implemented and validated in `ml-experiments/artifacts/current.json` — reuse as-is:
@@ -178,6 +242,11 @@ ml-experiments/                 # Phase 1 scratch (outside SDD)
 app/services/pricing/           # Phase 2 target (this capability)
   model.py, train.py, feature_schema.py, artifacts/
 
+app/api/internal_pricing.py     # Phase 2a addition: POST /internal/v1/pricing/quote
+                                 # (service-to-service, not under the public /api/v1 router;
+                                 # hard-depends on app/services/pricing/model.py's real
+                                 # per-asset guardrail clamping + category-name mapping)
+
 app/services/pricing_client.py  # as-built recommend adapter → ml-experiments / future production
 app/models/asset_category.py, asset.py, booking.py, booking_item.py  # Phase 1e read-only models
 app/repositories/pricing_repository.py         # Phase 1e: live period_utilization query
@@ -212,10 +281,11 @@ uv run python ml-experiments/shap_review.py
 | `HR-87-ml-2-d-production-db-wiring-for-period-utilization` | **Done (2026-08-10)** — Phase 1e: read-only models, `pricing_repository.py`, `pricing_read_resilience.py` tiered fallback; 20 new unit tests |
 | `feature/ml-3-pricing-service` | Scaffold package, port schema, model/train, guardrails, **relocate** (don't rebuild) Phase 1e's read models/repositories, **fix category-name mismatch** (`DB_NAME_TO_FEATURE_NAME`, found 2026-08-11) |
 | `feature/ml-4-integration-tests` | Wire pipeline, unit tests, manual retrain endpoint |
+| `feature/ml-6-internal-pricing-api` | `POST /internal/v1/pricing/quote` — hard depends on `feature/ml-3-pricing-service`; can run alongside/after `feature/ml-4-integration-tests` (shares the same production `model.py`) |
 
 ## N — Norms
 
-- In-process only for prediction; no public renter pricing API.
+- In-process only for prediction; no public **renter-facing** pricing API. `POST /internal/v1/pricing/quote` is a scoped exception: internal, service-to-service only (Spring Boot → Haystack), never called by a renter client, never mounted under the public `/api/v1` router.
 - Guardrails from per-asset rate bounds, not env tables.
 - Port feature schema from ml-experiments — do not re-derive.
 - Spring owns schema; Python maps only.
@@ -232,6 +302,10 @@ uv run python ml-experiments/shap_review.py
 - Do not compare `AssetCategory.name` against `feature_schema.CATEGORIES` (or vice versa) without going through `DB_NAME_TO_FEATURE_NAME` — a silent zero-row match degrades to the static fallback with no error, the exact bug found 2026-08-11.
 - Do not "fix" the category mismatch by renaming `asset_categories.name` values in the DB — see "Category name mapping" above for why the mapping lives in Haystack code, not seed data.
 - Do not write a test for category-name-dependent code paths using a fully mocked `session.execute()` only — it can't catch a filter-clause mismatch; assert against real DB-shaped names too.
+- Do not build `POST /internal/v1/pricing/quote` against `ml-experiments/predict_price.py`'s static per-category guardrail stand-in — it must use `app/services/pricing/model.py`'s real per-asset clamping, or the guardrail bounds returned to Spring Boot are wrong.
+- Do not mount `/internal/v1/pricing/quote` under the public `/api/v1` router, and do not call it from any renter-facing client — service-to-service only (Spring Boot).
+- Do not add a `POST /internal/v1/pricing/estimate` endpoint without a new decision — dropped in favor of a flat, non-ML base price on Spring Boot's browse/detail page.
+- Do not persist `raw_price` per quote item on Spring Boot's side — deliberately excluded from the audit fields (see spec.md Key decisions); track guardrail-clamp magnitude as Haystack-side monitoring instead.
 
 ## Key decisions
 
@@ -249,3 +323,8 @@ See [`spec.md`](./spec.md) Key decisions / non-goals table (mirrored here for RE
 | booking_month / fuel not added | Superseded / rejected |
 | Category-name mapping fixed in code, not DB data | `AssetCategory.name` is Spring-Boot canonical; `feature_schema.CATEGORIES` is the derived ML slug baked into trained artifacts |
 | `mlPredictedPrice` non-persistence: **locked**, not pending | Confirmed 2026-08-11 — see spec.md Change control 2.2.0 |
+| `/internal/v1/pricing/quote`: new internal HTTP surface, gated on real guardrail clamping | Spring Boot needs synchronous authoritative checkout pricing; still never renter-facing; must not ship against the static-guardrail prototype |
+| `distance_km` sent by Spring Boot, not geocoded here | Real geocoding stays a non-goal; Spring Boot already has both addresses |
+| `deposit_rate` fixed constant, response-only | Single source of truth; not asset/category-dependent today |
+| No `/internal/v1/pricing/estimate` | Flat base price pre-checkout; live pricing only at quote time |
+| Quote audit: `model_version`/`was_clamped` persisted, `raw_price` excluded | Redundant when unclamped; a calibration signal, not a per-transaction fact, when clamped |
