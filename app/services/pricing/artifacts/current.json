@@ -1,0 +1,49 @@
+{
+  "trained_at": "2026-08-07T12:27:05.791506+00:00",
+  "feature_columns": [
+    "category_forklift",
+    "category_scissor lift",
+    "category_boom lift",
+    "category_excavator",
+    "condition_ordinal",
+    "duration_days",
+    "capacity",
+    "distance_km",
+    "period_utilization",
+    "lead_time_days",
+    "platform_height"
+  ],
+  "condition_order": {
+    "NEEDS_REPAIR": 0,
+    "FAIR": 1,
+    "GOOD": 2,
+    "EXCELLENT": 3
+  },
+  "categories": [
+    "forklift",
+    "scissor lift",
+    "boom lift",
+    "excavator"
+  ],
+  "target_column": "price_per_day",
+  "hyperparameters": {
+    "n_estimators": 300,
+    "max_depth": 5,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "objective": "reg:squarederror",
+    "random_state": 42
+  },
+  "metrics": {
+    "mae": 10.675994533996581,
+    "rmse": 16.822801213461123,
+    "r2": 0.9739321719091302
+  },
+  "row_counts": {
+    "train": 4000,
+    "test": 1000,
+    "total": 5000
+  },
+  "data_source": "data/synthetic_pricing_data.csv"
+}

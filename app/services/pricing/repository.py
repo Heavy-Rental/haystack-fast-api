@@ -1,22 +1,32 @@
-"""Live pricing queries against Spring-Boot-owned data (Phase 1e).
+"""Live pricing queries against Spring-Boot-owned data.
 
-specification/SPEC-dynamic-pricing.md §5.2/§5.3. Pulled forward ahead of the
-rest of app/services/pricing/ (Phase 2) so predict_price()'s two real-time
-features have a real production source before this package's own PR lands —
-Phase 2 relocates, not rebuilds, this module.
+Relocated from ``app/repositories/pricing_repository.py`` (Phase 1e) into
+this package (Phase 2a, 2026-08-11) per
+openspec/specs/dynamic-pricing/spec.md's implementation task -- relocated,
+not rebuilt, except for one real fix folded into this move (see below).
 
-Reuses ml-experiments/feature_schema.py's spec_band() and
-ml-experiments/pricing_tables.py's bin/fallback constants directly (same
-sys.path bridge app/services/pricing_client.py already uses) rather than
-duplicating them -- spec_band()'s own docstring calls it out as the single
-source of truth for both training-time bucketing and this live query.
+Uses this package's own ``feature_schema.spec_band()`` and
+``pricing_tables.py`` bin/fallback constants (no more ml-experiments
+sys.path bridge -- Phase 2a is the last consumer that needed it).
+
+**Category-name mapping fix (2026-08-11):** ``compute_period_utilization()``
+previously filtered ``AssetCategory.name == category`` using ``category`` as
+given by its caller, which is always in ``feature_schema.CATEGORIES``
+convention (e.g. ``"excavator"``) -- but the real DB column holds Spring-Boot
+canonical names (e.g. ``"Excavator"``). That join never matched a real row,
+so this function always silently fell back to the static
+``pricing_tables.CATEGORY_UTILIZATION`` constant, with no error and no
+degraded flag -- confirmed live against ``heavy_rental`` during Phase 2 prep.
+Fixed here via ``category_mapping.to_db_name()`` on the join's right-hand
+side; every other use of ``category`` in this file stays in
+``feature_schema`` convention, unchanged. See
+openspec/specs/dynamic-pricing/design.md "Category name mapping" for the
+full incident writeup.
 """
 
 from __future__ import annotations
 
-import sys
 from datetime import date
-from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -25,23 +35,19 @@ from app.models.asset import Asset
 from app.models.asset_category import AssetCategory
 from app.models.booking import Booking
 from app.models.booking_item import BookingItem
-from app.repositories.pricing_read_resilience import PricingSchemaResolution
+from app.services.pricing import category_mapping
+from app.services.pricing import feature_schema as fs
+from app.services.pricing import pricing_tables as pt
+from app.services.pricing.read_resilience import PricingSchemaResolution
 
-_ML_DIR = Path(__file__).resolve().parents[2] / "ml-experiments"
-if str(_ML_DIR) not in sys.path:
-    sys.path.insert(0, str(_ML_DIR))
-
-import feature_schema as fs  # type: ignore
-import pricing_tables as pt  # type: ignore
-
-# period_utilization's live-hold status filter (spec §5.2): equipment is held
-# for the customer from PENDING_DEPOSIT onward; COMPLETED (returned) and
-# CANCELLED (releases the hold) are excluded.
+# period_utilization's live-hold status filter: equipment is held for the
+# customer from PENDING_DEPOSIT onward; COMPLETED (returned) and CANCELLED
+# (releases the hold) are excluded.
 LIVE_HOLD_STATUSES = ("PENDING_DEPOSIT", "PENDING_CONFIRMED", "CONFIRMED", "MOBILISED")
 
 
 def resolve_effective_capacity(category: str, capacity: float | None) -> float | None:
-    """Asset.capacity null fallback: per-category midpoint, not NaN (spec §5.2).
+    """Asset.capacity null fallback: per-category midpoint, not NaN.
 
     A data-entry gap, not a structural absence (unlike platform_height) --
     training data always has capacity populated, so a NaN input would be
@@ -56,7 +62,7 @@ def resolve_effective_capacity(category: str, capacity: float | None) -> float |
 
 
 def compute_lead_time_days(start_date: date, *, today: date | None = None) -> int:
-    """lead_time_days = start_date - today (spec §5.2), no new persisted column."""
+    """lead_time_days = start_date - today, no new persisted column."""
     return (start_date - (today or date.today())).days
 
 
@@ -71,18 +77,23 @@ def compute_period_utilization(
     end_date: date,
 ) -> float:
     """Live aggregate: fraction of same-category+spec-band assets with a
-    live-hold booking overlapping [start_date, end_date] (spec §5.2).
+    live-hold booking overlapping [start_date, end_date].
 
     Overlap is inclusive on both boundaries, matching
     BookingAvailabilityFilter's existing rule exactly (no same-day turnover).
+
+    ``category`` is always in ``feature_schema.CATEGORIES`` convention (the
+    caller's contract, same as every other pricing function) -- converted to
+    the real DB name only for the ``AssetCategory.name`` filter below.
     """
     effective_capacity = resolve_effective_capacity(category, capacity)
     target_band = fs.spec_band(category, effective_capacity, platform_height)
+    db_category_name = category_mapping.to_db_name(category)
 
     rows = session.execute(
         select(Asset.id, Asset.capacity, Asset.platform_height)
         .join(AssetCategory, Asset.category_id == AssetCategory.id)
-        .where(AssetCategory.name == category),
+        .where(AssetCategory.name == db_category_name),
         execution_options=resolution.execution_options,
     ).all()
 
