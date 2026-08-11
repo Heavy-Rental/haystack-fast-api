@@ -78,7 +78,7 @@ Use distinctive project text so vector + KG hits are obvious under mock embeddin
 ### 1) Ingest (Part A)
 
 ```bash
-curl -s -X POST http://localhost:8000/api/v1/recommendations/from-project-spec \
+curl -s -X POST http://localhost:8000/internal/v1/recommendations/submitprojectspecification \
   -H 'Content-Type: application/json' \
   -d '{
     "user_id": "user_demo",
@@ -94,7 +94,7 @@ curl -s -X POST http://localhost:8000/api/v1/recommendations/from-project-spec \
 Same process; paste `ingest_id` from step 1:
 
 ```bash
-curl -s -X POST http://localhost:8000/api/v1/recommendations/project-knowledge/query \
+curl -s -X POST http://localhost:8000/internal/v1/recommendations/project-knowledge/getassetrecommendations \
   -H 'Content-Type: application/json' \
   -d '{
     "user_id": "user_demo",

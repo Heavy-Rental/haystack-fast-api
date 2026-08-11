@@ -1,14 +1,17 @@
-# Contract: Project Knowledge Query
+# Contract: Project Knowledge Query (Call 2)
 
 | Field | Value |
 |-------|--------|
 | **Capability** | `knowledge-graph` (Part B — Stage-1 multi-agent Q&A) |
-| **Method / path** | `POST /api/v1/recommendations/project-knowledge/query` |
+| **Method / path** | `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` |
 | **Schemas** | `app/schemas/project_knowledge.py` |
 | **Service** | `app/services/project_knowledge_qa.py` |
-| **Prerequisite** | Successful `POST /api/v1/recommendations/from-project-spec` in the **same process** (session registry is process-local) |
+| **Prerequisite** | Successful `POST /internal/v1/recommendations/submitprojectspecification` in the **same process** (session registry is process-local) |
 | **Behaviour** | [`../spec.md`](../spec.md) FR-KG-010, FR-KG-013, FR-KG-014 |
 | **Testing** | [`../../../../docs/testing/knowledge-graph-testing-guide.md`](../../../../docs/testing/knowledge-graph-testing-guide.md) |
+| **Standards** | OpenSpec · Spec-kit contracts · OpenSPDD agent prompts (`app/agents/prompts.py`) |
+
+**Naming note:** Path is Spring-facing (`getassetrecommendations`). As-built behaviour is **project-knowledge Q&A** (markdown `answer`), **not** Call 3 ranked assets + prices (`results_by_need`).
 
 ---
 
@@ -19,12 +22,12 @@
 | Field | Type | Required | Notes |
 |-------|------|----------|--------|
 | `user_id` | string | **yes** | Same `user_id` used at ingest; min length 1 |
-| `ingest_id` | string | **yes** | `ingest_id` returned by `/from-project-spec`; min length 1 |
-| `query` | string | **yes** | Natural-language question; min length 1 |
+| `ingest_id` | string | **yes** | `ingest_id` from Call 1 lean response; min length 1 |
+| `query` | string | **yes** | Natural-language question **or** predefined prompt (may embed Call 1 `user_requirement_summary`); min length 1 |
 | `top_k` | integer \| null | no | Optional retrieval depth override; `1…50` when set; defaults to `PROJECT_AGENT_TOP_K` |
 | `kg_artifact_path` | string \| null | no | Optional path to reload KG-1 if the process-local session was lost. Vector store remains empty until re-ingest. |
 
-### Example request
+### Example request (free-form)
 
 ```json
 {
@@ -35,10 +38,20 @@
 }
 ```
 
+### Example request (predefined prompt + Call 1 summary)
+
+```json
+{
+  "user_id": "user_demo",
+  "ingest_id": "ing_REPLACE_ME",
+  "query": "Based on the existing information uploaded earlier, this is the summary: Indoor elevated work ~8m; need scissors lift. List equipment needs and constraints supported by the project sources only. Do not invent assets or rates."
+}
+```
+
 ### Example curl
 
 ```bash
-curl -s -X POST http://localhost:8000/api/v1/recommendations/project-knowledge/query \
+curl -s -X POST http://localhost:8000/internal/v1/recommendations/project-knowledge/getassetrecommendations \
   -H 'Content-Type: application/json' \
   -d '{
     "user_id": "user_demo",
@@ -79,53 +92,28 @@ curl -s -X POST http://localhost:8000/api/v1/recommendations/project-knowledge/q
   "tool_traces": [
     { "agent": "research", "tool": "project_vector_search", "query": "…", "hit_count": 1 },
     { "agent": "graph", "tool": "project_kg_query", "query": "…", "hit_count": 1 }
-  ]
+  ],
+  "research_notes": null,
+  "graph_notes": null
 }
 ```
 
-**Expect (healthy Stage-1 run):** HTTP 200; both tools appear in `sources_used` and/or `tool_traces`; answer evidence cites Vector and Graph when hits exist.
+---
+
+## Errors
+
+| Status | When |
+|--------|------|
+| `400` | Validation (`user_id` / `ingest_id` / `query` missing or empty) |
+| `404` | No session for `(user_id, ingest_id)` |
+
+Error body: `{"error","message"}`.
 
 ---
 
-## Negatives
+## Related
 
-| Case | Call | Expect |
-|------|------|--------|
-| Missing session | Q&A with unknown `ingest_id` (or no prior ingest in this process) | **404** `{"error":"not_found",…}` |
-| Empty query | Q&A with `"query": ""` | **422** or **400** |
-| Missing required fields | Omit `user_id`, `ingest_id`, or `query` | **422** (validation) |
-| Missing `user_id` on **ingest** (upstream) | Ingest without `user_id` | **400** (indexing) |
-| KG failure on **ingest** (upstream) | Simulated in pytest | Ingest **400** (hard-fail) — session never registered |
+Ingest route: `POST /internal/v1/recommendations/submitprojectspecification` — lean Call 1 contract  
+[`ingest-from-project-spec.md`](../../indexing/contracts/ingest-from-project-spec.md).
 
-Shared error JSON shape (project-setup / core errors):
-
-```json
-{ "error": "<code>", "message": "<human-readable reason>" }
-```
-
-Common codes: `not_found`, `bad_request`, validation-driven 422.
-
----
-
-## Process-local session note
-
-- Sessions live in `ProjectKnowledgeSessionRegistry` in-process.
-- Ingest (**15**) and query (**16**) must hit the **same** uvicorn process.
-- After restart, optional `kg_artifact_path` may reload KG-1 only; dual-source Q&A requires re-ingest until DocumentStore snapshots exist (Stage 2).
-
----
-
-## Related ingest fields (Part A — ownership shared with indexing)
-
-Successful ingest that enables this route returns (among other indexing fields):
-
-| Field | Expect on success |
-|-------|-------------------|
-| `ingest_id` | Starts with `ing_` |
-| `kg_built` | `true` |
-| `kg_node_count` | `≥ 1` |
-| `kg_relationship_count` | present |
-| `kg_artifact_path` | non-empty, under user-scoped path |
-| `kg_transform_applied` | `false` when transforms off |
-
-Ingest route: `POST /api/v1/recommendations/from-project-spec` — see indexing capability contracts for full field tables.
+Call 3 ranked assets: **not this route** — see recommendation-pipeline / implementation-plan S7.5.

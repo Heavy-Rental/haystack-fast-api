@@ -91,11 +91,8 @@ def test_service_project_text_unstructured() -> None:
     )
     assert result.ingest_id.startswith("ing_")
     assert result.user_id == "u_svc"
-    assert result.data_kind == "unstructured"
-    assert result.unstructured_count == 1
-    assert result.structured_count == 0
-    assert result.documents_written >= 1
-    assert result.warnings
+    assert "scissors" in result.user_requirement_summary.lower()
+    assert isinstance(result.warnings, list)
 
 
 def test_service_csv_structured() -> None:
@@ -106,10 +103,8 @@ def test_service_csv_structured() -> None:
         content_type="text/csv",
     )
     result = service.ingest_from_project_spec(user_id="u_csv", file_sources=[src])
-    assert result.data_kind == "structured"
-    assert result.structured_count == 1
-    assert result.documents_written >= 1
-    assert "fleet.csv" in result.filenames
+    assert result.user_id == "u_csv"
+    assert "boom" in result.user_requirement_summary.lower()
 
 
 def test_service_unsupported_raises() -> None:

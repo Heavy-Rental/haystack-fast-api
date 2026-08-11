@@ -8,13 +8,13 @@ from pydantic import BaseModel, Field
 
 
 class ProjectKnowledgeQueryRequest(BaseModel):
-    """POST /api/v1/recommendations/project-knowledge/query body."""
+    """POST /internal/v1/recommendations/project-knowledge/getassetrecommendations body."""
 
     user_id: str = Field(..., min_length=1, description="Same user_id used at ingest")
     ingest_id: str = Field(
         ...,
         min_length=1,
-        description="ingest_id returned by /from-project-spec",
+        description="ingest_id returned by /submitprojectspecification",
     )
     query: str = Field(..., min_length=1, description="Natural-language question")
     top_k: int | None = Field(

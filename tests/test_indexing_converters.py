@@ -133,21 +133,16 @@ def test_pipeline_classify_then_convert_csv() -> None:
     assert out["documents_written"] >= 1
 
 
-def test_service_returns_document_previews() -> None:
+def test_service_returns_lean_summary() -> None:
     service = IndexingIngestService()
     result = service.ingest_from_project_spec(
         user_id="u_conv",
         project_text="Need one excavator for trench work",
     )
-    assert result.document_count == 1
-    assert result.unstructured_document_count == 1
-    assert result.documents_written >= 1
-    assert result.chunk_count >= 1
-    assert result.documents
-    assert "excavator" in result.documents[0].content_preview.lower()
-    assert result.documents[0].content_length > 0
-    assert result.documents[0].has_embedding is True
-    assert any("Indexing complete" in w or "Part 3" in w for w in result.warnings)
+    assert result.ingest_id.startswith("ing_")
+    assert result.user_id == "u_conv"
+    assert "excavator" in result.user_requirement_summary.lower()
+    assert isinstance(result.warnings, list)
 
 
 def test_service_csv_has_structured_docs() -> None:
@@ -157,13 +152,8 @@ def test_service_csv_has_structured_docs() -> None:
         filename="fleet.csv",
     )
     result = service.ingest_from_project_spec(user_id="u_conv", file_sources=[src])
-    assert result.data_kind == "structured"
-    assert result.document_count == 1
-    assert result.structured_document_count == 1
-    assert result.documents_written >= 1
-    joined = " ".join(d.content_preview for d in result.documents)
-    assert "Boom" in joined
-    assert all(d.has_embedding for d in result.documents)
+    assert result.user_id == "u_conv"
+    assert "boom" in result.user_requirement_summary.lower()
 
 
 def test_empty_sources_convert_zero() -> None:

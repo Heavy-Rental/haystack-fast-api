@@ -6,7 +6,7 @@
 | **Status** | **Deferred (2026-08-07)** — describes pre-reroute **recommend** HTTP expectations (`rec_` / `results_by_need`). Live route is **indexing ingest**. |
 | **Feature id** | `recommendation-postman-testing` |
 | **Spec location** | `docs/testing/recommendation-postman-testing-guide.md` |
-| **Endpoint** | `POST /api/v1/recommendations/from-project-spec` |
+| **Endpoint** | `POST /internal/v1/recommendations/submitprojectspecification` |
 | **Live Postman (use this)** | [`../../postman/README.md`](../../postman/README.md) — `Indexing-Pipeline.postman_collection.json` |
 | **Live API contract** | [`openspec/specs/indexing/spec.md`](../../openspec/specs/indexing/spec.md) |
 | **Deferred recommend contract** | [`openspec/specs/recommendation-intake/spec.md`](../../openspec/specs/recommendation-intake/spec.md) |
@@ -51,7 +51,7 @@ Select this environment before sending requests.
 All recommend URLs use:
 
 ```text
-{{baseUrl}}/api/v1/recommendations/from-project-spec
+{{baseUrl}}/internal/v1/recommendations/submitprojectspecification
 ```
 
 ---
@@ -96,7 +96,7 @@ Health may be `degraded` if Postgres is down; recommend still works with seed fl
 | Field | Value |
 |-------|--------|
 | Method | **POST** |
-| URL | `{{baseUrl}}/api/v1/recommendations/from-project-spec` |
+| URL | `{{baseUrl}}/internal/v1/recommendations/submitprojectspecification` |
 | Headers | `Content-Type` = `application/json` |
 | Body | **raw** → **JSON** |
 
@@ -165,7 +165,7 @@ pm.test("Pricing has total_price, not weekly_rate", () => {
 | Field | Value |
 |-------|--------|
 | Method | **POST** |
-| URL | `{{baseUrl}}/api/v1/recommendations/from-project-spec` |
+| URL | `{{baseUrl}}/internal/v1/recommendations/submitprojectspecification` |
 | Body | **form-data** |
 
 **Do not** set `Content-Type: application/json`. Postman must send `multipart/form-data` with boundary.
@@ -202,7 +202,7 @@ Need one forklift for warehouse loading bay work.
 | Field | Value |
 |-------|--------|
 | Method | **POST** |
-| URL | `{{baseUrl}}/api/v1/recommendations/from-project-spec` |
+| URL | `{{baseUrl}}/internal/v1/recommendations/submitprojectspecification` |
 | Body raw JSON | `{"project_text": "   "}` |
 
 ### Expected

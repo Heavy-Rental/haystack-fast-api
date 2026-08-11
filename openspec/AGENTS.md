@@ -15,10 +15,10 @@ This folder is the **SDD source of truth**. Standards:
 ## Runtime flow (as-built)
 
 ```text
-Portal
+Portal / Spring
   │  user_id (required) + project_text | file
   ▼
-POST /api/v1/recommendations/from-project-spec
+POST /internal/v1/recommendations/submitprojectspecification
   │
   ▼
 ┌─────────────────────────────────────────────────────────────┐
@@ -38,17 +38,19 @@ POST /api/v1/recommendations/from-project-spec
 └─────────────────────────────────────────────────────────────┘
   │
   ▼
-IngestFromProjectSpecResponse
-  as-built: ingest_id, user_*, data_kind, documents_written, kg_*
+IngestFromProjectSpecResponse (lean public body — S1a)
+  as-built: ingest_id, user_id, user_requirement_summary, warnings[]
   TARGET (FR-IX-023): + needs_summary, tentative_start/end_date,
                       expected_budget (not ranked assets / ML rent)
+  Technical documents[] / kg_* stay internal (session meta)
 
   │  optional Stage-1 Q&A (Call 2)
   ▼
-POST /api/v1/recommendations/project-knowledge/query
+POST /internal/v1/recommendations/project-knowledge/getassetrecommendations
   LangGraph: research → graph → synthesis
   tools: project_vector_search + project_kg_query
   prompts: app/agents/prompts.py (OpenSPDD)
+  query required (free-form or predefined prompt + summary)
 
         ─ ─ ─ ─ deferred (not default HTTP) ─ ─ ─ ─
 Call 3 Recommend FR-010 (service) → fleet + pricing → results_by_need
@@ -111,7 +113,7 @@ KG-2 equipment stockpile (Stage 2)
 
 | Concern | Wins |
 |---------|------|
-| Live `POST .../from-project-spec` fields & index graph | **`specs/indexing/`** |
+| Live `POST .../submitprojectspecification` fields & index graph | **`specs/indexing/`** |
 | Mandatory KG after joiner / multi-agent Stage 1 | **`specs/knowledge-graph/`** |
 | FR-010 components / seed fleet | **`specs/recommendation-pipeline/`** (service) |
 | Deferred recommend JSON envelope | **`specs/recommendation-intake/`** (deferred) |

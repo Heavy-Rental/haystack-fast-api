@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | As-built MVP — full FR-010.1–8 **service-level** orchestration; **NOT** default HTTP for `/from-project-spec` |
+| **Status** | As-built MVP — full FR-010.1–8 **service-level** orchestration; **NOT** default HTTP for `/submitprojectspecification` |
 | **Feature id** | `recommendation-pipeline-mvp` |
 | **Tracking** | HR-65 (pipeline structure completion) |
 | **Standards** | OpenSpec · Spec-kit user stories · OpenSPDD (see [`design.md`](./design.md)) |
@@ -15,7 +15,7 @@
 
 **Read** project + setup first. Domain: [`../domain/spec.md`](../domain/spec.md). Parent owns end-to-end product vision, demo scenarios A/B/C, KG/agent targets, and deployment.
 
-**Conflict rule:** Pipeline step behaviour and component contracts for FR-010 → **this capability**. **Live** HTTP response for `/from-project-spec` → **indexing**. Broader product policy (catalog of four types, deposit 30%, SGD) → parent + this restatement.
+**Conflict rule:** Pipeline step behaviour and component contracts for FR-010 → **this capability**. **Live** HTTP response for `/submitprojectspecification` → **indexing**. Broader product policy (catalog of four types, deposit 30%, SGD) → parent + this restatement.
 
 **As-built note (2026-08-07):** `app/api/recommendations.py` calls `IndexingIngestService`, not `RecommendationService`. FR-010 remains callable via `RecommendationService.recommend_from_project_spec` in tests and for future reattach.
 
@@ -318,7 +318,7 @@ When `include_pricing` is true and a match is selected, `item.pricing` MUST expo
 Async HTTP handlers (`async def`) MUST NOT run the full sync service path on the event loop. Offload via `fastapi.concurrency.run_in_threadpool` (or equivalent) for **both** JSON and multipart success paths. **Live route:** offload `IndexingIngestService`. **When recommend is reattached:** offload `RecommendationService` (and LLM HTTP) the same way.
 
 #### Scenario: Live offload
-- **WHEN** live async `POST .../from-project-spec` succeeds
+- **WHEN** live async `POST .../submitprojectspecification` succeeds
 - **THEN** `IndexingIngestService` ran via threadpool
 
 #### Scenario: Recommend reattach offload
@@ -331,7 +331,7 @@ Async HTTP handlers (`async def`) MUST NOT run the full sync service path on the
 
 Public contract details: [`../recommendation-intake/spec.md`](../recommendation-intake/spec.md).
 
-**Service path:** `RecommendationService.recommend_from_project_spec(...)` (tests / future reattach of `POST /api/v1/recommendations/from-project-spec`).
+**Service path:** `RecommendationService.recommend_from_project_spec(...)` (tests / future reattach of `POST /internal/v1/recommendations/submitprojectspecification`).
 
 **Happy path (scissors):** `item` non-null, e.g.:
 

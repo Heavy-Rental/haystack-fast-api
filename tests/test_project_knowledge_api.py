@@ -48,7 +48,7 @@ def test_ingest_then_project_knowledge_query(api_client: TestClient) -> None:
     # Prefer HTTP ingest (registers session with default settings dim=384)
     # Override settings already mock+8; IndexingIngestService() uses settings.
     ingest_resp = api_client.post(
-        "/api/v1/recommendations/from-project-spec",
+        "/internal/v1/recommendations/submitprojectspecification",
         json={
             "user_id": "api_user",
             "project_text": PROJECT_TEXT,
@@ -56,11 +56,14 @@ def test_ingest_then_project_knowledge_query(api_client: TestClient) -> None:
     )
     assert ingest_resp.status_code == 200, ingest_resp.text
     body = ingest_resp.json()
-    assert body["kg_built"] is True
+    assert body["ingest_id"].startswith("ing_")
+    assert body["user_id"] == "api_user"
+    assert "excavator" in body["user_requirement_summary"].lower()
+    assert "kg_built" not in body
     ingest_id = body["ingest_id"]
 
     qa = api_client.post(
-        "/api/v1/recommendations/project-knowledge/query",
+        "/internal/v1/recommendations/project-knowledge/getassetrecommendations",
         json={
             "user_id": "api_user",
             "ingest_id": ingest_id,
@@ -81,7 +84,7 @@ def test_ingest_then_project_knowledge_query(api_client: TestClient) -> None:
 
 def test_query_missing_session_404(api_client: TestClient) -> None:
     resp = api_client.post(
-        "/api/v1/recommendations/project-knowledge/query",
+        "/internal/v1/recommendations/project-knowledge/getassetrecommendations",
         json={
             "user_id": "nobody",
             "ingest_id": "ing_missing",

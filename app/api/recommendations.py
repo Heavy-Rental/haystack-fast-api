@@ -19,7 +19,7 @@ from app.services.indexing import (
 )
 from app.services.project_knowledge_qa import ProjectKnowledgeQAService
 
-router = APIRouter(prefix="/api/v1/recommendations", tags=["recommendations"])
+router = APIRouter(prefix="/internal/v1/recommendations", tags=["recommendations"])
 
 
 def _parse_optional_date(value: object) -> date | None:
@@ -42,9 +42,9 @@ def _require_user_id(value: object) -> str:
 
 
 @router.post(
-    "/from-project-spec",
+    "/submitprojectspecification",
     response_model=IngestFromProjectSpecResponse,
-    summary="Ingest project-spec: index chunks and knowledge graph",
+    summary="Submit project specification: index chunks and knowledge graph",
     openapi_extra={
         "requestBody": {
             "content": {
@@ -149,7 +149,7 @@ async def recommend_from_project_spec(request: Request) -> IngestFromProjectSpec
 
 
 @router.post(
-    "/project-knowledge/query",
+    "/project-knowledge/getassetrecommendations",
     response_model=ProjectKnowledgeQueryResponse,
     summary="Multi-agent Q&A over project DocumentStore + KG-1",
 )
@@ -158,10 +158,13 @@ async def query_project_knowledge(
 ) -> ProjectKnowledgeQueryResponse:
     """LangGraph research → graph → synthesis over Stage-1 project sources only.
 
-    Requires a prior successful ``/from-project-spec`` ingest for the same
-    ``user_id`` + ``ingest_id`` (process-local session). Optional
+    Requires a prior successful ``/submitprojectspecification`` ingest for the
+    same ``user_id`` + ``ingest_id`` (process-local session). Optional
     ``kg_artifact_path`` can reload KG-1 after restart; vector store is empty
     until re-ingest.
+
+    Path name is Spring-facing; response is project-knowledge Q&A, not Call 3
+    ranked assets.
     """
     service = ProjectKnowledgeQAService()
     return await run_in_threadpool(

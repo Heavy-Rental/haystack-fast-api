@@ -173,7 +173,7 @@ Converters (FileTypeRouter / specific converters)
 | DocumentStore | Per-ingest `InMemoryDocumentStore` in session registry |
 | KG-1 online | In-memory on session + JSON artifact from Part A |
 | Agent mode | `PROJECT_AGENT_MODE=stub` (default, CI-safe) \| `llm` |
-| HTTP | `POST /api/v1/recommendations/project-knowledge/query` after `/from-project-spec` |
+| HTTP | `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` after `/submitprojectspecification` |
 | Scope | Project sources only — no equipment KG-2 |
 
 ### Alignment with parent product
@@ -263,8 +263,8 @@ uv run pytest \
 
 ### Live HTTP (same process)
 
-1. `POST /api/v1/recommendations/from-project-spec` → obtain `ingest_id` and `kg_*`.
-2. `POST /api/v1/recommendations/project-knowledge/query` with same `user_id` + `ingest_id`.
+1. `POST /internal/v1/recommendations/submitprojectspecification` → obtain `ingest_id` and `kg_*`.
+2. `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` with same `user_id` + `ingest_id`.
 
 Contract: [`contracts/project-knowledge-query.md`](./contracts/project-knowledge-query.md).  
 Postman folder **04 Stage-1 multi-agent Q&A**: [`../../../postman/README.md`](../../../postman/README.md).

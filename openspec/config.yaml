@@ -18,10 +18,12 @@ context: |
     - Spec-kit: .specify/memory/constitution.md; user stories; contracts; tasks
     - OpenSPDD: design.md as REASONS Canvas; structured prompts first-class;
       when behaviour wrong → fix prompt/spec first, then code
-  Live HTTP path: POST /api/v1/recommendations/from-project-spec (user_id required)
-    → dual-branch index → DocumentStore + mandatory KG → optional
-    POST .../project-knowledge/query multi-agent Q&A
-  Deferred: FR-010 recommend HTTP results_by_need (service-level only today)
+  Live HTTP path: POST /internal/v1/recommendations/submitprojectspecification (user_id required)
+    → dual-branch index → DocumentStore + mandatory KG
+    → lean response: ingest_id, user_id, user_requirement_summary, warnings[]
+    → optional Call 2 POST .../project-knowledge/getassetrecommendations multi-agent Q&A
+  Deferred: FR-010 recommend HTTP results_by_need (service-level only today);
+    full FR-IX-023 needs_summary/dates/budget beyond lean summary
 
 rules:
   specs: |

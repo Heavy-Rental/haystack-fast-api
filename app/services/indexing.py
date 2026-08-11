@@ -22,19 +22,15 @@ from app.core.exceptions import BadRequestError
 from app.pipelines.indexing.embedder_factory import build_document_embedder
 from app.pipelines.indexing.mime_map import MIME_TEXT_PLAIN, guess_mime_from_filename
 from app.pipelines.indexing.pipeline import build_indexing_pipeline, run_indexing_pipeline
-from app.schemas.indexing import IngestDocumentPreview, IngestFromProjectSpecResponse
+from app.schemas.indexing import IngestFromProjectSpecResponse
 from app.services.project_knowledge_session import (
     ProjectKnowledgeSession,
     get_project_knowledge_registry,
 )
+
 logger = logging.getLogger(__name__)
 
-PART3_WARNING = (
-    "Indexing complete (Packt Ch.4-style dual branch): documents were converted, "
-    "cleaned/split, embedded, and written to the process-local InMemoryDocumentStore "
-    "(swap store for persistence later)."
-)
-CONTENT_PREVIEW_CHARS = 500
+USER_REQUIREMENT_SUMMARY_MAX_CHARS = 1000
 
 
 def byte_stream_from_upload(
@@ -109,37 +105,38 @@ def _stamp_documents(
     return stamped
 
 
-def _document_preview(doc: Document) -> IngestDocumentPreview:
-    content = doc.content or ""
-    meta = dict(doc.meta or {})
-    slim_meta = {
-        k: v
-        for k, v in meta.items()
-        if k
-        in {
-            "file_path",
-            "filename",
-            "mime_type",
-            "data_kind",
-            "user_id",
-            "user_name",
-            "ingest_id",
-            "source_id",
-            "page_number",
-            "split_id",
-            "split_idx_start",
-            "_split_overlap",
-        }
-        or not isinstance(v, (dict, list))
-    }
-    embedding = getattr(doc, "embedding", None)
-    return IngestDocumentPreview(
-        content_preview=content[:CONTENT_PREVIEW_CHARS],
-        content_length=len(content),
-        meta=slim_meta,
-        data_kind=meta.get("data_kind"),
-        has_embedding=bool(embedding),
-    )
+def _normalize_requirement_text(text: str) -> str:
+    """Collapse whitespace for a stable client-facing summary string."""
+    lines = [" ".join(line.split()) for line in text.replace("\r\n", "\n").split("\n")]
+    lines = [line for line in lines if line]
+    return "\n".join(lines).strip()
+
+
+def _build_user_requirement_summary(
+    text: str,
+    *,
+    max_chars: int = USER_REQUIREMENT_SUMMARY_MAX_CHARS,
+) -> tuple[str, list[str]]:
+    """Deterministic summary from project_text or extracted document content."""
+    warnings: list[str] = []
+    normalized = _normalize_requirement_text(text or "")
+    if not normalized:
+        warnings.append("user_requirement_summary empty after extraction")
+        return "", warnings
+    if len(normalized) <= max_chars:
+        return normalized, warnings
+    truncated = normalized[: max_chars - 1].rstrip() + "…"
+    warnings.append("user_requirement_summary truncated")
+    return truncated, warnings
+
+
+def _extract_text_from_documents(documents: list[Document]) -> str:
+    parts: list[str] = []
+    for doc in documents:
+        content = (doc.content or "").strip()
+        if content:
+            parts.append(content)
+    return "\n\n".join(parts)
 
 
 def _build_pipeline_for_store(document_store: InMemoryDocumentStore) -> Pipeline:
@@ -303,8 +300,7 @@ class IndexingIngestService:
                 "indexing produced no writable chunks after clean/split/embed"
             )
 
-        previews = [_document_preview(d) for d in (embedded_docs or joiner_docs)]
-        warnings = [PART3_WARNING, *conversion_warnings]
+        public_warnings = list(conversion_warnings)
 
         settings = get_settings()
         from app.pipelines.kg.runner import run_knowledge_graph
@@ -335,7 +331,20 @@ class IndexingIngestService:
         kg_relationship_count = kg_result.kg_relationship_count
         kg_artifact_path = kg_result.kg_artifact_path
         kg_transform_applied = kg_result.kg_transform_applied
-        warnings.extend(kg_result.warnings)
+        # KG soft warnings stay internal/log; hard-fail already handled above.
+
+        # Prefer request project_text; else extracted document content (not raw bytes).
+        summary_source = ""
+        if project_text is not None and str(project_text).strip():
+            summary_source = str(project_text)
+        else:
+            summary_source = _extract_text_from_documents(
+                joiner_docs or embedded_docs
+            )
+        user_requirement_summary, summary_warnings = _build_user_requirement_summary(
+            summary_source
+        )
+        public_warnings.extend(summary_warnings)
 
         # Register dual knowledge sources for Stage-1 multi-agent tools.
         get_project_knowledge_registry().put(
@@ -354,6 +363,7 @@ class IndexingIngestService:
                     "kg_node_count": kg_node_count,
                     "kg_relationship_count": kg_relationship_count,
                     "kg_transform_applied": kg_transform_applied,
+                    "user_requirement_summary": user_requirement_summary,
                 },
             )
         )
@@ -372,22 +382,6 @@ class IndexingIngestService:
         return IngestFromProjectSpecResponse(
             ingest_id=ingest_id,
             user_id=uid,
-            user_name=uname,
-            data_kind=data_kind,  # type: ignore[arg-type]
-            mime_types_seen=list(out.get("mime_types_seen") or []),
-            filenames=list(out.get("filenames") or []),
-            structured_count=structured_count,
-            unstructured_count=unstructured_count,
-            document_count=convert_document_count,
-            structured_document_count=structured_document_count,
-            unstructured_document_count=unstructured_document_count,
-            chunk_count=chunk_count,
-            documents_written=documents_written,
-            documents=previews,
-            kg_built=kg_built,
-            kg_node_count=kg_node_count,
-            kg_relationship_count=kg_relationship_count,
-            kg_artifact_path=kg_artifact_path,
-            kg_transform_applied=kg_transform_applied,
-            warnings=warnings,
+            user_requirement_summary=user_requirement_summary,
+            warnings=public_warnings,
         )

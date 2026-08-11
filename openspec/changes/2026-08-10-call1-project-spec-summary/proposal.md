@@ -9,7 +9,7 @@
 
 ## Problem
 
-Live `POST /api/v1/recommendations/from-project-spec` returns a **technical** ingest body (counts, document previews, `kg_*`). Spring/portal clients want a **simpler** success payload: what the project needs, tentative rental dates, and expected budget from the uploaded project-spec — while still receiving `ingest_id` for Call 2 / Call 3.
+Live `POST /internal/v1/recommendations/submitprojectspecification` returns a **lean** ingest body (`ingest_id`, `user_id`, `user_requirement_summary`, `warnings[]`) after S1a. Spring/portal clients still want **full FR-IX-023** enrichment: structured `needs_summary[]`, tentative rental dates, and expected budget — while keeping `ingest_id` for Call 2 / Call 3.
 
 ## Proposal
 
