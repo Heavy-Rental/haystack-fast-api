@@ -22,16 +22,27 @@ Per masterplan locked decision: `predict_price(...)` is an **in-process Python f
 
 ### Architecture
 
+**As-built (2026-08-11)** — the originally-sketched 4-file layout grew two more modules during implementation: `category_mapping.py` (the DB-name fix) and the relocated `repository.py`/`read_resilience.py` (Phase 1e's logic, moved in rather than left at `app/repositories/`, per this doc's own "relocate, don't rebuild" instruction):
+
 ```text
 app/services/pricing/
 ├── __init__.py
-├── model.py           # load current.json + model.pkl once, expose predict_price(...)
-├── train.py            # retrain entrypoint (ports ml-experiments/train.py's logic)
-├── feature_schema.py   # ports ml-experiments/feature_schema.py near-verbatim
+├── model.py             # load model.pkl + current.json once, expose predict_price(...)
+│                         # + reload_model() hot-swap; real per-asset guardrail clamping
+├── train.py              # retrain entrypoint (ports ml-experiments/train.py's logic)
+│                         # + retrain() for the in-process manual-retrain path (Phase 2b)
+├── feature_schema.py     # ports ml-experiments/feature_schema.py near-verbatim
+├── pricing_tables.py     # ports ml-experiments/pricing_tables.py near-verbatim
+├── category_mapping.py   # NEW 2026-08-11: DB_NAME_TO_FEATURE_NAME / to_db_name() / to_feature_name()
+├── repository.py         # relocated from app/repositories/pricing_repository.py (Phase 1e);
+│                         # category-name mapping fix applied here (see below)
+├── read_resilience.py    # relocated from app/repositories/pricing_read_resilience.py (Phase 1e)
 └── artifacts/
-    ├── model.pkl
+    ├── model.pkl          # promoted from ml-experiments/artifacts/ (already-trained Phase 1 model)
     └── current.json
 ```
+
+`app/repositories/` is now empty (those were its only two files) — left in place (its own `__init__.py` says "Feature SDDs add concrete repositories") for future use, not deleted.
 
 ### Feature schema (locked, from Phase 1b + Phase 1d)
 
@@ -60,27 +71,32 @@ Target: `price_per_day` (training-time only; not part of the prediction input).
 
 Pricing needs read access to `asset_categories.name`, `assets.category_id`/`capacity`/`condition`/`platform_height`/`min_daily_rate`/`max_daily_rate`, `bookings.start_date`/`end_date`/`status`, and `booking_items.asset_id`/`booking_id`. **`Booking` has no `asset_id` column in the real schema** — the booking↔asset link exists only via `BookingItem`, so `period_utilization`'s overlap query (below) joins `booking_items → bookings`, not a direct `Booking.asset_id` this design originally assumed. Spring Boot owns schema/migrations; Python maps onto existing tables (no Alembic, no new tables).
 
-### Category name mapping (found + scoped 2026-08-11)
+### Category name mapping (found 2026-08-11, fixed 2026-08-11)
 
 `AssetCategory.name` in the real DB is the Spring-Boot canonical business name: `Excavator`, `Scissors Lift`, `Boom Lift`, `Fork Lift`. `feature_schema.CATEGORIES` — baked into the trained model's one-hot columns, and used as the `category` string everywhere in pricing code (`pricing_tables.py` keys, `spec_band()`, today's `seed_fleet.py` candidate fixtures) — uses a different convention: `excavator`, `scissor lift`, `boom lift`, `forklift`. These never coincide, not even case-insensitively (`Fork Lift` vs. `forklift` differs by more than case).
 
 **Confirmed live** (2026-08-11, against `postgres-haystack`/`heavy_rental`): `pricing_repository.compute_period_utilization()`'s `.where(AssetCategory.name == category)` join returns zero rows for every real category when called with a `feature_schema`-style `category` string — it silently falls through to `pt.CATEGORY_UTILIZATION.get(category, 0.0)`, the static per-category constant, with no error and no degraded flag. Called with a DB-style name instead, `feature_schema.spec_band()` raises `ValueError` (it only recognizes the `feature_schema.CATEGORIES` spelling). Either direction is broken. `tests/test_pricing_repository.py` didn't catch this because its `_session_returning()` helper mocks `session.execute` directly — the mocked return value never passes through the real `WHERE` clause, so a mismatched filter can't fail a test built that way.
 
-**Fix (Phase 2a scope, folded into the Phase 1e→`app/services/pricing/` relocation, not a separate task)**: a single shared mapping, applied once at the read boundary where an `AssetCategory` row's `name` is consumed —
+**Fix — implemented 2026-08-11**, as part of the Phase 1e→`app/services/pricing/` relocation, not a separate task: a single shared mapping module, `app/services/pricing/category_mapping.py` —
 
 ```python
-# DB canonical name -> feature_schema.CATEGORIES slug
 DB_NAME_TO_FEATURE_NAME = {
     "Excavator": "excavator",
     "Scissors Lift": "scissor lift",
     "Boom Lift": "boom lift",
     "Fork Lift": "forklift",
 }
+FEATURE_NAME_TO_DB_NAME = {v: k for k, v in DB_NAME_TO_FEATURE_NAME.items()}
+
+def to_feature_name(db_category_name: str) -> str: ...  # KeyError on unrecognized input
+def to_db_name(feature_category_name: str) -> str: ...  # KeyError on unrecognized input
 ```
 
-Applied where `AssetCategory.name` is read out of a row (so every downstream `category` string — including what's passed into `spec_band()`, `compute_period_utilization()`'s own join, and `resolve_effective_capacity()`) is always in `feature_schema` convention from that point on. The join itself (`AssetCategory.name == category`) still needs the DB-style name on its left side — so `compute_period_utilization()` inverts the mapping (or queries by `category_id` via a small lookup) rather than comparing a `feature_schema`-style string against the DB column directly. Direction matters: **DB name is the source of truth**, ML slug is the derived form — don't rename `AssetCategory.name` values to match the model; the model's one-hot columns adapt via this mapping, not the other way around.
+Every caller of `predict_price(...)`/`repository.py` stays in `feature_schema` convention throughout, exactly as before — the mapping is applied in exactly one place: `repository.py`'s `compute_period_utilization()` calls `category_mapping.to_db_name(category)` to build the `AssetCategory.name ==` filter's right-hand side, since that's the one spot in this package that needs the DB-style name. `spec_band()`, `resolve_effective_capacity()`, `predict_price(...)` itself, and everything else keep using the `feature_schema`-style string unchanged. A future caller that starts from a real `AssetCategory.name` row (e.g. the internal quote endpoint, Phase 2c, resolving `category` from an `asset_id`) calls `to_feature_name()` once before calling `predict_price(...)`. Direction matters: **DB name is the source of truth**, ML slug is the derived form — don't rename `AssetCategory.name` values to match the model; the model's one-hot columns adapt via this mapping, not the other way around.
 
-Test coverage gap this closes: at least one test must exercise the real `WHERE` clause with real DB-shaped names (e.g. an in-process test DB, or asserting on the compiled SQL/bound params), not only a fully mocked `session.execute` — see spec.md Verification.
+Test coverage gap this closes: **closed** — `tests/test_pricing_repository.py`'s `test_compute_period_utilization_filters_by_real_db_category_name` and `test_compute_period_utilization_queries_real_asset_and_category_models` compile the actual generated SQL (`literal_binds=True`) and assert on the bound `AssetCategory.name` literal, CI-safe without a live DB. `tests/test_pricing_model.py`'s `test_db_style_category_name_fails_loud_with_a_helpful_hint` covers `model.py`'s own category-validation check (a related but separate gap — see "Guardrail clamping" below).
+
+**Re-verified live** (2026-08-11, post-fix, against `postgres-haystack`/`heavy_rental`): `predict_price(...)` run for all 27 real assets now returns genuinely varied `period_utilization` per category/spec-band (e.g. Excavator's 4-asset main band: 0.75 / 0.25 / 0.0 across three different windows) — the live-query path is actually executing, not silently substituting the static constant.
 
 **Pricing's database access is read-only (2026-08-10, locked 2026-08-11).** This design previously listed "plus write access to `recommendation_items.ml_predicted_price`" here for Phase 2; that write is no longer planned. `predict_price(...)` returns the prediction on the recommendation response instead, and Spring Boot persists it to `RecommendationItem.mlPredictedPrice` — a JPA-mapped field on a Spring Boot entity, in a schema Spring Boot already owns. Now that this is locked, pricing's Postgres role can be granted `SELECT` only; no code path in this service writes to Postgres. Two topology facts make that more than a naming convention: (1) writing `public.recommendation_items` gets overwritten by the sync job's merge-upsert, which sets every shared non-key column to `EXCLUDED` each cycle, including to `NULL`; (2) the `primary_snapshot` foreign tables are writable (`pg_relation_is_updatable = 28`) and point at the Spring Boot production database directly, so a stray SQLAlchemy autoflush on a mutated instance could otherwise write upstream. Full rationale: `docs/dynamic-pricing-masterplan.md` change log, 2026-08-10. Rests on every prediction happening inside a synchronous Spring Boot → Haystack request — re-check if a batch/offline re-pricing path is ever planned.
 
@@ -108,14 +124,16 @@ Three tiers, attempted in order:
 
 **Implementation shape**: `app/repositories/pricing_read_resilience.py`'s `resolve_pricing_schema(session) -> PricingSchemaResolution` — called once per `predict_price_for_asset()` call, its `.execution_options` (SQLAlchemy's `schema_translate_map`, `{}` when reading `primary_snapshot` unmodified) threaded into every subsequent `session.execute(...)` in that call. This avoids declaring a second set of models pointed at `public` — the same `AssetCategory`/`Asset`/`Booking`/`BookingItem` classes (declared with `schema="primary_snapshot"`) serve both tiers; `schema_translate_map` redirects the table name at query time.
 
-### Guardrail clamping
+### Guardrail clamping — implemented 2026-08-11
 
 ```text
 predicted = model.predict(features)
 clamped = min(max(predicted, asset.minDailyRate), asset.maxDailyRate)
 ```
 
-Read per-asset at prediction time (admin-editable via asset admin-portal tag) — no separate config table or env var.
+Read per-asset at prediction time (admin-editable via asset admin-portal tag) — no separate config table or env var. `model.py`'s `predict_price(...)` takes `min_daily_rate`/`max_daily_rate` as **required** parameters — the caller (today: whoever has the asset's data; Phase 2b: `pricing_client.py`; Phase 2c: the internal quote endpoint reading a real `Asset` row) always supplies them. No fallback to a static per-category table exists anywhere in this package — that stand-in stays confined to the superseded `ml-experiments/predict_price.py` prototype.
+
+**A related gap found and closed while removing that static table** (2026-08-11): the `ml-experiments` prototype's only protection against an unrecognized `category` was an *incidental* `KeyError` from its `pricing_tables.CATEGORY_BASE_RATE[category]` guardrail lookup — never a deliberate validation check. With that lookup gone (guardrails are now explicit parameters), nothing would have caught a bad `category` string at all: confirmed empirically that `feature_schema.encode_category()`'s `pd.Categorical(..., categories=CATEGORIES)` silently produces an all-zero one-hot row for an out-of-vocabulary value — no error, and the model would predict from that garbage row without complaint. `model.py`'s `predict_price(...)` now raises `ValueError` explicitly for any `category not in feature_schema.CATEGORIES`, with a hint pointing at `category_mapping.to_feature_name()` for the common case of passing a raw `AssetCategory.name` by mistake. `condition` is intentionally left as-is (an unrecognized value still raises pandas' `IntCastingNaNError` — unfriendly but real, matching the corrected prototype docstring from earlier the same day) — only the `category` gap was a genuine regression introduced by dropping the static table, so only it got a deliberate fix.
 
 ### Internal quote API (added 2026-08-11)
 
@@ -239,21 +257,26 @@ ml-experiments/                 # Phase 1 scratch (outside SDD)
   artifacts/model.pkl, current.json
   demo_scenarios.py, shap_review.py, category_metrics.py
 
-app/services/pricing/           # Phase 2 target (this capability)
-  model.py, train.py, feature_schema.py, artifacts/
+app/services/pricing/           # Phase 2a — implemented 2026-08-11 (this capability)
+  model.py, train.py, feature_schema.py, pricing_tables.py, category_mapping.py,
+  repository.py, read_resilience.py, artifacts/model.pkl, artifacts/current.json
 
-app/api/internal_pricing.py     # Phase 2a addition: POST /internal/v1/pricing/quote
+app/api/internal_pricing.py     # Phase 2c, NOT yet built: POST /internal/v1/pricing/quote
                                  # (service-to-service, not under the public /api/v1 router;
-                                 # hard-depends on app/services/pricing/model.py's real
-                                 # per-asset guardrail clamping + category-name mapping)
+                                 # hard-depended on app/services/pricing/model.py's real
+                                 # per-asset guardrail clamping + category-name mapping,
+                                 # both now implemented and ready for this to build against)
 
-app/services/pricing_client.py  # as-built recommend adapter → ml-experiments / future production
-app/models/asset_category.py, asset.py, booking.py, booking_item.py  # Phase 1e read-only models
-app/repositories/pricing_repository.py         # Phase 1e: live period_utilization query
-app/repositories/pricing_read_resilience.py    # Phase 1e: primary_snapshot/public tiered fallback
-                                                # Phase 2a also adds: DB_NAME_TO_FEATURE_NAME mapping
-                                                # (category name normalization, see "Category name
-                                                # mapping" above) — lands in this same repository move
+app/services/pricing_client.py  # as-built recommend adapter — still calls the ml-experiments
+                                 # prototype; production swap to app.services.pricing is
+                                 # Phase 2b's task (feature/ml-4-integration-tests), not yet done.
+                                 # Only its imports changed in Phase 2a (repository.py/
+                                 # read_resilience.py moved out from under app/repositories/).
+app/models/asset_category.py, asset.py, booking.py, booking_item.py  # Phase 1e read-only models,
+                                                                       # unchanged, still here
+app/repositories/                                                    # now empty (Phase 1e's two
+                                                                       # files relocated into
+                                                                       # app/services/pricing/ above)
 ```
 
 External dependency (different repo, tracked for coordination): `openspec/specs/domain-seed-data/` — Spring Boot seed data richness, not built here. **Executed and verified 2026-08-11** — no longer a pending ask; see that spec's "State after reseed".
@@ -268,10 +291,15 @@ cd haystack-fast-api
 uv run python ml-experiments/demo_scenarios.py
 uv run python ml-experiments/shap_review.py
 
-# After Phase 2:
-# unit tests for feature schema, guardrails, prediction shape
-# manual retrain → check current.json trained_at
-# category metrics regression vs design reference table
+# Phase 2a (implemented 2026-08-11):
+uv run pytest tests/test_pricing_feature_schema.py tests/test_pricing_model.py \
+  tests/test_pricing_repository.py -v
+# manual retrain: python -c "from app.services.pricing.train import retrain; retrain()"
+#   → check artifacts/current.json's trained_at updated, model.py's _model_version changed
+
+# Still pending:
+# category metrics regression vs design reference table (not yet re-run against this package)
+# Phase 2b: pipeline integration tests once pricing_client.py is swapped
 ```
 
 ### Implementation branches
@@ -279,9 +307,9 @@ uv run python ml-experiments/shap_review.py
 | Branch | Scope |
 |--------|--------|
 | `HR-87-ml-2-d-production-db-wiring-for-period-utilization` | **Done (2026-08-10)** — Phase 1e: read-only models, `pricing_repository.py`, `pricing_read_resilience.py` tiered fallback; 20 new unit tests |
-| `feature/ml-3-pricing-service` | Scaffold package, port schema, model/train, guardrails, **relocate** (don't rebuild) Phase 1e's read models/repositories, **fix category-name mismatch** (`DB_NAME_TO_FEATURE_NAME`, found 2026-08-11) |
-| `feature/ml-4-integration-tests` | Wire pipeline, unit tests, manual retrain endpoint |
-| `feature/ml-6-internal-pricing-api` | `POST /internal/v1/pricing/quote` — hard depends on `feature/ml-3-pricing-service`; can run alongside/after `feature/ml-4-integration-tests` (shares the same production `model.py`) |
+| `feature/ml-3-pricing-service` | **Done (2026-08-11)** — scaffolded package, ported schema, built `model.py`/`train.py`, real per-asset guardrail clamping, relocated Phase 1e's read models/repositories in as `repository.py`/`read_resilience.py`, fixed the category-name mismatch (`category_mapping.py`); 24 new unit tests, 144 total passing, live-verified against all 27 real assets |
+| `feature/ml-4-integration-tests` | **Not started** — wire pipeline (swap `pricing_client.py` to `app.services.pricing.model`), unit tests, manual retrain endpoint |
+| `feature/ml-6-internal-pricing-api` | **Not started** — `POST /internal/v1/pricing/quote`; its hard dependency (`feature/ml-3-pricing-service`) is now satisfied, so this is unblocked whenever picked up; can run alongside/after `feature/ml-4-integration-tests` (shares the same production `model.py`) |
 
 ## N — Norms
 
