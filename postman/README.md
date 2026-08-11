@@ -130,11 +130,16 @@ Knowledge graph is **mandatory** on successful ingest. Artifacts land under `art
       "quantity": 1
     }
   ],
+  "expected_budget": {
+    "amount": 15000,
+    "currency": "SGD",
+    "source": "extracted"
+  },
   "warnings": []
 }
 ```
 
-(`tentative_*` are `null` when request omits dates. Stub decomposer yields one need from project text.)
+(`tentative_*` are `null` when request omits dates. Stub decomposer yields one need from project text. `expected_budget` is `null` + warning when no confident budget phrase is found.)
 
 **Not present on public body:** `documents[]`, `kg_*`, counts, `data_kind` (still run internally for Call 2).  
 **Not present** (old recommend API): `recommendation_id`, `results_by_need`.
