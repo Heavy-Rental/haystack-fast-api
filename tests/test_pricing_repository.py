@@ -1,12 +1,17 @@
-"""Phase 1e — app/repositories/pricing_repository.py (SPEC-dynamic-pricing.md §5.2)."""
+"""app/services/pricing/repository.py (openspec/specs/dynamic-pricing/spec.md).
+
+Relocated from app/repositories/pricing_repository.py (Phase 1e) into
+app/services/pricing/ (Phase 2a, 2026-08-11); see that module's docstring
+for the category-name mapping fix folded into this move.
+"""
 
 from __future__ import annotations
 
 from datetime import date
 from unittest.mock import MagicMock
 
-from app.repositories.pricing_read_resilience import PricingSchemaResolution
-from app.repositories.pricing_repository import (
+from app.services.pricing.read_resilience import PricingSchemaResolution
+from app.services.pricing.repository import (
     compute_lead_time_days,
     compute_period_utilization,
     resolve_effective_capacity,
@@ -119,3 +124,56 @@ def test_compute_period_utilization_uses_resolution_execution_options_for_both_r
     assert session.execute.call_count == 2
     for call in session.execute.call_args_list:
         assert call.kwargs["execution_options"] == DEGRADED.execution_options
+
+
+def test_compute_period_utilization_filters_by_real_db_category_name() -> None:
+    """Category-name mapping fix (2026-08-11), CI-safe per spec.md Verification.
+
+    Regression test for the bug found live against heavy_rental: the
+    AssetCategory.name filter must use the real DB-style name
+    ("Excavator"), never the feature_schema-style name ("excavator") the
+    caller passes in -- that mismatch is exactly why the join always
+    returned zero rows before this fix. No live DB needed: compile the
+    actual generated SQL and inspect the bound literal, which a fully
+    mocked session.execute (as every other test in this file uses) cannot
+    catch, since it never touches the real WHERE clause.
+    """
+    session = _session_returning(asset_rows=[], booked_asset_ids=[])
+
+    compute_period_utilization(
+        session,
+        PRIMARY,
+        category="excavator",  # feature_schema convention, the caller's contract
+        capacity=5000,
+        platform_height=None,
+        start_date=date(2026, 9, 1),
+        end_date=date(2026, 9, 7),
+    )
+
+    asset_query = session.execute.call_args_list[0].args[0]
+    compiled = asset_query.compile(compile_kwargs={"literal_binds": True})
+    compiled_sql = str(compiled)
+
+    assert "asset_categories.name = 'Excavator'" in compiled_sql
+    assert "asset_categories.name = 'excavator'" not in compiled_sql
+
+
+def test_compute_period_utilization_queries_real_asset_and_category_models() -> None:
+    """The relocated query still targets the real ORM models, not stand-ins."""
+    session = _session_returning(asset_rows=[], booked_asset_ids=[])
+
+    compute_period_utilization(
+        session,
+        PRIMARY,
+        category="scissor lift",
+        capacity=None,
+        platform_height=7.0,
+        start_date=date(2026, 9, 1),
+        end_date=date(2026, 9, 7),
+    )
+
+    asset_query = session.execute.call_args_list[0].args[0]
+    compiled_sql = str(asset_query.compile(compile_kwargs={"literal_binds": True}))
+    assert "FROM primary_snapshot.assets" in compiled_sql
+    assert "JOIN primary_snapshot.asset_categories" in compiled_sql
+    assert "asset_categories.name = 'Scissors Lift'" in compiled_sql
