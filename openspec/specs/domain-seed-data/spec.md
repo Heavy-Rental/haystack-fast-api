@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | Draft — Phase 2 prep dependency, not yet executed |
+| **Status** | **Executed & verified (2026-08-11)** — Spring Boot ran the reseed same-day; Haystack independently confirmed all Requirements below against the live DB |
 | **Owner / executes** | Spring Boot (`heavy_rental` schema owner) — this spec defines requirements Haystack needs from the data; it does not seed anything itself |
 | **Consumes** | [`../dynamic-pricing/spec.md`](../dynamic-pricing/spec.md) — `predict_price(...)`'s `period_utilization`/guardrail-clamping/per-asset differentiation all depend on this data being present and varied |
 | **Standards** | OpenSpec · OpenSPDD (see [`design.md`](./design.md)) |
@@ -12,7 +12,9 @@
 
 **Read** [`../dynamic-pricing/spec.md`](../dynamic-pricing/spec.md) before this document — it explains *why* this data needs to look a particular way.
 
-> **2026-08-11 note:** originally planned as a Phase-3-only concern ("seeding + scheduled retrain"). Confirmed against the live `heavy_rental` DB during Phase 2 prep that the current seed data is real but too thin/stale to exercise Phase 2's own acceptance scenarios meaningfully (see "Current state" below). Reclassified: **richer seed data is now a Phase 2 prep dependency**, not deferred wholesale to Phase 3. Phase 3's remaining scope (blend/cutover onto *real* transaction history) is unaffected — this spec is still synthetic/hand-authored data, just enough of it to demo and verify Phase 2 honestly.
+> **2026-08-11 note:** originally planned as a Phase-3-only concern ("seeding + scheduled retrain"). Confirmed against the live `heavy_rental` DB during Phase 2 prep that the seed data at the time was real but too thin/stale to exercise Phase 2's own acceptance scenarios meaningfully (see "State before reseed" below). Reclassified: **richer seed data is a Phase 2 prep dependency**, not deferred wholesale to Phase 3. Phase 3's remaining scope (blend/cutover onto *real* transaction history) is unaffected — this spec is still synthetic/hand-authored data, just enough of it to demo and verify Phase 2 honestly.
+>
+> **2026-08-11 (same day), execution:** Spring Boot executed the reseed the same day this spec was written, via `src/main/resources/data.sql`. Haystack independently re-queried `heavy_rental` afterward and confirmed every Requirement below. See "Execution result" for what was actually done (it deviates from this doc's original band-spread suggestion in one place, for the better — see that section) and "State after reseed" for the confirmed numbers.
 
 ---
 
@@ -22,7 +24,7 @@
 
 ---
 
-## Current state (confirmed 2026-08-11, live query against `postgres-haystack`/`heavy_rental`)
+## State before reseed (confirmed 2026-08-11 morning, live query against `postgres-haystack`/`heavy_rental`)
 
 | Finding | Detail |
 |---|---|
@@ -36,6 +38,35 @@
 | `asset_categories.name` values | `Excavator`, `Scissors Lift`, `Boom Lift`, `Fork Lift` — canonical Spring-Boot business names. **Correct as-is; not a data defect** — see dynamic-pricing spec's new category-normalization requirement, which is a Haystack code fix, not a data change |
 
 None of this is a bug on the Spring Boot side — it's a reasonable minimal fixture that was never sized for a live-aggregate ML feature. This spec is the sizing.
+
+---
+
+## Execution result (2026-08-11, same day)
+
+Spring Boot's summary, `src/main/resources/data.sql` the only file touched:
+
+- **Assets**: 8 → 27. Backfilled `capacity`/`platform_height` on the 6 pre-existing rows that lacked them; added 19 new brand-matched models.
+- **Band distribution — deviates from this spec's original suggestion, intentionally and for the better**: rather than the 3/2/1-style spread across bands this doc originally floated, every category got **exactly one 4-asset "main" spec-band, and exactly 1 asset in every other band** (Excavator: 1 / 1 / **4** / 1 across its 4 bands; Fork Lift: 1 / **4** / 1 across its 3 bands — forklift only has 3 `CAPACITY_BINS`; Scissors Lift and Boom Lift: **4** / 1 / 1 / 1). This still satisfies "Requirement: Category fleet depth and spec-band spread" (≥1 band with 2+ assets) and does it more cleanly — one predictable, guaranteed-non-degenerate band per category to point a demo at, instead of splitting the signal across two thinner bands.
+- **Asset images**: 8 → 27, 19 new rows reusing an existing same-brand asset's image verbatim — no new photo files, out of this spec's concern anyway.
+- **Users**: +2 (Mei Ling, Farid Rahman), real BCrypt hashes — beyond this spec's ask (which only needed "2-3 customers"), harmless.
+- **Bookings**: 20 → 90. Original 20 rows kept, with 3 status corrections found via automated status-vs-child-row consistency validation, not called for by this spec but a legitimate data-integrity fix caught along the way (ids 2, 6, 7 — statuses were inconsistent with their already-existing payment/delivery/return records).
+- **`booking_items`/`payments`/`delivery_records`/`return_records`**: every one of the 90 bookings now has the rows its status implies, including backfilling the 10 originally-orphaned bookings (ids 11–20). Validated programmatically (zero missing, zero extra, zero dangling FKs, zero duplicate IDs) rather than spot-checked.
+
+## State after reseed (independently confirmed 2026-08-11, live query against `postgres-haystack`/`heavy_rental`)
+
+| Check | Result |
+|---|---|
+| `capacity` nulls | **0** |
+| Condition spread per category | **4/4** `ConditionType` values in every category (exceeds the ≥3 requirement) |
+| `BookingStatus` coverage | **all 6** present (`PENDING_DEPOSIT`: 4, `CANCELLED`: 7, `PENDING_CONFIRMED`: 15, `CONFIRMED`: 22, `MOBILISED`: 14, `COMPLETED`: 28 — 90 total) |
+| Orphaned bookings (no `BookingItem`) | **0** |
+| `asset_categories.name` values | **unchanged** (`Excavator`, `Scissors Lift`, `Boom Lift`, `Fork Lift`) |
+| Booking window | **2026-06-22 → 2026-09-24** — spans well before/around/after "today" (2026-08-11) |
+| Rate sanity (`min_daily_rate ≤ base_daily_rate ≤ max_daily_rate`) | **0 violations** |
+| Duplicate asset names | **0** |
+| Distinct customers on bookings | **3** |
+
+**`period_utilization` sanity check** (simulated directly against the raw tables, since the category-name mapping code fix — `../dynamic-pricing/design.md` — hasn't landed yet; this bypasses that gap to confirm the *data* is usable): querying Excavator's 4-asset main band (`(3000,7000]`, asset ids 1/2/9/10) across three windows returned **0.75**, **0.25**, and **0.0** respectively — a genuine, varied, non-degenerate signal. Confirms this reseed does what it was for.
 
 ---
 
@@ -196,5 +227,6 @@ Plus a `period_utilization` spot-check via `app/repositories/pricing_repository.
 | Version | Date | Notes |
 |---------|------|--------|
 | 1.0.0 | 2026-08-11 | Initial draft. Written during Phase 2 prep after live-querying `heavy_rental` found the current 8-asset/20-booking fixture too thin/stale/incomplete to exercise Phase 2's own acceptance scenarios. Reclassifies seed-data richness from Phase-3-only to a Phase 2 prep dependency; Phase 3's real-data blend/cutover is unaffected. Execution plan for Spring Boot: [`design.md`](./design.md). |
+| 1.1.0 | 2026-08-11 (same day) | **Executed and independently verified.** Spring Boot ran the reseed same-day (`data.sql`); Haystack re-queried `heavy_rental` and confirmed every Requirement. Added "Execution result" and "State after reseed" sections; retitled "Current state" to "State before reseed" for before/after contrast. Recorded one intentional deviation from this doc's original band-spread suggestion (4-in-one-band instead of a 3/2/1 spread) — still satisfies the underlying requirement, more cleanly. Kept this spec (not deleted) as the standing data-shape contract for future reseeds/regression checks. |
 
 **Design / execution runbook:** [`design.md`](./design.md)

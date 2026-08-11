@@ -21,28 +21,32 @@ This document is the **execution plan for the Spring Boot side** — Haystack do
 
 `heavy_rental`'s schema is Spring-Boot-owned (`ddl-auto=update`; Hibernate manages the tables). Haystack's Postgres access is read-only (locked, see `../dynamic-pricing/design.md` "Data access"). This spec can only ever be a **requirements document Spring Boot executes against**, not something Haystack can seed itself, even for a demo fixture — no code path in this service writes to Postgres, and that's intentional, not a gap to route around here.
 
-### Target volumes per category
+### Target volumes per category — as originally drafted, then as actually executed
 
-Sizing rationale: `pricing_tables.CAPACITY_BINS`/`HEIGHT_BINS` each define 4 spec-bands per category. To get at least one band with 2+ assets (the minimum for a non-degenerate `period_utilization` fraction) without demanding a large fixture, **6 assets per category** (24 total, up from today's 8) is enough headroom to put 2-3 assets in at least one band while still touching 2-3 bands total — a fleet shape, not a uniform spread across all 4 bands.
+Sizing rationale: `pricing_tables.CAPACITY_BINS`/`HEIGHT_BINS` each define 4 spec-bands per category (3 for forklift). To get at least one band with 2+ assets (the minimum for a non-degenerate `period_utilization` fraction), this section originally suggested **6 assets per category** (24 total) spread 3/2/1 across three bands.
 
-| Category | Target asset count | `capacity` range (kg, from `CATEGORY_CAPACITY_KG`) | Spec-band dimension | Suggested band spread |
-|---|---|---|---|---|
-| Excavator | 6 (up from 2) | 1,000–30,000 | `capacity` (`CAPACITY_BINS["excavator"]`) | 3 in `(0,3000]` (mini), 2 in `(3000,7000]` (compact), 1 in `(7000,15000]` (standard) |
-| Fork Lift | 6 (up from 2) | 1,000–5,000 | `capacity` (`CAPACITY_BINS["forklift"]`) | 3 in `(0,2000]`, 2 in `(2000,3500]`, 1 in `(3500,None]` — and **vary** values within each band, not repeat `2500` |
-| Scissors Lift | 6 (up from 2) | `platform_height` 6–14m (capacity still populated too, per spec's "no capacity nulls" requirement, using `CATEGORY_CAPACITY_KG["scissor lift"]` 230–450) | `platform_height` (`HEIGHT_BINS["scissor lift"]`) | 3 in `(0,8]`, 2 in `(8,10]`, 1 in `(10,12]` |
-| Boom Lift | 6 (up from 2) | `platform_height` 12–43m (capacity per `CATEGORY_CAPACITY_KG["boom lift"]` 200–450) | `platform_height` (`HEIGHT_BINS["boom lift"]`) | 3 in `(0,18]`, 2 in `(18,24]`, 1 in `(24,31]` |
+**What Spring Boot actually built (executed + verified 2026-08-11) is better, and is the version to treat as canonical going forward**: instead of spreading assets thinly across multiple bands, every category got **exactly one 4-asset "main" band and exactly 1 asset in every other band** — 27 assets total (7/7/7/6, forklift having only 3 bands). One guaranteed-non-degenerate band per category is simpler to point a demo or a `period_utilization` spot-check at than a signal split across two thin bands, and it's what the confirmed live simulation (`../domain-seed-data/spec.md` "State after reseed") validated: `0.75`/`0.25`/`0.0` across three windows on Excavator's main band.
 
-`condition`: cycle at least 3 of `EXCELLENT`/`GOOD`/`FAIR`/`NEEDS_REPAIR` across each category's 6 assets — e.g. 2×`EXCELLENT`, 2×`GOOD`, 1×`FAIR`, 1×`NEEDS_REPAIR`.
+| Category | Assets (actual) | Main band (4 assets) | Other bands (1 asset each) |
+|---|---|---|---|
+| Excavator | 7 | `(3000,7000]` — compact | `(0,3000]`, `(7000,15000]`, `(15000,None]` |
+| Fork Lift | 6 | `(2000,3500]` | `(0,2000]`, `(3500,None]` |
+| Scissors Lift | 7 | `(0,8]` | `(8,10]`, `(10,12]`, `(12,None]` |
+| Boom Lift | 7 | `(0,18]` | `(18,24]`, `(24,31]`, `(31,None]` |
+
+`condition`: actual result exceeds the ≥3-of-4 requirement — all 4 `ConditionType` values present in every category.
 
 `min_daily_rate`/`max_daily_rate`/`base_daily_rate`: keep the existing per-category ranges already in the DB (they're reasonable — see `spec.md` "Current state", the rates themselves were never flagged as a problem) and interpolate new assets' rates within them by condition/capacity tier, don't invent a new pricing scheme.
 
 ### Booking generation
 
-- **Volume**: enough bookings that, at any given moment, several assets per category have an active/overlapping hold and several don't — roughly 3-4 bookings per asset (~80-100 total across 24 assets), not a fixed count.
-- **Status distribution**: explicitly include `PENDING_DEPOSIT` and `CANCELLED` at least once each (today: absent) alongside the existing `PENDING_CONFIRMED`/`CONFIRMED`/`MOBILISED`/`COMPLETED`. A `CANCELLED` booking should overlap a window that *also* has a non-cancelled booking on a different asset in the same band, so the exclusion is visibly checkable (the cancelled one must not count).
-- **Dates — rolling, not literal**: generate `start_date`/`end_date` as offsets from `CURRENT_DATE` at seed time (e.g. `CURRENT_DATE - interval 'N days'` .. `CURRENT_DATE + interval 'M days'`, with per-booking random-ish offsets), spanning roughly 30 days back to 60 days forward. This replaces today's single hardcoded 2026-08-06→2026-08-16 span, which goes stale on its own. If the existing seed mechanism (`data.sql`) can't express relative dates directly, move date generation into a small idempotent `@PostConstruct`/`CommandLineRunner`-style seeder (upsert-based, matching the existing convention) rather than literal SQL.
-- **`booking_items`**: every generated `Booking` gets exactly one (or more) `BookingItem` at insert time — no follow-up pass that leaves early rows orphaned (today's gap: 10 of 20 bookings have none).
-- **Customers**: spread bookings across at least 2-3 distinct `customer_id`s instead of all 20 on one user — cheap realism, not load-bearing for pricing.
+- **Volume**: enough bookings that, at any given moment, several assets per category have an active/overlapping hold and several don't — roughly 3-4 bookings per asset, not a fixed count. **Actual: 90 bookings** across 27 assets (20 original + 70 new), within this range.
+- **Status distribution**: explicitly include `PENDING_DEPOSIT` and `CANCELLED` at least once each (was: absent) alongside the existing `PENDING_CONFIRMED`/`CONFIRMED`/`MOBILISED`/`COMPLETED`. A `CANCELLED` booking should overlap a window that *also* has a non-cancelled booking on a different asset in the same band, so the exclusion is visibly checkable. **Actual: all 6 statuses present** (`PENDING_DEPOSIT`: 4, `CANCELLED`: 7, `PENDING_CONFIRMED`: 15, `CONFIRMED`: 22, `MOBILISED`: 14, `COMPLETED`: 28).
+- **Dates — rolling, not literal**: generate `start_date`/`end_date` as offsets from `CURRENT_DATE` at seed time, spanning roughly 30 days back to 60 days forward. This replaces the original single hardcoded 2026-08-06→2026-08-16 span, which went stale on its own. **Actual: 2026-06-22 → 2026-09-24**, confirmed spanning well before/around/after "today" (2026-08-11). Whether the mechanism is genuinely date-relative or a wide static range wasn't confirmed either way — worth asking Spring Boot directly before the *next* reseed, since a wide static range will eventually go stale the same way the original one did, just later.
+- **`booking_items`**: every generated `Booking` gets exactly one (or more) `BookingItem` at insert time — no follow-up pass that leaves early rows orphaned. **Actual: 0 orphaned bookings** — the 10 originally-orphaned bookings (ids 11-20) were backfilled too, beyond what this design asked for (it only required this for *new* bookings).
+- **Customers**: spread bookings across at least 2-3 distinct `customer_id`s instead of all 20 on one user — cheap realism, not load-bearing for pricing. **Actual: 3 distinct customers** (2 new users added: Mei Ling, Farid Rahman, with real BCrypt hashes).
+
+**Bonus, not asked for but a legitimate catch**: Spring Boot's execution added a programmatic status-vs-child-row consistency validation pass, which found and fixed 3 pre-existing status errors on the *original* 20 bookings (ids 2, 6, 7 — statuses inconsistent with their already-existing payment/delivery/return records). Not something this design anticipated; recorded here so the reasoning behind those 3 corrections isn't lost.
 
 ### What NOT to change
 
@@ -50,7 +54,9 @@ Sizing rationale: `pricing_tables.CAPACITY_BINS`/`HEIGHT_BINS` each define 4 spe
 - No new columns, tables, or entity fields — this is row data only, within the existing schema documented in `specification/SPEC-spring-entity-repository.md`.
 - No change to existing `min_daily_rate`/`max_daily_rate`/`base_daily_rate` ranges for the 8 assets that already exist — they're realistic; only null/missing/thin fields need filling in.
 
-### Execution runbook (for the Spring Boot developer)
+### Execution runbook (for the Spring Boot developer) — completed 2026-08-11
+
+Kept below as the record of what was asked for and as a template for any future reseed; steps 1-8 are done and independently verified (see `../domain-seed-data/spec.md` "Execution result"/"State after reseed"). Step 9 (coordinate with Haystack) is what triggered this update.
 
 1. **Confirm the existing seed mechanism first.** `specification/SPEC-spring-entity-repository.md` §7/§8 references a `SPEC-seed-data.md` and an upsert-based `data.sql`, consistent with `ddl-auto=update` (schema persists between runs — seeding must be `ON CONFLICT`-safe, not a fresh-DB assumption). That doc isn't mirrored into this repo — find it in the Spring Boot repo and extend that mechanism rather than introducing a second one.
 2. **Add the 16 new assets** (4 per category, on top of today's 8) per the target table above — vary `capacity`, `condition`, and rates within each category's existing range; populate `capacity` on every row, including the 2 pre-existing forklifts if still identical.
@@ -81,6 +87,8 @@ haystack-fast-api/
 ## O — Operations
 
 ### Verification runbook (Haystack side, after Spring Boot reseeds)
+
+**Status (2026-08-11): reseed confirmed, code fix still pending.** The script below calls `compute_period_utilization()` as it exists today — which still has the category-name mismatch bug (`../dynamic-pricing/design.md` "Category name mapping"), so running it right now with `category='excavator'` will silently return the static fallback constant, **not** reflect this reseed. To confirm the *data* independent of that still-open code fix, the check was instead run directly against the raw tables with the real DB category name substituted by hand: querying Excavator's 4-asset main band (`(3000,7000]`, asset ids 1/2/9/10) returned **0.75**, **0.25**, **0.0** across three different windows — confirming the reseed itself is solid. Re-run the script below for real, unmodified, once Phase 2a's mapping fix lands — it should then reproduce a similar non-degenerate result through the actual function.
 
 ```bash
 cd haystack-fast-api
@@ -125,7 +133,7 @@ Also re-run the SQL checks in `spec.md` "Verification".
 
 | Decision | Why |
 |---|---|
-| 6 assets/category (24 total), not more | Enough for 2+ assets in at least one spec-band per category without over-building a fixture; matches the minimal-fixture spirit of the existing 8 |
+| 6 assets/category (24 total) originally suggested, **27 actually built** — 4-in-one-band + 1-in-each-other-band, not a 3/2/1 spread | Executed version is cleaner: one guaranteed-non-degenerate band per category to point a demo/spot-check at, instead of splitting the signal across two thinner bands. Confirmed via live simulation (0.75/0.25/0.0 across three windows) — see spec.md "State after reseed" |
 | Capacity backfilled on existing assets, not just new ones | The 6 pre-existing non-forklift assets are the ones actually used in demos/tests today; leaving them null while only new assets get real values would still hide the fallback path most of the time |
 | Rolling dates over literal dates | Static 2026-08-06→2026-08-16 window already half-elapsed at spec-writing time; a fixture that self-invalidates within days isn't a fixture worth having |
 | Category names untouched | Mismatch is a Haystack read-time concern (ML feature naming vs. business naming), not a data defect — see `../dynamic-pricing/design.md` |

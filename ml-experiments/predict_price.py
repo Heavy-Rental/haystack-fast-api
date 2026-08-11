@@ -69,12 +69,16 @@ def predict_price(
     when not supplied; lead_time_days defaults to 0.0 (no lead-time signal
     available).
 
-    No input validation is performed -- an unrecognized category raises a
-    raw KeyError (pricing_tables.CATEGORY_BASE_RATE lookup) and an
-    unrecognized condition is silently encoded as NaN (feature_schema's
-    CONDITION_ORDER.map()) rather than erroring. Callers that accept
-    free-form input (e.g. an LLM-driven agent) should validate against the
-    enums below before calling.
+    No input validation is performed -- both failure modes raise, but as
+    unfriendly, easy-to-misdiagnose exceptions rather than a clear message:
+    an unrecognized category raises a raw KeyError (pricing_tables.
+    CATEGORY_BASE_RATE lookup), and an unrecognized condition raises
+    pandas' IntCastingNaNError (feature_schema.encode_condition() maps it
+    to NaN via CONDITION_ORDER.map(), then .astype(int) rejects the NaN --
+    it does not silently pass through). Callers that accept free-form
+    input (e.g. an LLM-driven agent) should validate against the enums
+    below before calling, rather than rely on either exception to surface
+    usefully.
 
     Args:
         category: One of feature_schema.CATEGORIES, exactly --

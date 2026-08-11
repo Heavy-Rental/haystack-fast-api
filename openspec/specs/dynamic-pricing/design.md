@@ -187,7 +187,7 @@ app/repositories/pricing_read_resilience.py    # Phase 1e: primary_snapshot/publ
                                                 # mapping" above) — lands in this same repository move
 ```
 
-External dependency (different repo, tracked for coordination): `openspec/specs/domain-seed-data/` — Spring Boot seed data richness, not built here.
+External dependency (different repo, tracked for coordination): `openspec/specs/domain-seed-data/` — Spring Boot seed data richness, not built here. **Executed and verified 2026-08-11** — no longer a pending ask; see that spec's "State after reseed".
 
 ## O — Operations
 
