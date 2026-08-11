@@ -84,7 +84,7 @@ Define a clear, testable architecture that:
 
 An engineer or portal uploads a project specification (`user_id` + text/file). After the shared indexing head joins cleaned/split chunks, the system **always** builds KG-1 from **post-join** chunks, saves a user-scoped JSON artifact, and returns `kg_*` fields on the ingest response.
 
-**Independent Test:** Ingest via `POST /api/v1/recommendations/from-project-spec` with distinctive project text; assert `kg_built=true`, artifact path under `{user_id}/`, and `tests/test_knowledge_graph.py` green. Full runbook: [knowledge-graph-testing-guide.md](../../../docs/testing/knowledge-graph-testing-guide.md).
+**Independent Test:** Ingest via `POST /internal/v1/recommendations/submitprojectspecification` with distinctive project text; assert `kg_built=true`, artifact path under `{user_id}/`, and `tests/test_knowledge_graph.py` green. Full runbook: [knowledge-graph-testing-guide.md](../../../docs/testing/knowledge-graph-testing-guide.md).
 
 **Acceptance Scenarios:**
 
@@ -97,7 +97,7 @@ An engineer or portal uploads a project specification (`user_id` + text/file). A
 
 After a successful ingest, a client asks a natural-language question with the same `user_id` and `ingest_id`. A fixed sequential LangGraph (`research_agent` → `graph_agent` → `synthesis_agent`) queries the project DocumentStore and KG-1 and returns a grounded answer with tool traces.
 
-**Independent Test:** Same-process ingest then `POST .../project-knowledge/query`; assert both tools in `sources_used` / `tool_traces` and dual-source synthesis. See testing guide and contract.
+**Independent Test:** Same-process ingest then `POST .../project-knowledge/getassetrecommendations`; assert both tools in `sources_used` / `tool_traces` and dual-source synthesis. See testing guide and contract.
 
 **Acceptance Scenarios:**
 

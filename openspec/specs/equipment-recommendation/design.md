@@ -199,7 +199,7 @@ See [`../recommendation-pipeline/design.md`](../recommendation-pipeline/design.m
 
 - Lock this SPEC against proven pipeline.
 - Resolve refine/reject and persistence scope questions.
-- Scaffold free-text/file intake; confirm `POST .../from-project-spec`; wire decomposer + quantity expansion + singular `item`.
+- Scaffold free-text/file intake; confirm `POST .../submitprojectspecification`; wire decomposer + quantity expansion + singular `item`.
 
 #### Day 3 — Real candidates + availability (`feature/agent-3-candidates-availability`)
 

@@ -305,7 +305,7 @@ Routers MUST stay thin; pipeline construction and SQL live in services/pipelines
 
 ### Requirement: API & errors (FR-040–FR-043)
 
-- **FR-040**: Public project-spec endpoint is `POST /api/v1/recommendations/from-project-spec` (JSON and/or multipart).
+- **FR-040**: Public project-spec endpoint is `POST /internal/v1/recommendations/submitprojectspecification` (JSON and/or multipart).
   - **Target / product intent:** recommend envelope (`recommendation_id`, `results_by_need`, singular `item`) per this SPEC and child intake.
   - **As-built override (2026-08-07):** the route currently runs the **indexing** pipeline and returns `IngestFromProjectSpecResponse`. Normative live contract: [`../indexing/spec.md`](../indexing/spec.md). Recommend response remains **target / reattach**; FR-010 service path: [`../recommendation-pipeline/spec.md`](../recommendation-pipeline/spec.md).
 - **FR-041**: Optional pricing-only endpoint remains allowed if pricing team does not expose an equivalent.
@@ -313,7 +313,7 @@ Routers MUST stay thin; pipeline construction and SQL live in services/pipelines
 - **FR-043**: Validation → `400`; missing → `404`; training conflict (target) → `409`; unhandled → `500`.
 
 #### Scenario: Live path is ingest
-- **WHEN** live `POST .../from-project-spec` succeeds
+- **WHEN** live `POST .../submitprojectspecification` succeeds
 - **THEN** response is ingest-shaped (indexing), not deferred recommend envelope
 
 ### Requirement: Observability & config (FR-050–FR-053)
@@ -347,7 +347,7 @@ Exact path and field names finalized on Day 2 with intake scaffold; working cont
 
 ### Recommend from project specification (MVP target)
 
-`POST /api/v1/recommendations/from-project-spec`  
+`POST /internal/v1/recommendations/submitprojectspecification`  
 JSON (`project_text`) or multipart (`file` ± `project_text`). Full field tables: [`../recommendation-intake/spec.md`](../recommendation-intake/spec.md).
 
 **Example request (JSON)**

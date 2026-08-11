@@ -31,9 +31,10 @@ When behaviour here and the codebase diverge, update them in the **same change s
 
 **Conflict rule:** Live route → **this capability wins here**. Optional / full KG rules → [`../knowledge-graph/spec.md`](../knowledge-graph/spec.md). Recommend envelope without a “deferred” label loses to this capability.
 
-**As-built vs parent FR-040:** live response is **ingest + optional kg_***, not ranked `results_by_need`.
+**As-built vs parent FR-040:** live public response is a **lean ingest envelope** (`ingest_id`, `user_id`, `user_requirement_summary`, `warnings[]`), not ranked `results_by_need`. Index/KG technical detail runs internally (session meta).
 
-**Target (not as-built):** successful Call 1 MAY add a **project-spec summary** (needs, tentative dates, expected budget) for Spring/portal UX while keeping `ingest_id` and index/KG status. MUST NOT become FR-010 `results_by_need` (ranked assets + predicted rent) without recommend reattach.
+**As-built (S1a):** lean body with deterministic `user_requirement_summary`.  
+**Target (FR-IX-023 remainder):** structured `needs_summary[]`, tentative dates, expected budget. MUST NOT become FR-010 `results_by_need` without recommend reattach.
 
 ---
 
@@ -44,7 +45,7 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 **Part 1 delivered:**
 
 1. `FileTypeRouter`-backed classification under `app/pipelines/indexing/`.
-2. Reroute `POST /api/v1/recommendations/from-project-spec` to this pipeline **instead of** `build_intake_front_pipeline` / FR-010 recommend.
+2. Reroute `POST /internal/v1/recommendations/submitprojectspecification` to this pipeline **instead of** `build_intake_front_pipeline` / FR-010 recommend.
 
 **Part 2 delivered:**
 
@@ -55,7 +56,7 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 
 5. `DocumentCleaner` → `DocumentSplitter` → document embedder → `DocumentWriter`.
 6. Default process-local `InMemoryDocumentStore`; CI-safe default embedder (`MockDocumentEmbedder`).
-7. Response fields `chunk_count`, `documents_written`, and `has_embedding` on previews.
+7. Lean public response fields `ingest_id`, `user_id`, `user_requirement_summary`, `warnings` (internal store still has embeddings).
 
 **HR-76 (shipped):** required `user_id`; **mandatory** user-scoped KG after post-join chunks ([`../knowledge-graph/spec.md`](../knowledge-graph/spec.md)).
 
@@ -66,7 +67,7 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 - Classified sources are **converted** to Haystack `Document`s by MIME type.
 - Converted documents are **cleaned, split, embedded, and written** to a DocumentStore.
 - Request requires **`user_id`** (optional `user_name`); echoed on response; stamped on chunk meta.
-- Successful responses return ingest fields plus **`kg_*`** (`kg_built=true` on success).
+- Successful public responses return the **lean** ingest body; KG success is required for 200 but **`kg_*` are not exposed** on the public body (session registry holds artifact path).
 - Missing `user_id`, unclassified type, empty source, zero written chunks, or KG failure → **400**.
 - Dates accepted; unused for ranking until reattach.
 
@@ -85,12 +86,12 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 
 A portal user uploads a structured project-spec CSV (e.g. `needs.csv`) with a required `user_id` and receives an ingest response classifying the source as structured, with documents and written chunks.
 
-**Independent Test:** Multipart POST to `/api/v1/recommendations/from-project-spec` with `user_id` and `needs.csv`.
+**Independent Test:** Multipart POST to `/internal/v1/recommendations/submitprojectspecification` with `user_id` and `needs.csv`.
 
 **Acceptance Scenarios:**
 
 1. **Given** multipart `needs.csv`, **When** POST, **Then** `data_kind=structured`, `structured_count≥1`, `document_count≥1`, content preview includes CSV text.
-2. **Given** successful convert and Part 3 pipeline, **When** write completes, **Then** `documents_written ≥ 1`, chunk previews have `has_embedding=true`, and the DocumentStore count increases.
+2. **Given** successful convert and Part 3 pipeline, **When** write completes, **Then** DocumentStore count increases and Call 1 returns lean `ingest_id` + non-empty `user_requirement_summary`.
 
 ### User Story 2 - Unstructured text / markdown ingest (Priority: P1)
 
@@ -141,11 +142,11 @@ The public from-project-spec route runs the indexing pipeline, not intake-front 
 ## Requirements
 
 ### Requirement: Live route runs indexing pipeline
-`POST /api/v1/recommendations/from-project-spec` MUST run the **indexing file-type pipeline**, not `intake_front`, as the default HTTP path.  
+`POST /internal/v1/recommendations/submitprojectspecification` MUST run the **indexing file-type pipeline**, not `intake_front`, as the default HTTP path.  
 (Trace: FR-IX-001)
 
 #### Scenario: Default HTTP path is indexing
-- **WHEN** a client calls `POST /api/v1/recommendations/from-project-spec`
+- **WHEN** a client calls `POST /internal/v1/recommendations/submitprojectspecification`
 - **THEN** the handler runs the indexing file-type pipeline
 - **AND** does not use `build_intake_front_pipeline` / FR-010 recommend as the primary path
 
@@ -275,24 +276,24 @@ Default embedder MUST be CI-safe (`MockDocumentEmbedder` or equivalent). Optiona
 - **THEN** the optional OpenAI document embedder mode is used
 
 ### Requirement: Successful ingest reports written chunks
-Successful ingest MUST report `documents_written` ≥ 1 (and matching `chunk_count` for the default path). Zero written chunks → **400**.  
+Successful ingest MUST write ≥ 1 chunk internally (zero written chunks → **400**). Public body MUST NOT require `documents_written` / `chunk_count` (lean S1a).  
 (Trace: FR-IX-016)
 
 #### Scenario: At least one written document
 - **WHEN** ingest completes successfully
-- **THEN** `documents_written` ≥ 1 and `chunk_count` matches for the default path
+- **THEN** the request succeeds with lean `ingest_id` and non-empty `user_requirement_summary`
 
 #### Scenario: Zero written chunks rejected
 - **WHEN** the pipeline would write zero chunks
 - **THEN** the response is HTTP 400
 
 ### Requirement: Ingest response shape (no recommend envelope)
-Successful responses MUST use `IngestFromProjectSpecResponse` (`ingest_id`, …). MUST NOT return `recommendation_id` / `results_by_need` on the default path until reattach is specified.  
+Successful responses MUST use lean `IngestFromProjectSpecResponse` (`ingest_id`, `user_id`, `user_requirement_summary`, `warnings`). MUST NOT return `recommendation_id` / `results_by_need` on the default path until reattach is specified. MUST NOT expose technical `documents[]` / public `kg_*` on the default lean body.  
 (Trace: FR-IX-017)
 
 #### Scenario: Ingest DTO only
 - **WHEN** a successful default-path response is returned
-- **THEN** the body is `IngestFromProjectSpecResponse` with `ingest_id`
+- **THEN** the body is lean `IngestFromProjectSpecResponse` with `ingest_id`, `user_id`, and `user_requirement_summary`
 - **AND** does not include `recommendation_id` or `results_by_need`
 
 ### Requirement: Explicit dual-branch Packt Ch.4 graph
@@ -346,22 +347,39 @@ After **`final_doc_joiner`** chunks exist and index write succeeds, MUST build a
 - **WHEN** KG is built
 - **THEN** full Ragas transforms run only inside `KnowledgeGraphGenerator` when `KG_APPLY_TRANSFORMS=true`
 
-### Requirement: Project-spec summary on ingest response (TARGET)
-After successful index + mandatory KG, the live success body MUST include a **client-facing project-spec summary** in addition to `ingest_id` and index/KG status fields (or a documented compact default with optional verbose indexing detail).  
-Summary MUST include:
+### Requirement: Lean project-spec summary on ingest response (as-built S1a)
+After successful index + mandatory KG, the live success body MUST be a **lean client-facing envelope**:
 
-1. **`needs_summary`** — what the uploaded project-spec implies is needed (equipment/work descriptions; optional quantity / equipment_hints).  
-2. **`tentative_start_date` / `tentative_end_date`** — from request when provided, else extracted from project-spec when confidently found, else null.  
-3. **`expected_budget`** — amount (+ currency when known) extracted from project-spec when confidently found, else null; MUST NOT invent a budget.  
+1. **`ingest_id`** — handle for Call 2 / Call 3  
+2. **`user_id`** — request echo  
+3. **`user_requirement_summary`** — deterministic string from `project_text` or extracted multipart content (not raw bytes); MAY truncate with a warning  
+4. **`warnings`** — soft issues (MAY be empty)  
 
-MUST NOT treat this summary as ranked fleet recommendations or ML rent prices (`results_by_need` / Call 3).  
+MUST NOT expose technical `documents[]` previews or public `kg_*` on the default lean body.  
+MUST NOT treat this as ranked fleet recommendations or ML rent prices (`results_by_need` / Call 3).  
+(Trace: FR-IX-017 lean; partial FR-IX-023)  
+**Status:** **as-built (S1a)**.
+
+#### Scenario: Lean summary present on success
+- **GIVEN** successful ingest of a project-spec with non-empty content
+- **WHEN** `POST .../submitprojectspecification` succeeds
+- **THEN** the body includes `ingest_id`, `user_id`, and non-empty `user_requirement_summary`
+- **AND** does not include `documents`, `kg_built`, `recommendation_id`, or `results_by_need`
+
+### Requirement: Full project-spec summary on ingest response (TARGET FR-IX-023)
+After lean S1a, the live success body MAY be enriched with:
+
+1. **`needs_summary`** — structured needs (description; optional quantity / equipment_hints / need_id).  
+2. **`tentative_start_date` / `tentative_end_date`** — from request when provided, else extracted when confidently found, else null.  
+3. **`expected_budget`** — amount (+ currency when known) extracted when confidently found, else null; MUST NOT invent a budget.  
+
 MUST NOT use `options.include_pricing` as a budget amount (boolean only).  
 (Trace: FR-IX-023)  
-**Status:** **TARGET** — not as-built; as-built body is technical ingest + `kg_*` only (FR-IX-017).
+**Status:** **TARGET** — not as-built beyond lean `user_requirement_summary`.
 
 #### Scenario: Needs summary present on target success
 - **GIVEN** target implementation and successful ingest of a project-spec that describes equipment needs
-- **WHEN** `POST .../from-project-spec` succeeds
+- **WHEN** `POST .../submitprojectspecification` succeeds
 - **THEN** the body includes `ingest_id` and non-empty `needs_summary` (or empty list + warning if no needs could be inferred)
 - **AND** does not include `recommendation_id` or `results_by_need`
 
@@ -433,6 +451,11 @@ Sources MUST be classified according to the following normative extension / MIME
 ---
 
 ## Change control
+
+| Version | Date | Notes |
+|---------|------|--------|
+| **0.5.0** | 2026-08-11 | **S1a lean as-built:** public body `ingest_id` + `user_id` + `user_requirement_summary` + `warnings`; internal paths `/internal/v1/recommendations/...`; full FR-IX-023 still TARGET |
+
 
 | Version | Date | Notes |
 |---------|------|--------|

@@ -15,7 +15,7 @@ class RecommendOptions(BaseModel):
 
 
 class RecommendFromProjectSpecRequest(BaseModel):
-    """POST /api/v1/recommendations/from-project-spec JSON body."""
+    """POST /internal/v1/recommendations/submitprojectspecification JSON body."""
 
     user_id: str = Field(
         ...,

@@ -22,7 +22,7 @@ Service-level recommend graph; not default HTTP (live path is indexing).
 ### Live HTTP path (indexing — normative for the route)
 
 ```text
-POST /from-project-spec (user_id required)
+POST /submitprojectspecification (user_id required)
   → IndexingIngestService
   → dual-branch index → final_doc_joiner → embed → write
   → mandatory KG after post-join chunks

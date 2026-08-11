@@ -2,7 +2,7 @@
 
 ## R — Requirements
 
-See [`spec.md`](./spec.md) Purpose, Outcomes, and Requirements (FR-IX-001–022 + MIME classification map). Live HTTP owner for `POST /api/v1/recommendations/from-project-spec`; conflict rule: live route wins here; KG rules in [`../knowledge-graph/spec.md`](../knowledge-graph/spec.md).
+See [`spec.md`](./spec.md) Purpose, Outcomes, and Requirements (FR-IX-001–022 + MIME classification map). Live HTTP owner for `POST /internal/v1/recommendations/submitprojectspecification`; conflict rule: live route wins here; KG rules in [`../knowledge-graph/spec.md`](../knowledge-graph/spec.md).
 
 **API field tables:** [`contracts/ingest-from-project-spec.md`](./contracts/ingest-from-project-spec.md).
 
@@ -28,7 +28,7 @@ Aligned with Packt Ch. 4 indexing flowchart
 ### Dual-branch pipeline diagram
 
 ```text
-  POST /from-project-spec (user_id required)
+  POST /submitprojectspecification (user_id required)
        │
        ▼
   file_type_router → dual-branch convert/clean/split

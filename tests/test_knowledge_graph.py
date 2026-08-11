@@ -89,14 +89,16 @@ def test_service_always_builds_kg_artifact(
         project_text="Indoor elevated work for scissors lift",
     )
     assert result.user_id == "bob"
-    assert result.user_name == "Bob Builder"
-    assert result.kg_built is True
-    assert result.kg_node_count and result.kg_node_count >= 1
-    assert result.kg_transform_applied is False
-    assert result.kg_artifact_path
-    assert Path(result.kg_artifact_path).exists()
-    assert "bob" in result.kg_artifact_path
-    assert result.documents[0].meta.get("user_id") == "bob"
+    assert "scissors" in result.user_requirement_summary.lower()
+    from app.services.project_knowledge_session import get_project_knowledge_registry
+
+    session = get_project_knowledge_registry().get("bob", result.ingest_id)
+    assert session is not None
+    assert session.kg_artifact_path
+    assert Path(session.kg_artifact_path).exists()
+    assert "bob" in session.kg_artifact_path
+    assert session.meta.get("user_name") == "Bob Builder"
+    assert session.meta.get("kg_node_count", 0) >= 1
 
     get_settings.cache_clear()
 
@@ -108,6 +110,8 @@ def test_two_users_distinct_kg_paths(
     monkeypatch.setenv("KG_ARTIFACT_DIR", str(tmp_path))
     get_settings.cache_clear()
 
+    from app.services.project_knowledge_session import get_project_knowledge_registry
+
     def _ingest(uid: str, text: str):
         return IndexingIngestService(
             pipeline=build_indexing_pipeline(
@@ -118,10 +122,12 @@ def test_two_users_distinct_kg_paths(
 
     r1 = _ingest("user_a", "Need excavator for trench")
     r2 = _ingest("user_b", "Need boom lift for facade")
-    assert r1.kg_built and r2.kg_built
-    assert r1.kg_artifact_path != r2.kg_artifact_path
-    assert "user_a" in (r1.kg_artifact_path or "")
-    assert "user_b" in (r2.kg_artifact_path or "")
+    s1 = get_project_knowledge_registry().get("user_a", r1.ingest_id)
+    s2 = get_project_knowledge_registry().get("user_b", r2.ingest_id)
+    assert s1 is not None and s2 is not None
+    assert s1.kg_artifact_path != s2.kg_artifact_path
+    assert "user_a" in (s1.kg_artifact_path or "")
+    assert "user_b" in (s2.kg_artifact_path or "")
 
     get_settings.cache_clear()
 

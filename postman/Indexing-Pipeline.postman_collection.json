@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
     "name": "Indexing + Project Knowledge (Stage 1)",
-    "description": "Postman collection for:\n1) POST /api/v1/recommendations/from-project-spec \u2014 indexing + mandatory KG-1\n2) POST /api/v1/recommendations/project-knowledge/query \u2014 Stage-1 multi-agent Q&A\n\n**Import:** Collection + environment `Indexing-Pipeline-Local`.\n**Server:** `uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload` from `haystack-fast-api/`.\n**Files:** For multipart requests, attach fixtures from `postman/fixtures/`.\n\n**Multi-agent:** Run request **15** (ingest) then **16** (query) so `ingestId` is saved.\nSessions are process-local; use the same server for both calls.\nDefault `PROJECT_AGENT_MODE=stub` (no LLM key required).\n\n**Ingest success shape:** `ingest_id`, `data_kind`, `chunk_count`, `documents_written`, `kg_*`.\n**Q&A success shape:** `answer`, `sources_used`, `tool_traces`, `research_hits`, `graph_hits`.\n**Not returned on ingest:** `recommendation_id` / `results_by_need`.",
+    "description": "Postman collection for:\n1) POST /internal/v1/recommendations/submitprojectspecification \u2014 indexing + mandatory KG-1\n2) POST /internal/v1/recommendations/project-knowledge/getassetrecommendations \u2014 Stage-1 multi-agent Q&A\n\n**Import:** Collection + environment `Indexing-Pipeline-Local`.\n**Server:** `uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload` from `haystack-fast-api/`.\n**Files:** For multipart requests, attach fixtures from `postman/fixtures/`.\n\n**Multi-agent:** Run request **15** (ingest) then **16** (query) so `ingestId` is saved.\nSessions are process-local; use the same server for both calls.\nDefault `PROJECT_AGENT_MODE=stub` (no LLM key required).\n\n**Ingest success shape:** `ingest_id`, `data_kind`, `chunk_count`, `documents_written`, `kg_*`.\n**Q&A success shape:** `answer`, `sources_used`, `tool_traces`, `research_hits`, `graph_hits`.\n**Not returned on ingest:** `recommendation_id` / `results_by_need`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -12,11 +12,11 @@
     },
     {
       "key": "ingestPath",
-      "value": "/api/v1/recommendations/from-project-spec"
+      "value": "/internal/v1/recommendations/submitprojectspecification"
     },
     {
       "key": "projectKnowledgePath",
-      "value": "/api/v1/recommendations/project-knowledge/query"
+      "value": "/internal/v1/recommendations/project-knowledge/getassetrecommendations"
     },
     {
       "key": "userId",

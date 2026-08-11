@@ -92,12 +92,10 @@ def test_service_returns_write_fields() -> None:
         user_id="u_vec",
         project_text="Indoor elevated work for scissors lift",
     )
-    assert result.chunk_count >= 1
-    assert result.documents_written == result.chunk_count
-    assert result.documents
-    assert result.documents[0].has_embedding is True
-    assert any("Indexing complete" in w or "Part 3" in w for w in result.warnings)
-    assert get_document_store().count_documents() >= result.documents_written
+    assert result.ingest_id.startswith("ing_")
+    assert result.user_id == "u_vec"
+    assert "scissors" in result.user_requirement_summary.lower()
+    assert get_document_store().count_documents() >= 1
 
 
 def test_reset_document_store_clears() -> None:

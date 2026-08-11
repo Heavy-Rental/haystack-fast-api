@@ -1,8 +1,30 @@
-"""HTTP intake: POST /api/v1/recommendations/from-project-spec (indexing + HR-76 user)."""
+"""HTTP intake: POST /internal/v1/recommendations/submitprojectspecification (S1 lean body)."""
 
 from fastapi.testclient import TestClient
 
-ENDPOINT = "/api/v1/recommendations/from-project-spec"
+ENDPOINT = "/internal/v1/recommendations/submitprojectspecification"
+
+LEAN_KEYS = {"ingest_id", "user_id", "user_requirement_summary", "warnings"}
+TECHNICAL_KEYS = {
+    "documents",
+    "kg_built",
+    "kg_node_count",
+    "kg_artifact_path",
+    "chunk_count",
+    "documents_written",
+    "data_kind",
+}
+
+
+def _assert_lean_body(body: dict) -> None:
+    assert set(body.keys()) <= LEAN_KEYS | set(body.keys())
+    for key in TECHNICAL_KEYS:
+        assert key not in body
+    assert body["ingest_id"].startswith("ing_")
+    assert body["user_id"]
+    assert isinstance(body["user_requirement_summary"], str)
+    assert body["user_requirement_summary"].strip()
+    assert isinstance(body["warnings"], list)
 
 
 def test_from_project_spec_json_unstructured(client: TestClient) -> None:
@@ -19,26 +41,10 @@ def test_from_project_spec_json_unstructured(client: TestClient) -> None:
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["ingest_id"].startswith("ing_")
+    _assert_lean_body(body)
     assert body["user_id"] == "user_demo"
-    assert body["user_name"] == "Demo User"
-    assert body["data_kind"] == "unstructured"
-    assert body["unstructured_count"] == 1
-    assert body["structured_count"] == 0
-    assert body["document_count"] == 1
-    assert body["unstructured_document_count"] == 1
-    assert body["chunk_count"] >= 1
-    assert body["documents_written"] >= 1
-    assert body["documents"]
-    assert "scissors" in body["documents"][0]["content_preview"].lower()
-    assert body["documents"][0]["has_embedding"] is True
-    assert body["documents"][0]["meta"].get("user_id") == "user_demo"
+    assert "scissors" in body["user_requirement_summary"].lower()
     assert "results_by_need" not in body
-    assert body["kg_built"] is True
-    assert body["kg_node_count"] and body["kg_node_count"] >= 1
-    assert body["kg_artifact_path"]
-    assert body["kg_transform_applied"] is False
-    assert body["warnings"]
 
 
 def test_missing_user_id_returns_400(client: TestClient) -> None:
@@ -91,9 +97,9 @@ def test_optional_dates_omitted(client: TestClient) -> None:
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["data_kind"] == "unstructured"
-    assert body["ingest_id"].startswith("ing_")
+    _assert_lean_body(body)
     assert body["user_id"] == "u1"
+    assert "fork" in body["user_requirement_summary"].lower()
 
 
 def test_multipart_text_file_unstructured(client: TestClient) -> None:
@@ -110,15 +116,9 @@ def test_multipart_text_file_unstructured(client: TestClient) -> None:
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["ingest_id"].startswith("ing_")
+    _assert_lean_body(body)
     assert body["user_id"] == "u_mp"
-    assert body["data_kind"] == "unstructured"
-    assert body["unstructured_count"] == 1
-    assert body["document_count"] == 1
-    assert body["documents_written"] >= 1
-    assert "forklift" in body["documents"][0]["content_preview"].lower()
-    assert body["documents"][0]["has_embedding"] is True
-    assert "project.txt" in body["filenames"]
+    assert "forklift" in body["user_requirement_summary"].lower()
 
 
 def test_multipart_csv_structured(client: TestClient) -> None:
@@ -131,15 +131,8 @@ def test_multipart_csv_structured(client: TestClient) -> None:
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["data_kind"] == "structured"
-    assert body["structured_count"] == 1
-    assert body["document_count"] == 1
-    assert body["structured_document_count"] == 1
-    assert body["documents_written"] >= 1
-    joined = " ".join(d["content_preview"] for d in body["documents"])
-    assert "Scissors" in joined
-    assert all(d["has_embedding"] for d in body["documents"])
-    assert "text/csv" in body["mime_types_seen"] or body["mime_types_seen"]
+    _assert_lean_body(body)
+    assert "scissors" in body["user_requirement_summary"].lower()
 
 
 def test_multipart_json_file_structured(client: TestClient) -> None:
@@ -152,11 +145,8 @@ def test_multipart_json_file_structured(client: TestClient) -> None:
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["data_kind"] == "structured"
-    assert body["document_count"] >= 1
-    assert body["documents_written"] >= 1
-    joined = " ".join(d["content_preview"] for d in body["documents"]).lower()
-    assert "excavator" in joined
+    _assert_lean_body(body)
+    assert "excavator" in body["user_requirement_summary"].lower()
 
 
 def test_multipart_markdown_converts(client: TestClient) -> None:
@@ -169,10 +159,9 @@ def test_multipart_markdown_converts(client: TestClient) -> None:
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["data_kind"] == "unstructured"
-    assert body["document_count"] == 1
-    preview = body["documents"][0]["content_preview"].lower()
-    assert "boom" in preview or "project" in preview
+    _assert_lean_body(body)
+    summary = body["user_requirement_summary"].lower()
+    assert "boom" in summary or "project" in summary
 
 
 def test_multipart_unsupported_type_400(client: TestClient) -> None:

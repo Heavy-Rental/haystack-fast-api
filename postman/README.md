@@ -24,8 +24,8 @@ research (vector) → graph (KG-1) → synthesis
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `baseUrl` | `http://localhost:8000` | API host |
-| `ingestPath` | `/api/v1/recommendations/from-project-spec` | Index + mandatory KG |
-| `projectKnowledgePath` | `/api/v1/recommendations/project-knowledge/query` | Multi-agent Q&A |
+| `ingestPath` | `/internal/v1/recommendations/submitprojectspecification` | Index + mandatory KG |
+| `projectKnowledgePath` | `/internal/v1/recommendations/project-knowledge/getassetrecommendations` | Multi-agent Q&A |
 | `userId` | `user_demo` | Required identity |
 | `ingestId` | _(empty)_ | Filled by successful ingest Tests scripts |
 | `agentQuery` | excavator/soil question | Query for multi-agent request |
@@ -113,35 +113,23 @@ All ingest requests must include **`user_id`** (JSON or form-data). Optional: **
 
 Knowledge graph is **mandatory** on successful ingest. Artifacts land under `artifacts/kg/{user_id}/kg_{ingest_id}.json`. Full Ragas transforms only if `KG_APPLY_TRANSFORMS=true` (runs inside `KnowledgeGraphGenerator`). KG failure fails the request.
 
-## Success body checklist — ingest
+## Success body checklist — ingest (S1a lean)
 
 ```json
 {
   "ingest_id": "ing_…",
   "user_id": "user_demo",
-  "user_name": "Demo User",
-  "data_kind": "unstructured | structured | mixed",
-  "document_count": 1,
-  "chunk_count": 1,
-  "documents_written": 1,
-  "documents": [
-    {
-      "content_preview": "…",
-      "has_embedding": true,
-      "meta": { "user_id": "user_demo", "ingest_id": "ing_…" }
-    }
-  ],
-  "kg_built": true,
-  "kg_transform_applied": false,
-  "warnings": ["Indexing complete …"]
+  "user_requirement_summary": "Indoor elevated work ~8m; need scissors lift…",
+  "warnings": []
 }
 ```
 
+**Not present on public body:** `documents[]`, `kg_*`, counts, `data_kind` (still run internally for Call 2).  
 **Not present** (old recommend API): `recommendation_id`, `results_by_need`.
 
 ## Success body checklist — multi-agent Q&A
 
-`POST /api/v1/recommendations/project-knowledge/query`
+`POST /internal/v1/recommendations/project-knowledge/getassetrecommendations`
 
 ```json
 {

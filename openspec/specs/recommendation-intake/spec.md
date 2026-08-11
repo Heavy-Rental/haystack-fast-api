@@ -27,7 +27,7 @@
 | Parent equipment-recommendation | End-to-end product vision, catalog, target KG |
 | Dynamic pricing | Production `predict_price()` |
 
-**Conflict rule:** For the **live** HTTP response of `POST .../from-project-spec`, the **indexing capability wins**. Sections marked **deferred** describe the pre-reroute / reattach recommend contract and MUST NOT be treated as current as-built HTTP behaviour.
+**Conflict rule:** For the **live** HTTP response of `POST .../submitprojectspecification`, the **indexing capability wins**. Sections marked **deferred** describe the pre-reroute / reattach recommend contract and MUST NOT be treated as current as-built HTTP behaviour.
 
 ---
 
@@ -36,7 +36,7 @@
 **Default path today:**
 
 ```text
-POST /from-project-spec (user_id required)
+POST /submitprojectspecification (user_id required)
   → IndexingIngestService
   → dual-branch index → final_doc_joiner → embed → write
   → mandatory KG after post-join chunks
@@ -94,7 +94,7 @@ Historical / target intake for equipment recommendation:
 
 | Area | Requirement |
 |------|-------------|
-| **Endpoint** | `POST /api/v1/recommendations/from-project-spec` |
+| **Endpoint** | `POST /internal/v1/recommendations/submitprojectspecification` |
 | **JSON / multipart request** | Same fields as before (`project_text`, `file`, dates, options) + **`user_id`** (live) |
 | **Pipeline** | Indexing (see indexing capability) |
 | **Response** | `IngestFromProjectSpecResponse` |
@@ -123,11 +123,11 @@ Historical / target intake for equipment recommendation:
 
 As a customer, I paste project text so the system **indexes** it (live) and later can recommend equipment (deferred).
 
-**Independent Test:** `POST .../from-project-spec` with `user_id` + non-empty `project_text`; expect ingest response.
+**Independent Test:** `POST .../submitprojectspecification` with `user_id` + non-empty `project_text`; expect ingest response.
 
 **Acceptance Scenarios:**
 
-1. **Given** non-empty `project_text` and `user_id`, **When** `POST .../from-project-spec`, **Then** `200`, `ingest_id` starts with `ing_`, `data_kind=unstructured`, `documents_written` ≥ 1, `results_by_need` absent.
+1. **Given** non-empty `project_text` and `user_id`, **When** `POST .../submitprojectspecification`, **Then** `200`, `ingest_id` starts with `ing_`, `data_kind=unstructured`, `documents_written` ≥ 1, `results_by_need` absent.
 2. **Given** empty / whitespace `project_text` and no file, **When** posted, **Then** `400` shared error shape.
 
 ### User Story 2 - Upload project file (Priority: P1) — LIVE
@@ -168,7 +168,7 @@ As a client, when text is empty or dates are invalid, I receive **400** with a s
 
 ### Requirement: Accept from-project-spec (FR-I-001) — LIVE
 
-The service MUST accept `POST /api/v1/recommendations/from-project-spec` as JSON and/or `multipart/form-data` with **`user_id`**, **`project_text`** and/or **`file`**, plus optional `user_name`, `start_date` / `end_date`.
+The service MUST accept `POST /internal/v1/recommendations/submitprojectspecification` as JSON and/or `multipart/form-data` with **`user_id`**, **`project_text`** and/or **`file`**, plus optional `user_name`, `start_date` / `end_date`.
 
 #### Scenario: JSON free-text accepted
 - **WHEN** a client posts JSON with non-empty `project_text` and required `user_id`
@@ -291,7 +291,7 @@ When `include_pricing` is true and a match is selected, `item.pricing` MUST expo
 **Live** successful responses MUST follow the indexing capability (`ingest_id`, …). MUST NOT require `results_by_need` on the default path.
 
 #### Scenario: No results_by_need on live success
-- **WHEN** live `POST .../from-project-spec` succeeds
+- **WHEN** live `POST .../submitprojectspecification` succeeds
 - **THEN** the body is ingest-shaped and does not require `results_by_need`
 
 ### Requirement: Project-spec summary is not recommend (FR-I-016) — TARGET alignment
@@ -307,7 +307,7 @@ When indexing implements FR-IX-023, Call 1 MAY return `needs_summary`, `tentativ
 
 ## Deferred API contracts (recommend reattach)
 
-### `POST /api/v1/recommendations/from-project-spec`
+### `POST /internal/v1/recommendations/submitprojectspecification`
 
 #### JSON (`Content-Type: application/json`)
 

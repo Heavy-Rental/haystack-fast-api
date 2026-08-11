@@ -40,8 +40,8 @@ uv sync --all-groups
 
 | Layer | How to test | Expect |
 |-------|-------------|--------|
-| **HTTP** `POST .../from-project-spec` | `tests/test_recommendations_intake.py`, `postman/` | `ingest_id`, `data_kind`, `documents_written`, `has_embedding`, `kg_*` |
-| **HTTP** multi-agent Q&A `POST .../project-knowledge/query` | [`knowledge-graph-testing-guide.md`](./knowledge-graph-testing-guide.md); `tests/test_project_knowledge_*.py`; Postman folder **04** | `answer`, dual `sources_used` / `tool_traces` |
+| **HTTP** `POST .../submitprojectspecification` | `tests/test_recommendations_intake.py`, `postman/` | `ingest_id`, `data_kind`, `documents_written`, `has_embedding`, `kg_*` |
+| **HTTP** multi-agent Q&A `POST .../project-knowledge/getassetrecommendations` | [`knowledge-graph-testing-guide.md`](./knowledge-graph-testing-guide.md); `tests/test_project_knowledge_*.py`; Postman folder **04** | `answer`, dual `sources_used` / `tool_traces` |
 | **Service** FR-010 | `tests/test_recommend_pipeline_mvp.py`, `tests/test_pipeline_intake_front.py` | `recommendation_id`, `results_by_need`, singular `item` |
 
 ---
@@ -96,14 +96,14 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 | Base | `http://localhost:8000` |
 | Health | `GET http://localhost:8000/health` |
 | OpenAPI / Swagger | `http://localhost:8000/docs` |
-| Project-spec (live **ingest**) | `POST http://localhost:8000/api/v1/recommendations/from-project-spec` |
+| Project-spec (live **ingest**) | `POST http://localhost:8000/internal/v1/recommendations/submitprojectspecification` |
 
 ---
 
 ## 3. Happy path — free-text (curl) — **live indexing**
 
 ```bash
-curl -s -X POST http://localhost:8000/api/v1/recommendations/from-project-spec \
+curl -s -X POST http://localhost:8000/internal/v1/recommendations/submitprojectspecification \
   -H 'Content-Type: application/json' \
   -d '{
     "user_id": "user_demo",
@@ -140,7 +140,7 @@ Import [`../postman/README.md`](../postman/README.md) collection. Or:
 | Field | Value |
 |-------|--------|
 | Method | **POST** |
-| URL | `http://localhost:8000/api/v1/recommendations/from-project-spec` |
+| URL | `http://localhost:8000/internal/v1/recommendations/submitprojectspecification` |
 | Headers | `Content-Type: application/json` |
 | Body | **raw → JSON** (same body as §3) |
 | Expect | `ingest_id`, `data_kind=unstructured`, `documents_written` ≥ 1 |
@@ -155,14 +155,14 @@ Import [`../postman/README.md`](../postman/README.md) collection. Or:
 6. `POST No match submarine (200, item null)` — §6  
 
 Environment variable: `baseUrl` = `http://localhost:8000`  
-Request URL: `{{baseUrl}}/api/v1/recommendations/from-project-spec`
+Request URL: `{{baseUrl}}/internal/v1/recommendations/submitprojectspecification`
 
 ---
 
 ## 5. Happy path — Swagger UI
 
 1. Open `http://localhost:8000/docs`
-2. Expand **POST** `/api/v1/recommendations/from-project-spec`
+2. Expand **POST** `/internal/v1/recommendations/submitprojectspecification`
 3. **Try it out** → paste JSON from §3 → **Execute**
 4. Confirm response matches §3 expected result
 
