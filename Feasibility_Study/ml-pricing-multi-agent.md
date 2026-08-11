@@ -5,11 +5,11 @@
 | **Document type** | Architecture / ML integration feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.1.0 |
+| **Version** | 1.2.0 |
 | **Application** | `haystack-fast-api` equipment recommendation |
 | **Question** | Can the **ML pricing model** supply structured context for Multi-Agent **recommend after [4]** when agents invoke tools **in-process** (including fleet data from Postgres-Haystack)? |
 | **Primary sources** | [`docs/dynamic-pricing-masterplan.md`](../docs/dynamic-pricing-masterplan.md) · [`docs/dynamic-pricing-execution-plan.md`](../docs/dynamic-pricing-execution-plan.md) · [`openspec/specs/dynamic-pricing/`](../openspec/specs/dynamic-pricing/) · `ml-experiments/` · `app/services/pricing_client.py` |
-| **Related studies** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) §4.1 [7] · [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) |
+| **Related studies** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) §4.1 [7] · [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) · [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) |
 
 > **Normative product rules** for pricing remain in OpenSpec dynamic-pricing. This study maps pricing into the **in-process multi-agent tool** path (no separate tool server).
 
@@ -55,16 +55,19 @@
 ## 3. Role after step [4]
 
 ```text
-[4] indexing succeeds
-[5] project / needs tools (in-process)
-[6] fleet tools → Postgres-Haystack (+ Neo4j context)
-[7] pricing tool → predict_asset_price (in-process)
-[8] synthesis → assets + prices
+[4] Coordinator gate (indexing succeeds; non-agent)
+[5] project / needs Worker (in-process tools)
+    Delegator → fan-out per need_id
+[6] fleet Workers ×N → Postgres-Haystack (+ Neo4j context)
+[7] pricing Workers ×N → predict_asset_price (in-process tool)
+[8] Coordinator synthesis → assets + prices
 ```
 
 | Layer | Pricing responsibility |
 |-------|------------------------|
-| **Orchestrator** | When to price; rank; totals; rationale |
+| **Coordinator** (Orchestrator policy) | When recommend may price; rank; totals; rationale at **[8]** |
+| **Delegator** | Routes pricing **Workers** per `need_id` after fleet candidates exist |
+| **Pricing Worker [7]** | Invokes allowlisted tool only; no invent rates |
 | **`predict_asset_price` tool** | Model + clamp; return daily rate + metadata |
 | **Postgres-Haystack** | Asset attributes + booking util |
 | **Neo4j / project KG** | Agent context only, not untrained XGBoost features |
@@ -112,7 +115,7 @@ No separate tool-server process is required for multi-agent pricing.
 | P2 | Phase 1e live utilization |
 | P3 | Phase 2a `app/services/pricing/` + per-asset clamp |
 | P4 | Wire `predict_asset_price` as multi-agent tool (in-process) |
-| P5 | Recommend graph [7]–[8] when `include_pricing` |
+| P5 | Recommend graph: pricing **Workers [7]×N** + Coordinator **[8]** when `include_pricing` |
 
 ---
 
@@ -122,6 +125,7 @@ No separate tool-server process is required for multi-agent pricing.
 |---------|------|--------|
 | **1.0.0** | 2026-08-10 | Initial (with FastMCP packaging options) |
 | **1.1.0** | 2026-08-10 | **Remove FastMCP**; in-process multi-agent tool only |
+| **1.2.0** | 2026-08-11 | C/W/D roles: pricing Worker fan-out per need; Coordinator synthesis |
 
 ---
 
@@ -130,6 +134,7 @@ No separate tool-server process is required for multi-agent pricing.
 | Decision | Recommendation |
 |----------|----------------|
 | ML pricing as agent tool? | **Yes (GO)** in-process |
+| Multi-agent role | **Pricing Worker [7]** fan-out per need; tool executes model |
 | Public price HTTP API? | **No** |
 | Target variable | **`price_per_day`** |
 | Feature sources | **Postgres-Haystack** + request window |

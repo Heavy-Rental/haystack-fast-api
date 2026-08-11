@@ -5,12 +5,12 @@
 | **Document type** | Architecture / Haystack packaging feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.1.0 |
+| **Version** | 1.2.0 |
 | **Application** | `haystack-fast-api` indexing (Plane B step **[4]**) |
 | **Question** | Can the existing **indexing pipeline** (`build_indexing_pipeline` / `run_indexing_pipeline`) be packaged as a Haystack **SuperComponent**? |
 | **As-built** | `app/pipelines/indexing/pipeline.py`, `app/services/indexing.py` |
 | **Haystack ref** | [SuperComponents](https://docs.haystack.deepset.ai/docs/supercomponents) · hierarchy in `openspec/specs/equipment-recommendation/` (Component → Pipeline → SuperComponent → Tool → Agent) |
-| **Related studies** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) §4 |
+| **Related studies** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) §4 · [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) (**[4]** = Coordinator gate, not Worker) |
 
 ---
 
@@ -163,11 +163,13 @@ class IndexingPipelineSuperComponent:
 | I1 Pgvector shared store | One SC with shared store; meta filters on docs still stamped pre-run |
 | Tests inject pipeline | Keep inject path: pass prebuilt Pipeline into SC **or** bypass SC in tests |
 
-### 4.4 Multi-Agent — **GO** as packaging for tool **[4]**
+### 4.4 Multi-Agent — **GO** as packaging for tool **[4]** (Coordinator gate)
+
+**[4]** is a **forced non-agent tool edge** under the **Coordinator** — not an LLM **Worker** agent. SuperComponent (if used) is only packaging for the dual-branch pipeline inside the service path.
 
 ```text
-Multi-Agent Orchestrator
-  └─ tool run_indexing_from_request
+Multi-Agent Orchestrator (Coordinator)
+  └─ gate tool run_indexing_from_request   # non-LLM forced edge
         └─ IndexingIngestService  (meta + KG + session)
               └─ IndexingPipelineSuperComponent.run(sources=…)
                     └─ dual-branch Pipeline
@@ -175,9 +177,9 @@ Multi-Agent Orchestrator
 
 | Path | Feasible? |
 |------|-----------|
-| Agent tool → service → SuperComponent | **Preferred** |
-| Agent tool → SuperComponent only | **Risky** — loses KG hard-fail & DTO |
-| PipelineTool(LLM) wrapping full index | **Optional** — free-form LLM tool calling not required for Stage 1 (forced index edge) |
+| Coordinator gate tool → service → SuperComponent | **Preferred** |
+| Gate tool → SuperComponent only | **Risky** — loses KG hard-fail & DTO |
+| PipelineTool(LLM) wrapping full index | **Avoid for [4]** — free-form LLM tool calling must not own the gate (forced index edge) |
 
 ### 4.5 What should **not** be inside the SuperComponent
 
@@ -266,6 +268,7 @@ Multi-Agent Orchestrator
 |---------|------|--------|
 | **1.0.0** | 2026-08-10 | Initial: indexing Pipeline → SuperComponent **GO** with boundary (no KG inside) |
 | **1.1.0** | 2026-08-10 | Remove FastMCP packaging language |
+| **1.2.0** | 2026-08-11 | **[4]** = Coordinator gate (non-agent); not Worker; LLM PipelineTool avoided for gate |
 
 ---
 
@@ -278,7 +281,8 @@ Multi-Agent Orchestrator
 | Include KG-1 in SuperComponent? | **No** |
 | Include HTTP DTO / session registry? | **No** |
 | Required now? | **No** — optional packaging |
-| Multi-Agent [4] | Service → SuperComponent.run(sources) |
+| Multi-Agent [4] | **Coordinator gate** → service → SuperComponent.run(sources) |
+| [4] is LLM Worker? | **No** |
 | Agent indexing tool | Wrap service/SC; Spring stays REST multipart |
 | Outputs | Map documents + documents_written; keep summary adapter if needed |
 | Avoid | Mega SuperComponent (index+KG+session); silent loss of chunk outputs for KG |
