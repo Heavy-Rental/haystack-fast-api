@@ -5,12 +5,12 @@
 | **Document type** | Architecture / agent orchestration feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.1.0 |
+| **Version** | 1.4.1 |
 | **Application** | `haystack-fast-api` Multi-Agent Orchestrator (LangGraph) |
 | **Question** | Can the **synthesis** step under Multi-Agent Orchestrator output **recommended assets** and **predicted rent price** grounded in the **uploaded project specification**? |
 | **As-built** | `app/agents/nodes.py` (`make_synthesis_node`), `app/agents/prompts.py`, Stage-1 Q&A only |
 | **Target contract** | Align with `RecommendFromProjectSpecResponse` / `RecommendationItem` + `PricingPayload` (`app/schemas/recommendations.py`) |
-| **Related** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) §4.1 [5]–[8] · [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) |
+| **Related** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) §4.1 [5]–[8] · [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) · [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) |
 
 ---
 
@@ -61,15 +61,20 @@ From `SYNTHESIS_AGENT_SYSTEM` / prompts:
 ### 2.2 Target (post-[4] recommend graph)
 
 ```text
-[4] indexing (project-spec → Pgvector + KG-1)
-[5] project / needs agents   → project_* , decompose_project_needs
-[6] fleet / graph agents     → retrieve_fleet_*, neo4j_*, availability
-[7] pricing agent            → predict_asset_price  (per candidate)
-[8] SYNTHESIS                → structured recommendation
+[4] indexing gate (Coordinator; non-agent tool edge → Pgvector + KG-1)
+[5] project / needs Worker     → project_* , decompose_project_needs
+    Delegator router           → expand work items per need_id
+[6] fleet / graph Workers ×N   → retrieve_fleet_*, neo4j_*, availability  (per need)
+[7] pricing Workers ×N         → predict_asset_price  (per need / candidates)
+[8] SYNTHESIS (Coordinator)    → structured recommendation
       results_by_need[]:
         need_id, item { asset_id, equipment_type, rank, rationale,
                         pricing { daily_rate, total_price, currency, … } }
 ```
+
+**Role vocabulary:** synthesis **[8]** is **Coordinator**-owned and tool-free; **[5]–[7]** are **Workers** (fleet/pricing **fan-out per need**); routing is an **explicit Delegator**; **[4]** is a **forced non-agent gate** under the Coordinator — see [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md).
+
+**Instruction template:** Coordinator synthesis behavior is defined in C/W/D **§10.2** (**A–L**). **L-1** sequential barrier after need pipelines; **L-2** does not parallel-invent. Multi-need **parallel** fan-out is Delegator/Workers; synthesis is **sequential** merge. **J-3** ranks only priced STM candidates. Fleet via Workers on **`postgres_haystack`←`postgres-primary`** (C/W/D §10.0.5–§10.0.11).
 
 Project-spec document grounds **what** is needed; fleet + pricing tools ground **what is offered** and **at what rate**.
 
@@ -177,6 +182,19 @@ Upload project-spec
 |---------|------|--------|
 | **1.0.0** | 2026-08-10 | Initial: synthesis **GO** for assets+prices as merge node; as-built Q&A gap |
 | **1.1.0** | 2026-08-10 | Tools are in-process (no FastMCP) |
+| **1.2.0** | 2026-08-11 | §2.2 cross-link Coordinator / Worker / Delegator vocabulary (synthesis = Coordinator) |
+| **1.3.0** | 2026-08-11 | Target graph: Delegator + [6]×N / [7]×N; decision card fan-out / Coordinator |
+| **1.3.1** | 2026-08-11 | Point synthesis persona to C/W/D §10.2 A/B instruction template |
+| **1.3.2** | 2026-08-11 | Coordinator template includes **C** contextual awareness |
+| **1.3.3** | 2026-08-11 | Coordinator **D** state space / partition write rules for synthesis |
+| **1.3.4** | 2026-08-11 | Coordinator **E** environment: no fleet tools at synthesis |
+| **1.3.5** | 2026-08-11 | Coordinator **F** integration: events + state validation before merge |
+| **1.3.6** | 2026-08-11 | Coordinator **G** monitoring/adaptation: no invent to improve fill rate |
+| **1.3.7** | 2026-08-11 | Coordinator **H** memory: STM merge; episodic persist; no direct fleet LTM |
+| **1.3.8** | 2026-08-11 | Coordinator **I** context management: merge multi-need task contexts |
+| **1.3.9** | 2026-08-11 | Coordinator **J** decision integration: rank only tool-backed candidates |
+| **1.4.0** | 2026-08-11 | Coordinator **K** workflow: barrier synthesis after fan-out |
+| **1.4.1** | 2026-08-11 | Coordinator **L** sequential barrier vs parallel need ribs |
 
 ---
 
@@ -186,8 +204,10 @@ Upload project-spec
 |----------|----------------|
 | Synthesis outputs recommended assets + rent prices? | **Yes (target GO)** |
 | As-built today? | **No** (Q&A only) |
-| How prices appear | Only from **`predict_asset_price`** (or documented fallback) |
-| How assets appear | Only from fleet tools after project-spec needs extraction |
+| Synthesis role | **Coordinator [8]** (tool-free merge) |
+| How prices appear | Only from **`predict_asset_price`** via **pricing Workers [7]×N** (or documented fallback) |
+| How assets appear | Only from fleet tools via **fleet Workers [6]×N** after needs extraction |
+| Multi-need | **Fan-out Workers per need**; partial failure → per-need warning |
 | Project-spec role | Grounds needs/constraints via [4]+[5] |
 | Synthesis tools | **None** — merge/rank only |
 | Output shape | Structured recommend DTO + optional markdown |

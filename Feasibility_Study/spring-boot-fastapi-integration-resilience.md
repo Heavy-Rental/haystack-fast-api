@@ -6,10 +6,10 @@
 | **Document type** | Architecture / integration feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.2.0 |
+| **Version** | 1.3.0 |
 | **Application** | `haystack-fast-api` (equipment recommendation / project-spec AI feature) |
 | **Caller** | Spring Boot REST API (portal / domain system of record) |
-| **Related** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) (data planes, agent→indexing, Pgvector) |
+| **Related** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) (data planes, agent→indexing, Pgvector) · [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) (FastAPI multi-agent roles) |
 | **As-built routes** | `POST .../from-project-spec`, `POST .../project-knowledge/query`, `GET /health` |
 
 ---
@@ -65,18 +65,18 @@ haystack-fast-api             (Haystack pipelines, agents, stores)
 |------|-----------------|----------------------------------|
 | **Ingest** `POST /from-project-spec` | Multipart file or JSON text + `user_id` | Seconds–tens of seconds (index + KG + optional agent orchestration) |
 | **Q&A** `POST /project-knowledge/query` | JSON `user_id`, `ingest_id`, `query` | Seconds if LLM; fast if stub |
-| **Recommend** (service / future HTTP) | Needs / dates / options | Seconds–tens; multi unit-need loop via **Multi-Agent Orchestrator** after ingest **[4]** |
+| **Recommend** (service / future HTTP) | Needs / dates / options | Seconds–tens; multi unit-need **fan-out Workers** via **Multi-Agent Orchestrator** after ingest **[4]** (may warrant C2 jobs) |
 | **Health** `GET /health` | — | Milliseconds |
 
 **Implication:** One protocol choice will not optimize all four. Design **per interaction type**.
 
-Related internal flow (after request arrives) — target (dual-plane study §4.1):
+Related internal flow (after request arrives) — target (dual-plane study §4.1 + C/W/D vocabulary):
 
-1. Multi-Agent **indexing tool [4]** (project → Pgvector + KG-1).  
-2. **After [4]**, Multi-Agent Orchestrator agents invoke **in-process tools** (target): project context, **Postgres-Haystack** fleet SQL, **Neo4j** graph, **ML pricing** (`predict_asset_price`).  
-3. Orchestrator **synthesizes recommendation** (merge of tool results).  
+1. **Coordinator gate [4]** — forced **non-agent** indexing tool (project → Pgvector + KG-1). Not an LLM Worker.  
+2. **After [4]**, **Delegator** routes **Workers**: project context **[5]**; then **fan-out per need** for fleet **[6]** / pricing **[7]** via **in-process tools** (Postgres-Haystack, Neo4j, `predict_asset_price`).  
+3. **Coordinator synthesis [8]** merges tool results into the recommendation DTO (tool-free).  
 
-Spring still uses **REST** to FastAPI. Wire resilience (this doc) stays focused on the **Spring ↔ FastAPI** connection.
+Spring still uses **REST** to FastAPI and does **not** implement C/W/D roles — those are FastAPI-internal. Wire resilience (this doc) stays focused on the **Spring ↔ FastAPI** connection. Role details: [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md).
 ---
 
 ## 3. Clarifying streaming and SSE
@@ -451,6 +451,7 @@ Optional: large files via **Spaces** + URL.
 | **1.0.0** | 2026-08-10 | Initial study: Spring↔FastAPI resilience; SSE vs upload; multi-call recommender; C1–C3 |
 | **1.1.0** | 2026-08-10 | Call 3 recommend maps to Multi-Agent after [4] + tools (pricing, Neo4j, Postgres-Haystack) |
 | **1.2.0** | 2026-08-10 | Remove FastMCP; in-process tools only |
+| **1.3.0** | 2026-08-11 | Call 3 internal flow: C/W/D roles; fan-out Workers; Spring stays REST saga |
 
 ---
 
