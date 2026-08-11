@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import app.services.pricing_client as pc
-from app.repositories.pricing_read_resilience import (
+from app.services.pricing.read_resilience import (
     PricingSchemaResolution,
     PricingSchemaUnavailable,
 )

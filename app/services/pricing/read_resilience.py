@@ -1,22 +1,28 @@
 """Shared 3-tier read-resilience resolver for pricing DB reads.
 
-specification/SPEC-dynamic-pricing.md §5.3.1. Every pricing read against
-``primary_snapshot`` shares this one resolution, decided once per
-``predict_price(...)`` call and applied to every read in that call — a single
-prediction must not mix ``primary_snapshot`` and ``public`` across its reads.
+Relocated from ``app/repositories/pricing_read_resilience.py`` (Phase 1e) into
+this package (Phase 2a, 2026-08-11) per
+openspec/specs/dynamic-pricing/spec.md's implementation task -- relocated,
+not rebuilt; behavior unchanged.
+
+openspec/specs/dynamic-pricing/spec.md "Requirement: Tiered read resilience
+against primary_snapshot". Every pricing read against ``primary_snapshot``
+shares this one resolution, decided once per ``predict_price(...)`` call and
+applied to every read in that call -- a single prediction must not mix
+``primary_snapshot`` and ``public`` across its reads.
 
 Three tiers, attempted in order:
 
 1. Transient (mid-recreate). Retry a short, bounded number of times.
-2. Sustained (a failed sync cycle). Degrade to reading ``public`` instead — a
+2. Sustained (a failed sync cycle). Degrade to reading ``public`` instead -- a
    real value, at most one sync cycle stale, not a fabricated default.
 3. Cold start (neither schema has the relation). Raise
-   ``PricingSchemaUnavailable`` rather than returning a price — what the
-   caller does with that is SPEC-recommendation-pipeline.md's call, not
+   ``PricingSchemaUnavailable`` rather than returning a price -- what the
+   caller does with that is the recommendation pipeline's call, not
    pricing's.
 
 Only ``UndefinedTable`` (relation-missing) errors are treated as a schema
-outage and retried/degraded — any other exception propagates immediately, so
+outage and retried/degraded -- any other exception propagates immediately, so
 a real bug doesn't get silently reinterpreted as a schema outage.
 """
 
@@ -34,7 +40,8 @@ from app.models.asset_category import AssetCategory
 
 logger = logging.getLogger(__name__)
 
-# Seconds-scale total, exact schedule TBD (spec §5.3.1, non-blocking open item).
+# Seconds-scale total, exact schedule TBD (non-blocking open item carried
+# forward from Phase 1e).
 _TRANSIENT_RETRY_BACKOFF_SECONDS: tuple[float, ...] = (0.0, 0.3, 0.6)
 
 PRIMARY_SCHEMA = "primary_snapshot"
@@ -45,7 +52,7 @@ class PricingSchemaUnavailable(RuntimeError):
     """Neither primary_snapshot nor public has the relations pricing needs.
 
     A container that has never completed a sync (both schemas are populated
-    by the same external job — spec §5.3), not a recoverable read failure.
+    by the same external job), not a recoverable read failure.
     """
 
 
@@ -80,7 +87,7 @@ def _probe(session: Session, schema: str) -> None:
 def resolve_pricing_schema(session: Session) -> PricingSchemaResolution:
     """Resolve which schema this predict_price() call should read from.
 
-    Not per-query — call once and thread the result through every read.
+    Not per-query -- call once and thread the result through every read.
     """
     last_exc: Exception | None = None
     for backoff in _TRANSIENT_RETRY_BACKOFF_SECONDS:

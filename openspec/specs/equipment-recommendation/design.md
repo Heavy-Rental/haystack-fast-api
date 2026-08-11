@@ -113,7 +113,9 @@ Haystack 2.0 pipelines are **directed multigraphs** (branching, loops). Canonica
 | `rank_with_rationale` | PromptBuilder + Generator | Sync |
 | `trigger_pricing_model_training` | Start training; return `job_id` | Async |
 
-Safeguard: do not retrain on every user recommendation by default.
+Safeguards:
+- Do not retrain on every user recommendation by default.
+- `predict_price()` performs no input validation (`ml-experiments/predict_price.py` docstring, 2026-08-11): an unrecognized `category` raises `KeyError`, an unrecognized `condition` raises pandas' `IntCastingNaNError` — neither is a clean, LLM-legible error. Whoever builds `recommend_prices` must validate `category`/`condition` against `feature_schema.CATEGORIES`/`CONDITION_ORDER` *before* calling — either in the tool wrapper itself or via the calling agent's own schema-constrained tool-call args — not assume the underlying function will fail usefully on bad input.
 
 ### Knowledge graph pattern (Chapter 5 + as-built)
 

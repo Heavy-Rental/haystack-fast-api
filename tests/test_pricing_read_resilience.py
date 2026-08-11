@@ -13,7 +13,7 @@ import pytest
 from psycopg.errors import UndefinedTable
 from sqlalchemy.exc import ProgrammingError
 
-from app.repositories.pricing_read_resilience import (
+from app.services.pricing.read_resilience import (
     PricingSchemaUnavailable,
     resolve_pricing_schema,
 )

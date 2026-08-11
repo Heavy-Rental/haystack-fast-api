@@ -1,7 +1,12 @@
 """Single import site for predict_price() (FR-020–022).
 
 Prototype: ml-experiments/predict_price.py (experimental model).
-Production swap: change only this module to app.services.pricing.
+Production swap: change only this module to app.services.pricing -- still
+pending (Phase 2b, "wire predict_price(...) into app.pipelines"); this
+module's own predict routing is unchanged by Phase 2a. Its imports below
+were updated because Phase 2a relocated app/repositories/pricing_repository.py
+and pricing_read_resilience.py into app/services/pricing/ (repository.py /
+read_resilience.py) -- same functions, new home, no behavior change here.
 """
 
 from __future__ import annotations
@@ -15,8 +20,8 @@ from typing import Any, Callable
 
 from sqlalchemy.orm import Session
 
-from app.repositories.pricing_read_resilience import resolve_pricing_schema
-from app.repositories.pricing_repository import (
+from app.services.pricing.read_resilience import resolve_pricing_schema
+from app.services.pricing.repository import (
     compute_lead_time_days,
     compute_period_utilization,
     resolve_effective_capacity,
