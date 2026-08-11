@@ -61,9 +61,6 @@ def predict_price(
 ) -> PricePrediction:
     """Predict price_per_day and clamp it to the category's guardrail bounds.
 
-    platform_height should be None for forklift/excavator, matching how the
-    model was trained (native NaN, not a sentinel -- see feature_schema.py).
-
     period_utilization/lead_time_days (Phase 1d) are optional, not required,
     with fallback defaults -- so this prototype's existing callers (e.g.
     pricing_client.py) keep working unmodified after Phase 1d merges, ahead
@@ -71,6 +68,35 @@ def predict_price(
     defaults to the static per-category pricing_tables.CATEGORY_UTILIZATION
     when not supplied; lead_time_days defaults to 0.0 (no lead-time signal
     available).
+
+    No input validation is performed -- an unrecognized category raises a
+    raw KeyError (pricing_tables.CATEGORY_BASE_RATE lookup) and an
+    unrecognized condition is silently encoded as NaN (feature_schema's
+    CONDITION_ORDER.map()) rather than erroring. Callers that accept
+    free-form input (e.g. an LLM-driven agent) should validate against the
+    enums below before calling.
+
+    Args:
+        category: One of feature_schema.CATEGORIES, exactly --
+            "forklift", "scissor lift", "boom lift", "excavator".
+        condition: One of feature_schema.CONDITION_ORDER's keys, exactly --
+            "NEEDS_REPAIR", "FAIR", "GOOD", "EXCELLENT".
+        duration_days: Rental length, in days.
+        capacity: Load capacity. Units are category-specific, matching
+            training data (pricing_tables.py) -- not independently checked.
+        distance_km: Delivery distance, in kilometers.
+        platform_height: Platform height in metres for "scissor lift"/
+            "boom lift"; must be None for "forklift"/"excavator", matching
+            how the model was trained (native NaN, not a sentinel -- see
+            feature_schema.py). Do not substitute 0 or another sentinel for
+            the excluded categories.
+        period_utilization: Fraction (0-1) of same-category/spec-band
+            assets already booked over the requested window. Optional --
+            omit rather than guess a value; falls back to the category's
+            static pricing_tables.CATEGORY_UTILIZATION when not supplied.
+        lead_time_days: Days between today and the rental start date.
+            Optional -- omit rather than guess a value; defaults to 0.0
+            (no lead-time signal available).
     """
     if period_utilization is None:
         period_utilization = pt.CATEGORY_UTILIZATION[category]
