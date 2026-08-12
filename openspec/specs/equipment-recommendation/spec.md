@@ -280,15 +280,15 @@ Routers MUST stay thin; pipeline construction and SQL live in services/pipelines
 
 ### Requirement: Pricing integration (FR-020–FR-024)
 
-- **FR-020**: Obtain prices by calling **`predict_price()`**—not a hand-written local stub once experimental exists.
-- **FR-021**: Prototype: import from `ml_experiments/`.
-- **FR-022**: Production swap: single import change when `app/services/pricing/predict_price()` ready; if not ready, keep experimental and log explicitly.
+- **FR-020**: Obtain prices by calling **`predict_price()`**—not a hand-written local stub once experimental exists. **As-built:** production path is `pricing_client.predict_price_for_asset` → `app.services.pricing.model.predict_price`.
+- **FR-021**: Prototype: import from `ml_experiments/`. **Superseded (Phase 2b):** experimental loader removed; `ml-experiments/` remains offline scratch only.
+- **FR-022**: Production swap: single import site (`pricing_client`). **As-built.** Agent tool **`predict_asset_price`** (S6 / US-5) MUST use the same entrypoint — no second prediction path.
 - **FR-023**: Pricing payload SHOULD expose rates/currency/explanation (and model identity when available).
 - **FR-024**: Deposit guidance default **30%** unless policy overrides.
 
-#### Scenario: Experimental then production
-- **WHEN** production pricing is not ready
-- **THEN** demo runs on experimental model with explicit log note
+#### Scenario: Production pricing single source of truth
+- **WHEN** the service recommend path and the agent tool `predict_asset_price` price the same asset/window
+- **THEN** both go through `pricing_client` / production `predict_price` and agree on rate and `model_version`
 
 ### Requirement: ML training tool (FR-030–FR-035) — TARGET
 

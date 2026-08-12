@@ -398,12 +398,12 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Fleet source MVP | In-memory seed | No Spring models yet; SPEC allows seed subset |
-| Pricing source MVP | ml-experiments + fallback | FR-021; no block if pkl missing |
+| Pricing source | Production `app/services/pricing/` via `pricing_client` | FR-020/022 as-built (Phase 2b); ml-experiments prototype retired |
 | Public pricing fields | `daily_rate` + `total_price` (not `weekly_rate = daily × 7`) | Duration is a model input; fabricated weekly misquotes; mockup “Estimated total” |
 | Async route + sync service | `run_in_threadpool` at router | FR-P-012 / parent NFR-008; LLM sync httpx must not block ASGI loop |
 | Rank MVP | Deterministic + template rationale | CI without LLM; honest schema-gap text |
 | Unit loop vs one giant graph | Service loop for 4–8 | Matches parent architecture; easier testing |
-| Production pricing swap | Single `pricing_client` module | FR-022 |
+| Production pricing swap | Single `pricing_client` module | FR-022; agent tool `predict_asset_price` (S6) shares entrypoint |
 
 ---
 

@@ -44,6 +44,32 @@ app/services/pricing/
 
 `app/repositories/` is now empty (those were its only two files) — left in place (its own `__init__.py` says "Feature SDDs add concrete repositories") for future use, not deleted.
 
+### Consumers (single source of truth)
+
+**As-built (2026-08-12, S6):** every price path funnels through production `predict_price(...)` (or `pricing_client` shaping above it). No second model loader.
+
+```text
+PredictPriceAdapter (service recommend / Call 2 MVP)
+    → pricing_client.predict_price_for_asset
+        → model.predict_price
+
+POST /internal/v1/pricing/quote (US-4)
+    → repository.get_asset_for_pricing + model.predict_price
+        (response shape in schemas/pricing.py; same model)
+
+predict_asset_price agent tool (US-5 / S6)
+    → pricing_client.predict_price_for_asset   # same as pipeline
+        → model.predict_price
+```
+
+| Consumer | Module | Notes |
+|----------|--------|--------|
+| Pipeline / Call 2 MVP | `app/pipelines/predict_price_adapter.py` | Per-candidate dict + `item.pricing` |
+| Internal quote API | `app/api/internal_pricing.py` | Spring checkout; resolves asset by id |
+| Agent tool | `app/agents/tools.py` (`TOOL_PREDICT_ASSET_PRICE`) | Pricing Worker [7] allowlist; Phase 7 graph not yet wired |
+
+Silent zeros: tool raises `ValueError` if `daily_rate <= 0`.
+
 ### Feature schema (locked, from Phase 1b + Phase 1d)
 
 Ports `ml-experiments/feature_schema.py` directly — same `CATEGORIES`, `CONDITION_ORDER`, `FEATURE_COLUMNS`, `build_features()`/`get_target()` logic. Adapt input from `pandas.DataFrame` (CSV-sourced in Phase 1) to a single row/dict from ORM objects.
