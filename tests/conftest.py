@@ -17,11 +17,14 @@ def _isolate_kg_artifact_dir(
     monkeypatch.setenv("KG_ARTIFACT_DIR", str(tmp_path / "kg"))
     monkeypatch.setenv("PROJECT_AGENT_MODE", "stub")
     get_settings.cache_clear()
+    from app.services.ingest_idempotency import reset_ingest_idempotency_store
     from app.services.project_knowledge_session import reset_project_knowledge_registry
 
     reset_project_knowledge_registry()
+    reset_ingest_idempotency_store()
     yield
     reset_project_knowledge_registry()
+    reset_ingest_idempotency_store()
     get_settings.cache_clear()
 
 

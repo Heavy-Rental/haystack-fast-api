@@ -113,6 +113,28 @@ All ingest requests must include **`user_id`** (JSON or form-data). Optional: **
 
 Knowledge graph is **mandatory** on successful ingest. Artifacts land under `artifacts/kg/{user_id}/kg_{ingest_id}.json`. Full Ragas transforms only if `KG_APPLY_TRANSFORMS=true` (runs inside `KnowledgeGraphGenerator`). KG failure fails the request.
 
+## Resilience headers (S2a / C1)
+
+Collection variables (optional; disabled on requests by default — enable as needed):
+
+| Variable | Header | Notes |
+|----------|--------|--------|
+| `idempotencyKey` | `Idempotency-Key` | UUID per logical ingest |
+| `correlationId` | `X-Correlation-Id` | Default demo value `postman-corr-demo` |
+| `traceparent` | `traceparent` | W3C Trace Context when testing traces |
+
+| Header | Required | Purpose |
+|--------|----------|---------|
+| `Idempotency-Key` | no | Per logical ingest (UUID recommended). Same `user_id` + key → same `ingest_id` on retry (process-local store). Failed 4xx/5xx are **not** cached. Safe for Spring timeout retries. |
+| `X-Correlation-Id` | no | End-to-end log correlation; **echoed** on every response. Server mints UUID if omitted. |
+| `traceparent` | no | Optional W3C Trace Context; logged when present. |
+
+**Error shape (all routes):** `{"error":"<code>","message":"<text>"}`.
+
+**Retry:** clients MAY retry **5xx** / transport timeouts with the **same** `Idempotency-Key`. Do not reuse a key for a different logical project-spec.
+
+**Limits:** idempotency map is **process-local** (not multi-replica). Optional TTL: `IDEMPOTENCY_TTL_SECONDS` (default 86400). Max upload size is proxy/Uvicorn deployment config (no separate app hard-cap beyond MIME validation).
+
 ## Success body checklist — ingest (FR-IX-023 as-built S1a–S1e)
 
 ```json

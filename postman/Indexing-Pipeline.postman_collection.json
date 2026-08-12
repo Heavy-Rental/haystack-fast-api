@@ -29,6 +29,21 @@
     {
       "key": "agentQuery",
       "value": "What excavator capacity and soil conditions are required?"
+    },
+    {
+      "key": "idempotencyKey",
+      "value": "",
+      "description": "Optional Idempotency-Key (UUID) for Call 1 retry safety"
+    },
+    {
+      "key": "correlationId",
+      "value": "postman-corr-demo",
+      "description": "Optional X-Correlation-Id for log join"
+    },
+    {
+      "key": "traceparent",
+      "value": "",
+      "description": "Optional W3C traceparent"
     }
   ],
   "item": [
@@ -57,7 +72,20 @@
           ],
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present.",
+                "disabled": true
+              }
+            ],
             "url": "{{baseUrl}}/health",
             "description": "Sanity check. `status` may be `degraded` if Postgres is down; indexing still works."
           },
@@ -127,6 +155,24 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
               }
             ],
             "body": {
@@ -183,6 +229,24 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
               }
             ],
             "body": {
@@ -223,7 +287,26 @@
           ],
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -285,7 +368,26 @@
           ],
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -339,7 +441,26 @@
           ],
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -390,7 +511,26 @@
           ],
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -441,7 +581,26 @@
           ],
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -505,6 +664,24 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
               }
             ],
             "body": {
@@ -542,6 +719,24 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
               }
             ],
             "body": {
@@ -579,6 +774,24 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
               }
             ],
             "body": {
@@ -612,7 +825,26 @@
           ],
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -662,7 +894,26 @@
           ],
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -711,7 +962,26 @@
           ],
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -778,6 +1048,24 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
               }
             ],
             "body": {
@@ -841,6 +1129,18 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present.",
+                "disabled": true
               }
             ],
             "body": {
@@ -878,6 +1178,18 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present.",
+                "disabled": true
               }
             ],
             "body": {
@@ -910,6 +1222,18 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present.",
+                "disabled": true
               }
             ],
             "body": {

@@ -1,8 +1,9 @@
 """Project-spec intake + Stage-1 multi-agent project-knowledge Q&A."""
 
 from datetime import date
+from typing import Annotated
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Header, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import ValidationError
 
@@ -13,6 +14,11 @@ from app.schemas.project_knowledge import (
     ProjectKnowledgeQueryResponse,
 )
 from app.schemas.recommendations import RecommendFromProjectSpecRequest
+from app.services.ingest_idempotency import (
+    get_ingest_idempotency_store,
+    normalize_idempotency_key,
+    scope_idempotency_key,
+)
 from app.services.indexing import (
     IndexingIngestService,
     byte_stream_from_upload,
@@ -41,11 +47,58 @@ def _require_user_id(value: object) -> str:
     return text
 
 
+async def _run_ingest_with_optional_idempotency(
+    *,
+    user_id: str,
+    idempotency_key: str | None,
+    producer,
+) -> IngestFromProjectSpecResponse:
+    """Run ingest; when key present, return/store successful lean body only."""
+    key = normalize_idempotency_key(idempotency_key)
+    if key is None:
+        return await run_in_threadpool(producer)
+
+    store = get_ingest_idempotency_store()
+    scope = scope_idempotency_key(user_id, key)
+    return await run_in_threadpool(store.run_once, scope, producer)
+
+
 @router.post(
     "/submitprojectspecification",
     response_model=IngestFromProjectSpecResponse,
     summary="Submit project specification: index chunks and knowledge graph",
     openapi_extra={
+        "parameters": [
+            {
+                "name": "Idempotency-Key",
+                "in": "header",
+                "required": False,
+                "schema": {"type": "string", "format": "uuid"},
+                "description": (
+                    "Optional client UUID per logical ingest. When present, a "
+                    "successful 200 lean body is replayed for the same "
+                    "user_id + key (process-local store). Failed 4xx/5xx are "
+                    "not cached. Safe for Spring retries after timeout."
+                ),
+            },
+            {
+                "name": "X-Correlation-Id",
+                "in": "header",
+                "required": False,
+                "schema": {"type": "string"},
+                "description": (
+                    "Optional end-to-end correlation id (logged + echoed). "
+                    "If omitted, the server mints a UUID."
+                ),
+            },
+            {
+                "name": "traceparent",
+                "in": "header",
+                "required": False,
+                "schema": {"type": "string"},
+                "description": "Optional W3C trace context (logged when present).",
+            },
+        ],
         "requestBody": {
             "content": {
                 "application/json": {
@@ -72,11 +125,21 @@ def _require_user_id(value: object) -> str:
         }
     },
 )
-async def recommend_from_project_spec(request: Request) -> IngestFromProjectSpecResponse:
+async def recommend_from_project_spec(
+    request: Request,
+    idempotency_key: Annotated[
+        str | None,
+        Header(alias="Idempotency-Key", convert_underscores=False),
+    ] = None,
+) -> IngestFromProjectSpecResponse:
     """Index project-spec; always build KG from post-final_doc_joiner chunks.
 
     Full Ragas transforms run only inside KnowledgeGraphGenerator when
     KG_APPLY_TRANSFORMS is true. KG failure fails the request.
+
+    Optional ``Idempotency-Key`` (S2a): successful 200 responses are cached
+    process-locally under ``user_id`` + key so Spring retries return the same
+    ``ingest_id`` without double-indexing.
     """
     content_type = request.headers.get("content-type", "")
     service = IndexingIngestService()
@@ -92,14 +155,20 @@ async def recommend_from_project_spec(request: Request) -> IngestFromProjectSpec
             )
             raise BadRequestError(messages or "Validation failed") from exc
 
-        return await run_in_threadpool(
-            service.ingest_from_project_spec,
+        def _produce_json() -> IngestFromProjectSpecResponse:
+            return service.ingest_from_project_spec(
+                user_id=body.user_id,
+                user_name=body.user_name,
+                project_text=body.project_text,
+                file_sources=None,
+                start_date=body.start_date,
+                end_date=body.end_date,
+            )
+
+        return await _run_ingest_with_optional_idempotency(
             user_id=body.user_id,
-            user_name=body.user_name,
-            project_text=body.project_text,
-            file_sources=None,
-            start_date=body.start_date,
-            end_date=body.end_date,
+            idempotency_key=idempotency_key,
+            producer=_produce_json,
         )
 
     if "multipart/form-data" in content_type:
@@ -139,14 +208,20 @@ async def recommend_from_project_spec(request: Request) -> IngestFromProjectSpec
                     )
                 )
 
-        return await run_in_threadpool(
-            service.ingest_from_project_spec,
+        def _produce_multipart() -> IngestFromProjectSpecResponse:
+            return service.ingest_from_project_spec(
+                user_id=user_id,
+                user_name=user_name,
+                project_text=project_text_str,
+                file_sources=file_sources or None,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+        return await _run_ingest_with_optional_idempotency(
             user_id=user_id,
-            user_name=user_name,
-            project_text=project_text_str,
-            file_sources=file_sources or None,
-            start_date=start_date,
-            end_date=end_date,
+            idempotency_key=idempotency_key,
+            producer=_produce_multipart,
         )
 
     raise BadRequestError(
@@ -158,6 +233,24 @@ async def recommend_from_project_spec(request: Request) -> IngestFromProjectSpec
     "/project-knowledge/getassetrecommendations",
     response_model=ProjectKnowledgeQueryResponse,
     summary="Multi-agent Q&A over project DocumentStore + KG-1",
+    openapi_extra={
+        "parameters": [
+            {
+                "name": "X-Correlation-Id",
+                "in": "header",
+                "required": False,
+                "schema": {"type": "string"},
+                "description": "Optional end-to-end correlation id (logged + echoed).",
+            },
+            {
+                "name": "traceparent",
+                "in": "header",
+                "required": False,
+                "schema": {"type": "string"},
+                "description": "Optional W3C trace context (logged when present).",
+            },
+        ],
+    },
 )
 async def query_project_knowledge(
     body: ProjectKnowledgeQueryRequest,

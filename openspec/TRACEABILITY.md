@@ -25,6 +25,7 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | `specification/tasks-indexing-file-type-router.md` | `openspec/changes/archive/2026-08-07-indexing-file-type-router/tasks.md` | |
 | `specification/tasks-knowledge-graph.md` | `openspec/changes/archive/2026-08-07-knowledge-graph-hr-76/tasks.md` | |
 | `specification/tasks-kg-multi-agent-stage1.md` | `openspec/changes/archive/2026-08-08-kg-multi-agent-stage1/tasks.md` | |
+| — (S2a new) | `openspec/changes/archive/2026-08-12-s2a-ingest-idempotency-correlation/` | FR-IX-024/025 proposal + tasks |
 | `app/agents/prompts.py` | `openspec/spdd/prompts/project-knowledge-agents.md` (index) | OpenSPDD first-class prompts |
 
 ## FR / requirement ID map
@@ -38,6 +39,8 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | FR-IX-023 S1d (as-built) | Indexing — `expected_budget` | `specs/indexing/spec.md` + contract; impl-plan **1.5** |
 | FR-IX-023 S1e (as-built) | Indexing — free-text/file date extract | `specs/indexing/spec.md` + contract; impl-plan **1.6** |
 | FR-IX-023 Call 1 summary (as-built) | Full lean summary S1a–S1e | `specs/indexing/spec.md` + contract; impl-plan **1.7** |
+| FR-IX-024 (as-built S2a) | Indexing — `Idempotency-Key` process-local store; same key → same `ingest_id` | `specs/indexing/spec.md` + contract; impl-plan **2.3** / S2a |
+| FR-IX-025 (as-built S2a) | Indexing — `X-Correlation-Id` / `traceparent` log + echo | `specs/indexing/spec.md` + contract; impl-plan **2.4** / S2a |
 | FR-I-016 (as-built alignment) | Intake — FR-IX-023 summary ≠ recommend | `specs/recommendation-intake/spec.md` |
 | MIME map §3 | Indexing | Requirement: MIME classification map |
 | FR-KG-001 … FR-KG-008 | KG Part A | `specs/knowledge-graph/spec.md` |

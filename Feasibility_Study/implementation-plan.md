@@ -73,7 +73,7 @@ Pricing: pricing_client → ml-experiments + category fallback
   Phase 2a (app/services/pricing/ + per-asset clamp) — not done
   predict_asset_price agent tool — not done
 Error JSON: {"error","message"} handlers already as-built
-Idempotency-Key / ingest correlation headers — not as-built (S2a remaining)
+Idempotency-Key / ingest correlation headers — **as-built S2a** (process-local store + middleware)
 ```
 
 **Call 1 → Call 2 handoff (minimum):** Spring stores `user_id` + `ingest_id` from Call 1; Call 2 sends those plus `query`. See **§1.2.1** for full Call 2 request rules (including predefined prompt + summary).
@@ -512,13 +512,13 @@ Maps to `spring-boot-fastapi-integration-resilience.md` Phase C1.
 |------|------|-------|---------------|
 | **2.1** | WebClient (or RestClient) with **per-operation timeouts** (ingest ≫ Q&A ≫ health) | Spring | Config documented |
 | **2.2** | Circuit breaker + bulkhead (Resilience4j) on recommender client | Spring | CB opens on forced 5xx; recovers |
-| **2.3** | `Idempotency-Key` on ingest POST; FastAPI stores key → same `ingest_id` on retry | Spring + **App** | Double POST same key → one logical ingest |
-| **2.4** | Correlation: `X-Correlation-Id` / `traceparent` on every call; log both sides | Both | Trace id visible end-to-end |
+| **2.3** | `Idempotency-Key` on ingest POST; FastAPI stores key → same `ingest_id` on retry | Spring + **App** | Double POST same key → one logical ingest — **app as-built (S2a)** |
+| **2.4** | Correlation: `X-Correlation-Id` / `traceparent` on every call; log both sides | Both | Trace id visible end-to-end — **app as-built (S2a)**; Spring half → S2b |
 | **2.5** | Spring **saga** orchestrator: ingest → persist ingest_id → Q&A (0..N) → (later) recommend | Spring | No re-ingest on Q&A failure |
-| **2.6** | Document max file size, expected p95; **error contract already as-built** (`{"error","message"}`) — document in ops runbook | Both | Runbook + regression tests |
+| **2.6** | Document max file size, expected p95; **error contract already as-built** (`{"error","message"}`) — document in ops runbook | Both | Runbook + regression tests — **app docs as-built (S2a)** |
 
-**As-built (app):** shared error JSON via `app/core/errors.py`; `run_in_threadpool` on ingest/Q&A.  
-**App remaining:** idempotency store (memory OK for single-node tests), correlation header logging.
+**As-built (app / S2a):** shared error JSON via `app/core/errors.py`; `run_in_threadpool` on ingest/Q&A; process-local `Idempotency-Key` store (`app/services/ingest_idempotency.py`); correlation middleware (`app/middleware/correlation.py`); OpenSpec FR-IX-024/025 + Postman headers.  
+**App remaining (out of S2a):** multi-replica shared idempotency store; Spring client half → **S2b**.
 
 **Defer C2 (202 + poll/SSE)** until measured gateway timeouts force it (Phase 9).
 
@@ -1092,7 +1092,7 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | FR-010 service recommend (seed) | In-process / tests only — not public Call 3 |
 | Full recommend multi-agent path | Not built (staged S7.0–S7.7) |
 | Pgvector / Neo4j populate | Not in app path |
-| Idempotency-Key on ingest | Not as-built (S2a) |
+| Idempotency-Key on ingest | **As-built S2a** (process-local; multi-replica later) |
 | Stage catalog | **Specified** (§3.1) |
 | Per-stage test implementation | **Specified** (§4 each stage + §5–§7) |
 | TDD process (P9) | **Specified** (§2.1 red→green→refactor; mandatory for code stages) |
