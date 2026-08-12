@@ -263,7 +263,7 @@ Routers MUST stay thin; pipeline construction and SQL live in services/pipelines
 - **FR-018b**: Empty candidate/document lists → predictable empty outputs, no unhandled exceptions.
 - **FR-019**: Ranking generation MUST use Haystack LLM generation + `PromptBuilder` (or equivalent).
 - **FR-019a**: (Target) SuperComponents for recurring subgraphs.
-- **FR-019b**: (Target) Tools with short unique name + NL description.
+- **FR-019b**: (Target) Tools with short unique name + NL description. **As-built (S7.1):** allowlisted in-process tools `decompose_project_needs`, `retrieve_fleet_assets`, `filter_fleet_candidates`, `check_booking_availability` (+ S6 `predict_asset_price`) via `app/agents/fleet_tools.py` + `tool_factory.py`. Free-form SQL/Cypher rejected. Graph wire remains S7.3+.
 - **FR-019c**: Pipelines assembled with explicit `.add_component` / `.connect` / `.run`.
 - **FR-019d**: (Target) File ingest branch by media type.
 - **FR-019e**: (Target) Hybrid retrieval when catalog knowledge exists.
@@ -277,6 +277,31 @@ Routers MUST stay thin; pipeline construction and SQL live in services/pipelines
 - **GIVEN** empty candidates (Scenario C)
 - **WHEN** filter/rank run
 - **THEN** predictable empty outputs without raising
+
+#### Scenario: Allowlisted fleet tools (S7.1 as-built)
+- **GIVEN** a recommend tool catalog from `build_recommend_tool_catalog(backend="fake")`
+- **WHEN** an unknown tool name is requested
+- **THEN** the factory rejects it (no free-form SQL mega-tool)
+
+### Requirement: Recommend agent state partitions (S7.0 as-built)
+
+The multi-agent recommend path SHALL use a shared `RecommendAgentState` (STM) with role-partitioned writes. Fleet Workers write only `fleet_by_need[need_id]`; Pricing Workers write only `prices_by_need[need_id]` for known candidate `asset_id`s; Coordinators write `recommendation` without inventing `asset_id`s outside fleet candidates. `run.indexing_ok == false` MUST block fleet (and pricing) partition writes. Illegal transitions raise a hard error (no partial corrupt write). Runtime: `app/agents/recommend_state.py` (`validate_state_transition`, `apply_partition_write`). LangGraph DAG wiring is Phase 7 S7.3+ and out of scope for this requirement's gate.
+
+**Status:** **as-built (S7.0)**.
+
+#### Scenario: Fleet Worker cannot write recommendation
+- **WHEN** a fleet_worker proposes a `recommendation` partition write
+- **THEN** validation rejects the transition
+
+#### Scenario: Gate false blocks fleet write
+- **GIVEN** `run.indexing_ok` is false
+- **WHEN** a fleet_worker writes `fleet_by_need`
+- **THEN** validation rejects the transition
+
+#### Scenario: Unknown priced asset rejected
+- **GIVEN** fleet candidates that do not include `AST-UNKNOWN`
+- **WHEN** a pricing_worker writes a price for `AST-UNKNOWN`
+- **THEN** validation rejects the transition
 
 ### Requirement: Pricing integration (FR-020–FR-024)
 
@@ -560,6 +585,7 @@ Architecture, Ragas pattern, deps, and offline pipeline sketch: [`design.md`](./
 | 0.9.1 | 2026-08-07 | As-built override FR-040: public path is indexing ingest |
 | 0.9.2 | 2026-08-07 | KG as-built pointer; sequential map |
 | 1.0.0 | 2026-08-10 | Migrated to OpenSpec under `openspec/specs/equipment-recommendation/`; architecture/day plan/deployment → design.md |
+| 1.1.0 | 2026-08-12 | **S7.0 + S7.1 as-built:** `RecommendAgentState` + F-2 partition validation; allowlisted fleet/needs tools + DI factory (FR-019b note). Graph (S7.3+) still TARGET. Archives `changes/archive/2026-08-12-s7-0-recommend-agent-state/`, `.../s7-1-fleet-tool-catalog/`. |
 
 When behaviour, API paths, tool names, or schedule gates change, bump this table and align OpenAPI / tests / execution plan in the same change set.
 

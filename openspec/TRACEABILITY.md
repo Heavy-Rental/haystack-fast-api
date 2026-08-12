@@ -28,6 +28,8 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | — (S2a new) | `openspec/changes/archive/2026-08-12-s2a-ingest-idempotency-correlation/` | FR-IX-024/025 proposal + tasks |
 | — (S3 new) | `openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/` | FR-IX-026 proposal + tasks |
 | — (S6 new) | `openspec/changes/archive/2026-08-12-s6-predict-asset-price-tool/` | US-5 / Phase 6 agent pricing tool |
+| — (S7.0 new) | `openspec/changes/archive/2026-08-12-s7-0-recommend-agent-state/` | Phase 7 RecommendAgentState + F-2 partition validation |
+| — (S7.1 new) | `openspec/changes/archive/2026-08-12-s7-1-fleet-tool-catalog/` | Phase 7 fleet/needs in-process tool catalog + DI factory |
 | `app/agents/prompts.py` | `openspec/spdd/prompts/project-knowledge-agents.md` (index) | OpenSPDD first-class prompts |
 
 ## FR / requirement ID map
@@ -64,6 +66,10 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | US-1 … US-4 + pricing FRs | Dynamic pricing | `specs/dynamic-pricing/spec.md` |
 | US-5 / S6 (as-built) | Dynamic pricing — agent tool `predict_asset_price` → `pricing_client` | `specs/dynamic-pricing/spec.md` + design; `app/agents/tools.py`; `tests/test_predict_asset_price_tool.py`; impl-plan **Phase 6 / S6** · archive `changes/archive/2026-08-12-s6-predict-asset-price-tool/` |
 | S6 change archive | predict_asset_price tool tasks | `changes/archive/2026-08-12-s6-predict-asset-price-tool/` |
+| S7.0 (as-built) | Equipment recommendation — `RecommendAgentState` + F-2 partition validation | `specs/equipment-recommendation/spec.md` + design; `app/agents/recommend_state.py`; `tests/test_recommend_agent_state.py`; impl-plan **Phase 7 / S7.0** · archive `changes/archive/2026-08-12-s7-0-recommend-agent-state/` |
+| S7.1 (as-built) | Equipment recommendation — fleet/needs allowlisted tools + DI factory | `specs/equipment-recommendation/spec.md`; `app/agents/fleet_tools.py` · `tool_factory.py`; `tests/test_fleet_tools.py` · `test_tool_factory.py`; impl-plan **Phase 7 / S7.1** · archive `changes/archive/2026-08-12-s7-1-fleet-tool-catalog/` |
+| S7.0 change archive | RecommendAgentState + validation tasks | `changes/archive/2026-08-12-s7-0-recommend-agent-state/` |
+| S7.1 change archive | Fleet tool catalog tasks | `changes/archive/2026-08-12-s7-1-fleet-tool-catalog/` |
 | FR-001 … FR-053 (+ NFR, demo) | Equipment recommendation parent | `specs/equipment-recommendation/spec.md` |
 | Domain invariants | Domain | `specs/domain/spec.md` |
 | Setup / layering / stack | Project setup | `specs/project-setup/spec.md` |

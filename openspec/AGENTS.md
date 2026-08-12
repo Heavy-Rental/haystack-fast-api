@@ -70,8 +70,11 @@ Spring Boot (RestClient / WebClient saga)
        tools: project_vector_search + project_kg_query
        prompts: app/agents/prompts.py (OpenSPDD)
 
-        ─ ─ ─ ─ deferred richer multi-agent recommend ─ ─ ─ ─
-C/W/D full graph S7.x can replace MVP RecommendationService behind same Call 2 DTO
+        ─ ─ ─ ─ multi-agent recommend building blocks ─ ─ ─ ─
+S7.0 as-built: RecommendAgentState + F-2 partition validation
+S7.1 as-built: fleet/needs allowlisted tools + DI factory (fake/SQL)
+S7.2–S7.7 TARGET: Neo4j tools, LangGraph DAG, synthesis, HTTP enrich, prompts
+C/W/D full graph can replace MVP RecommendationService behind same Call 2 DTO
 KG-2 equipment stockpile (Stage 2)
 ```
 

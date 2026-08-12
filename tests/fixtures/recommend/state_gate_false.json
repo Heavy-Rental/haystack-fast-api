@@ -1,0 +1,28 @@
+{
+  "run": {
+    "mode": "recommend",
+    "user_id": "u-test",
+    "ingest_id": "ing-failed",
+    "indexing_ok": false,
+    "start_date": "2026-09-01",
+    "end_date": "2026-09-14",
+    "include_pricing": true
+  },
+  "project": {
+    "research_notes": "",
+    "graph_notes": "",
+    "needs": []
+  },
+  "work_plan": [],
+  "fleet_by_need": {},
+  "prices_by_need": {},
+  "recommendation": {
+    "results_by_need": [],
+    "warnings": []
+  },
+  "tool_traces": [],
+  "persistence": {
+    "ai_recommendation_id": null,
+    "recommendation_item_ids": []
+  }
+}
