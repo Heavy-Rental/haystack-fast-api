@@ -43,6 +43,33 @@ traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01
 
 ---
 
+## Request headers (S2a as-built)
+
+| Header | Required | Notes |
+|--------|----------|--------|
+| `Idempotency-Key` | no | UUID (or opaque string) per **logical** ingest. When present, scoped with `user_id`. Successful **200** lean body is stored process-locally and **replayed** on retry (same `ingest_id`). Failed **4xx/5xx are not cached**. Missing key → always new ingest (legacy behaviour). |
+| `X-Correlation-Id` | no | End-to-end correlation. Logged on the request path; **echoed** on the response. If omitted, server mints a UUID. |
+| `traceparent` | no | Optional W3C Trace Context; logged when present (C1 logging-only). |
+
+**Idempotency rules (normative):**
+
+1. Applies to **successful ingest only** (HTTP 200 lean body).  
+2. Scope key = `user_id` + `Idempotency-Key` (same key under different users → different logical ingests).  
+3. JSON and multipart honour the same key.  
+4. Concurrent POSTs with the same scoped key use **single-flight** (wait for first producer; no double logical index).  
+5. Store is **process-local memory** (optional TTL via `IDEMPOTENCY_TTL_SECONDS`, default 24h). **Not multi-replica safe** without a later shared store.  
+6. Clients MAY retry **5xx** (and timed-out requests) with the **same** `Idempotency-Key`. Do **not** reuse a key for a different logical project-spec.
+
+### Example headers
+
+```http
+Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
+X-Correlation-Id: spring-req-abc123
+traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01
+```
+
+---
+
 ## Request
 
 | Field | Required | Notes |
