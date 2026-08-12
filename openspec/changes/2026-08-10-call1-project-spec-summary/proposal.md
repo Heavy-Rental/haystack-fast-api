@@ -3,13 +3,13 @@
 | Field | Value |
 |-------|--------|
 | **Date** | 2026-08-10 |
-| **Status** | Spec / feasibility only — **not implemented** |
+| **Status** | **Shipped as-built** (S1a–S1e / Phase 1.7) — Call 1 lean FR-IX-023 summary |
 | **Capability** | indexing (+ intake alignment) |
 | **Trace** | FR-IX-023 · FR-I-016 |
 
 ## Problem
 
-Live `POST /internal/v1/recommendations/submitprojectspecification` returns a **lean** ingest body (`ingest_id`, `user_id`, `user_requirement_summary`, `warnings[]`) after S1a. Spring/portal clients still want **full FR-IX-023** enrichment: structured `needs_summary[]`, tentative rental dates, and expected budget — while keeping `ingest_id` for Call 2 / Call 3.
+Live `POST /internal/v1/recommendations/submitprojectspecification` returns the **FR-IX-023 as-built** lean body: `ingest_id`, `user_id`, `user_requirement_summary`, `tentative_*` (request preferred; free-text extract when omitted), `needs_summary[]`, `expected_budget` | null, `warnings[]`. Still not Call 3 `results_by_need`.
 
 ## Proposal
 
@@ -26,19 +26,20 @@ Live `POST /internal/v1/recommendations/submitprojectspecification` returns a **
 - Using `include_pricing` as budget
 - Runtime code in this change set
 
-## Specs updated
+## Specs updated (as-built)
 
-- `openspec/specs/indexing/spec.md` (FR-IX-023 TARGET)
+- `openspec/specs/indexing/spec.md` (**FR-IX-023 as-built** S1a–S1e / Phase 1.7)
 - `openspec/specs/indexing/contracts/ingest-from-project-spec.md`
 - `openspec/specs/indexing/design.md`
 - `openspec/specs/recommendation-intake/spec.md` (FR-I-016)
 - `openspec/AGENTS.md` flow
 - `Feasibility_Study/call1-ingest-response-project-summary.md`
+- `Feasibility_Study/implementation-plan.md` Phase 1
 
-## Implementation tasks (later)
+## Implementation tasks (shipped)
 
-- [ ] Extend `IngestFromProjectSpecResponse` schema
-- [ ] Wire need decomposer / extractors after KG in `IndexingIngestService`
-- [ ] Echo request dates; extract budget safely
-- [ ] Tests + Postman + OpenAPI
-- [ ] Converge as-built status when shipped
+- [x] Extend `IngestFromProjectSpecResponse` schema (lean + FR-IX-023 fields)
+- [x] Wire need decomposer / date / budget extractors after KG in `IndexingIngestService`
+- [x] Echo request dates (S1b); free-text date extract (S1e); budget extract (S1d)
+- [x] Tests + Postman + OpenAPI
+- [x] Converge as-built status (Phase 1.7)

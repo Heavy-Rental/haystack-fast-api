@@ -68,6 +68,47 @@ def test_from_project_spec_json_unstructured(client: TestClient) -> None:
     assert "results_by_need" not in body
 
 
+def test_tentative_dates_extracted_from_text_when_request_omits(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        ENDPOINT,
+        json={
+            "user_id": "user_dates",
+            "project_text": (
+                "Need scissors lifts for fit-out. "
+                "Rental period from 2026-09-01 to 2026-09-14. "
+                "Budget SGD 10,000."
+            ),
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    _assert_lean_body(body)
+    assert body["tentative_start_date"] == "2026-09-01"
+    assert body["tentative_end_date"] == "2026-09-14"
+    assert body["expected_budget"] is not None
+    assert body["expected_budget"]["amount"] == 10000.0
+
+
+def test_request_dates_override_text_extract(client: TestClient) -> None:
+    response = client.post(
+        ENDPOINT,
+        json={
+            "user_id": "user_override",
+            "start_date": "2026-10-01",
+            "end_date": "2026-10-20",
+            "project_text": (
+                "Hire from 2026-09-01 to 2026-09-12 for earthworks."
+            ),
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tentative_start_date"] == "2026-10-01"
+    assert body["tentative_end_date"] == "2026-10-20"
+
+
 def test_expected_budget_extracted_when_present(client: TestClient) -> None:
     response = client.post(
         ENDPOINT,

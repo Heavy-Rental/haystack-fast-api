@@ -36,6 +36,7 @@ from app.services.project_knowledge_session import (
     get_project_knowledge_registry,
 )
 from app.services.project_spec_budget import extract_expected_budget
+from app.services.project_spec_dates import resolve_rental_dates
 
 logger = logging.getLogger(__name__)
 
@@ -379,6 +380,14 @@ class IndexingIngestService:
         )
         public_warnings.extend(summary_warnings)
 
+        # S1b + S1e: request dates preferred; else free-text/file extract.
+        resolved_start, resolved_end, date_warnings = resolve_rental_dates(
+            request_start=start_date,
+            request_end=end_date,
+            text=summary_source,
+        )
+        public_warnings.extend(date_warnings)
+
         # S1c: structured needs after successful index+KG (stub decomposer in CI).
         decomposer = self._need_decomposer or create_need_decomposer()
         try:
@@ -417,10 +426,12 @@ class IndexingIngestService:
                     "kg_transform_applied": kg_transform_applied,
                     "user_requirement_summary": user_requirement_summary,
                     "tentative_start_date": (
-                        start_date.isoformat() if start_date is not None else None
+                        resolved_start.isoformat()
+                        if resolved_start is not None
+                        else None
                     ),
                     "tentative_end_date": (
-                        end_date.isoformat() if end_date is not None else None
+                        resolved_end.isoformat() if resolved_end is not None else None
                     ),
                     "needs_summary": [item.model_dump() for item in needs_summary],
                     "expected_budget": (
@@ -432,7 +443,7 @@ class IndexingIngestService:
 
         logger.info(
             "indexing_ingest ingest_id=%s user_id=%s data_kind=%s chunks=%s "
-            "written=%s kg_built=%s needs=%s budget=%s",
+            "written=%s kg_built=%s needs=%s budget=%s dates=%s..%s",
             ingest_id,
             uid,
             data_kind,
@@ -441,14 +452,16 @@ class IndexingIngestService:
             kg_built,
             len(needs_summary),
             expected_budget.amount if expected_budget else None,
+            resolved_start,
+            resolved_end,
         )
 
         return IngestFromProjectSpecResponse(
             ingest_id=ingest_id,
             user_id=uid,
             user_requirement_summary=user_requirement_summary,
-            tentative_start_date=start_date,
-            tentative_end_date=end_date,
+            tentative_start_date=resolved_start,
+            tentative_end_date=resolved_end,
             needs_summary=needs_summary,
             expected_budget=expected_budget,
             warnings=public_warnings,

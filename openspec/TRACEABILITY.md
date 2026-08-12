@@ -36,9 +36,9 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | FR-IX-023 dates echo (as-built S1b) | Indexing — `tentative_*` echo request dates | `specs/indexing/spec.md` + contract |
 | FR-IX-023 S1c (as-built) | Indexing — `needs_summary[]` | `specs/indexing/spec.md` + contract; impl-plan **1.4** |
 | FR-IX-023 S1d (as-built) | Indexing — `expected_budget` | `specs/indexing/spec.md` + contract; impl-plan **1.5** |
-| FR-IX-023 S1e (TARGET, after S1d) | Indexing — free-text/file date extract | `specs/indexing/spec.md` + contract; impl-plan **1.6** |
-| FR-IX-023 converge (TARGET) | Mark as-built when S1c+S1d+S1e green | impl-plan **1.7**; change `changes/2026-08-10-call1-project-spec-summary/` |
-| FR-I-016 (TARGET) | Intake — summary ≠ recommend | `specs/recommendation-intake/spec.md` |
+| FR-IX-023 S1e (as-built) | Indexing — free-text/file date extract | `specs/indexing/spec.md` + contract; impl-plan **1.6** |
+| FR-IX-023 Call 1 summary (as-built) | Full lean summary S1a–S1e | `specs/indexing/spec.md` + contract; impl-plan **1.7** |
+| FR-I-016 (as-built alignment) | Intake — FR-IX-023 summary ≠ recommend | `specs/recommendation-intake/spec.md` |
 | MIME map §3 | Indexing | Requirement: MIME classification map |
 | FR-KG-001 … FR-KG-008 | KG Part A | `specs/knowledge-graph/spec.md` |
 | FR-KG-010 … FR-KG-014 | KG Part B (011 Stage 2) | same |

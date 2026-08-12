@@ -20,7 +20,7 @@ Related studies: [`README.md`](./README.md) · normative product behaviour: [`..
 
 | Study | Verdict | Priority for shipping value |
 |-------|---------|------------------------------|
-| **Call 1 project-spec summary** | GO lean body first (`ingest_id`, `user_id`, `user_requirement_summary`); full FR-IX-023 needs/dates/budget **TARGET** | **High** — client-facing, small surface |
+| **Call 1 project-spec summary** | GO lean body + full FR-IX-023 needs/dates/budget **as-built** (S1a–S1e / Phase 1.7) | **High** — client-facing, small surface |
 | **Spring ↔ FastAPI resilience** | REST default; SSE not for upload; C1 then C2 jobs | **High** for production multi-call |
 | **Postgres–Haystack–Neo4j dual plane** | Viable dual-track; poll ETL first; Neo4j projection async | **High** for production recommend accuracy |
 | **Indexing → SuperComponent** | GO, optional packaging; no KG inside SC; packaging for **Coordinator gate [4]** | **Low** — refactor, not product path |
@@ -52,7 +52,7 @@ Call 1: POST /internal/v1/recommendations/submitprojectspecification
   → lean public body (shipping contract):
        ingest_id, user_id, user_requirement_summary, warnings[]
   → technical indexing/KG fields NOT on public body (still run internally)
-  → FR-IX-023 remainder planned: S1c needs → S1d budget → S1e free-text dates → 1.7 as-built
+  → FR-IX-023 Call 1 summary **as-built** (S1a–S1e: summary, date echo+extract, needs, budget)
 
 Call 2: POST /internal/v1/recommendations/project-knowledge/getassetrecommendations
   → requires user_id + ingest_id from Call 1 + query
@@ -450,8 +450,8 @@ Maps to [`call1-ingest-response-project-summary.md`](./call1-ingest-response-pro
 | **1.3 S1b** | Echo request `start_date`/`end_date` as `tentative_start_date` / `tentative_end_date` when present | service + API | Dates in response when supplied; null when omitted | **Done** |
 | **1.4 S1c** | `needs_summary[]` via decomposer **after** successful index+KG only | service + stub decomposer | CI stub; LLM optional | **Done** |
 | **1.5 S1d** | `expected_budget` extract: currency phrases only; **never invent** | extractor + tests | No hallucinated budgets | **Done** |
-| **1.6 S1e** | **FR-IX-023 free-text date extract:** when request omits dates, extract rental window from project text / extracted file content when confident; **request dates still preferred**; else null + warning; **never invent** | extractor + API fixtures | Text/file with clear dates fills `tentative_*` without request dates; request overrides extract | Planned (**after S1d**) |
-| **1.7** | Converge FR-IX-023: full tests + Postman; **mark FR-IX-023 as-built** in OpenSpec when **S1c + S1d + S1e** are green | tests, postman, openspec | Full Call 1 project-spec summary as-built | Planned (**after S1e**) |
+| **1.6 S1e** | **FR-IX-023 free-text date extract:** when request omits dates, extract rental window from project text / extracted file content when confident; **request dates still preferred**; else null + warning; **never invent** | extractor + API fixtures | Text/file with clear dates fills `tentative_*` without request dates; request overrides extract | **Done** |
+| **1.7** | Converge FR-IX-023: full tests + Postman; **mark FR-IX-023 as-built** in OpenSpec when **S1c + S1d + S1e** are green | tests, postman, openspec | Full Call 1 project-spec summary as-built | **Done** |
 
 **FR-IX-023 completion order (normative for implementers):**
 
@@ -466,15 +466,14 @@ S1c needs_summary[]           (1.4)
 S1d expected_budget           (1.5)
     │
     ▼
-S1e free-text date extract    (1.6)  ← remaining date half of FR-IX-023
+S1e free-text date extract    (1.6)  ← **Done**
     │
     ▼
-1.7 mark FR-IX-023 as-built   (OpenSpec + Postman + regression)
+1.7 mark FR-IX-023 as-built   (OpenSpec + Postman + regression)  ← **Done**
 ```
 
-- **FR-IX-023 is complete only after S1c + S1d + S1e.**  
-- **S1b** stays request-echo only; **S1e** adds document/text extract when the request omits dates.  
-- Do not mark FR-IX-023 as-built at 1.7 until free-text dates (S1e) ship.
+- **FR-IX-023 is complete** after S1c + S1d + S1e (**Phase 1.7 as-built**).  
+- **S1b** stays request-echo only; **S1e** adds document/text extract when the request omits dates.
 
 **Non-goals in this phase:** ranked assets, ML rent, Call 3; public `documents[]` / `kg_*`.
 
@@ -501,6 +500,13 @@ S1e free-text date extract    (1.6)  ← remaining date half of FR-IX-023
 ### Phase 2 — Spring ↔ FastAPI resilience C1 (mostly Spring)
 
 Maps to `spring-boot-fastapi-integration-resilience.md` Phase C1.
+
+**Stage-scoped implementation plans (implementers):**
+
+| Stage | Perspective | Plan |
+|-------|-------------|------|
+| **S2a** | haystack-fast-api | [`phase2-s2a-haystack-implementation-plan.md`](./phase2-s2a-haystack-implementation-plan.md) |
+| **S2b** | Spring Boot REST API | [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) |
 
 | Step | Work | Owner | Exit criteria |
 |------|------|-------|---------------|
@@ -1077,7 +1083,7 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | Item | Status |
 |------|--------|
 | Feasibility decisions | Complete (GO) |
-| OpenSpec FR-IX-023 full Call 1 | Partial as-built (S1a/S1b); remainder **S1c → S1d → S1e** then **1.7** as-built mark |
+| OpenSpec FR-IX-023 full Call 1 | **As-built** (S1a–S1e complete; Phase 1.7) |
 | Call 1 lean public body | Shipping: `ingest_id`, `user_id`, `user_requirement_summary`, `tentative_*` echo, `warnings` |
 | Internal recommendation routes | `/internal/v1/recommendations/...` |
 | As-built ingest + Stage-1 Q&A | Live (internal paths) |

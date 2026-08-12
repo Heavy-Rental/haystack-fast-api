@@ -3,12 +3,12 @@
 | Field | Value |
 |-------|--------|
 | **Document type** | API / product feasibility study |
-| **Status** | Complete (study) — **lean public body is the shipping contract**; full FR-IX-023 still TARGET |
+| **Status** | Complete (study) — lean public body + **FR-IX-023 Call 1 summary as-built** (S1a–S1e); not Call 3 recommend |
 | **Date** | 2026-08-11 |
-| **Version** | 1.1.1 |
+| **Version** | 1.2.0 |
 | **Endpoint** | `POST /internal/v1/recommendations/submitprojectspecification` |
 | **Question** | What should Call 1 return for Spring/portal without over-exposing indexing/KG internals, while enabling Call 2? |
-| **OpenSpec** | FR-IX-023 TARGET (full) · contract `openspec/specs/indexing/contracts/ingest-from-project-spec.md` · proposal `openspec/changes/2026-08-10-call1-project-spec-summary/` |
+| **OpenSpec** | FR-IX-023 **as-built** (S1a–S1e) · contract `openspec/specs/indexing/contracts/ingest-from-project-spec.md` · proposal `openspec/changes/2026-08-10-call1-project-spec-summary/` |
 | **Related** | Dual-plane §2.1 Call 1 · multi-agent synthesis (Call 3) · ml-pricing · C/W/D roles (Call 3 only) · [`implementation-plan.md`](./implementation-plan.md) Phase 1 |
 
 ---
@@ -19,12 +19,12 @@
 |----------|--------|
 | Minimal fields for Call 2 handoff? | **`ingest_id` + `user_id`** (client already knows `user_id`) |
 | Client-facing requirement text without technical dump? | **GO** — `user_requirement_summary` (string) from `project_text` or extracted file content |
-| Full needs + dates + budget (FR-IX-023)? | **GO (TARGET)** — later increment on top of lean body |
+| Full needs + dates + budget (FR-IX-023)? | **GO (as-built)** — S1a–S1e / Phase 1.7 |
 | Expose `documents[]` / `kg_*` / counts on public body? | **No** (default) — keep internal; optional verbose later |
 | Same as Call 3 recommend (assets + rent price)? | **No** |
 | `include_pricing` as budget? | **No** (boolean only) |
 
-**Overall:** Call 1 public response is a **lean client-facing envelope** after successful index + KG (pipeline still runs fully for Call 2 session). Full structured `needs_summary[]` / dates / budget remains **FR-IX-023 TARGET**.
+**Overall:** Call 1 public response is a **lean client-facing envelope** after successful index + KG (pipeline still runs fully for Call 2 session). Full structured `needs_summary[]` / dates / budget is **FR-IX-023 as-built**.
 
 **Not multi-agent recommend:** Call 1 is HTTP **ingest response** enrichment (service path, or Coordinator **[4]** gate when agent-fronted). It is **not** Coordinator synthesis **[8]**, not fleet/pricing **Workers**, and not Call 3 `results_by_need`.
 
@@ -32,17 +32,20 @@
 
 ---
 
-## 2. Shipping lean body vs full TARGET
+## 2. Shipping lean body + FR-IX-023 as-built
 
 ### Lean public body (shipping contract)
 
 Required for Spring saga Call 1 → Call 2 without oversharing:
 
 ```text
-200 IngestFromProjectSpecResponse (lean)
+200 IngestFromProjectSpecResponse (lean + FR-IX-023 as-built)
   ingest_id                      ← required for Call 2
   user_id                        ← echo
   user_requirement_summary       ← string summary of project_text or extracted multipart content
+  tentative_start_date / end     ← request preferred; else free-text extract; else null
+  needs_summary[]                ← need decomposer (stub default in CI)
+  expected_budget | null         ← extract only; never invent
   warnings[]                     ← soft issues (may be empty)
 ```
 
@@ -52,7 +55,22 @@ Required for Spring saga Call 1 → Call 2 without oversharing:
 {
   "ingest_id": "ing_a1b2c3d4e5f6",
   "user_id": "user_demo",
-  "user_requirement_summary": "Indoor elevated work ~8m; need scissors lift on soft clay site for fit-out.",
+  "user_requirement_summary": "Indoor elevated work ~8m; need scissors lift on soft clay. Budget SGD 15000. From 2026-09-01 to 2026-09-12.",
+  "tentative_start_date": "2026-09-01",
+  "tentative_end_date": "2026-09-12",
+  "needs_summary": [
+    {
+      "need_id": "need_1",
+      "description": "Indoor elevated work ~8m; need scissors lift on soft clay. Budget SGD 15000. From 2026-09-01 to 2026-09-12.",
+      "equipment_hints": [],
+      "quantity": 1
+    }
+  ],
+  "expected_budget": {
+    "amount": 15000,
+    "currency": "SGD",
+    "source": "extracted"
+  },
   "warnings": []
 }
 ```
@@ -62,21 +80,12 @@ Required for Spring saga Call 1 → Call 2 without oversharing:
 | `ingest_id` | Generated `ing_` + hex | **Only** server-generated handle Call 2 needs |
 | `user_id` | Request echo | Client already sent it |
 | `user_requirement_summary` | Deterministic summary of `project_text` **or** extracted file text after conversion | Not raw bytes; not LLM invent; truncate + warning if long |
-| `warnings` | Conversion / truncation soft issues | Empty when none |
+| `tentative_*` | Request dates preferred; else free-text/file extract (S1e) | Null + warning when unknown; never invent |
+| `needs_summary[]` | Need decomposer after index+KG | Stub default in CI |
+| `expected_budget` | Currency/amount phrases only | Null + warning if uncertain; never invent |
+| `warnings` | Conversion / truncation / missing extract soft issues | Empty when none |
 
 **Internal (not on public body):** DocumentStore write, KG-1 build, session registry, chunk previews, `kg_artifact_path`, counts, `data_kind`, etc. — still **executed** so Call 2 works.
-
-### Full TARGET (FR-IX-023 — later)
-
-```text
-200 (future enrichment of lean body)
-  ingest_id, user_id
-  user_requirement_summary       ← may remain or be superseded by structured needs
-  needs_summary[]                ← decomposer / LLM
-  tentative_start_date / end     ← request preferred, else extract
-  expected_budget | null         ← extract only; never invent
-  warnings[]
-```
 
 ---
 
@@ -86,10 +95,10 @@ Required for Spring saga Call 1 → Call 2 without oversharing:
 |-------|--------|-------------|
 | `ingest_id` | Existing | **Required** for Call 2/3 |
 | `user_id` | Request echo | **Required** (lean) |
-| `user_requirement_summary` | project_text or extracted docs | **GO** (deterministic first) |
-| `needs_summary[]` | NeedDecomposer / LLM | **GO (TARGET)** |
-| `tentative_*` dates | Request preferred; else extract | **GO (TARGET)** |
-| `expected_budget` | Currency phrases only | **CONDITIONAL GO** — null + warning if uncertain |
+| `user_requirement_summary` | project_text or extracted docs | **GO (as-built)** |
+| `needs_summary[]` | NeedDecomposer / LLM | **GO (as-built S1c)** |
+| `tentative_*` dates | Request preferred; else extract | **GO (as-built S1b+S1e)** |
+| `expected_budget` | Currency phrases only | **GO (as-built S1d)** — null + warning if uncertain |
 
 ---
 
@@ -100,14 +109,14 @@ Required for Spring saga Call 1 → Call 2 without oversharing:
        │
        ▼
 user_requirement_summary        ← from project_text or extracted content
+tentative_* / needs / budget    ← FR-IX-023 as-built (S1b–S1e)
        │
        ▼
 lean response assembly          ← no documents[] / kg_* on public body
 ```
 
 - Summary extraction **must not** run if index/KG fails (no partial “success” without session).
-- Prefer **deterministic** summary for CI; optional LLM rewrite later.
-- Structured `needs_summary` / budget = later phase after lean ships.
+- Prefer **deterministic** summary / extractors for CI; optional LLM decomposer via config.
 
 ---
 
@@ -115,7 +124,7 @@ lean response assembly          ← no documents[] / kg_* on public body
 
 | Call | Route | Body focus |
 |------|-------|------------|
-| **1** | `POST /internal/v1/recommendations/submitprojectspecification` | Lean: **`ingest_id` + `user_id` + `user_requirement_summary`** |
+| **1** | `POST /internal/v1/recommendations/submitprojectspecification` | Lean FR-IX-023: **`ingest_id` + `user_id` + summary + dates + needs + budget** |
 | **2** | `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` | Q&A: needs `user_id` + `ingest_id` + `query` |
 | **3** | Future multi-agent recommend HTTP | Ranked **assets** + **predicted rent** |
 
@@ -128,9 +137,9 @@ Skipping Call 2 after Call 1 remains valid once Call 3 is reattached.
 | Risk | Mitigation |
 |------|------------|
 | Clients that parsed technical `documents[]` / `kg_*` | Lean is intentional; Spring should use lean fields only |
-| Hallucinated budget (full TARGET) | Null when uncertain; source marker |
+| Hallucinated budget or dates | Null when uncertain; source marker; never invent |
 | Confusion with recommend | Spec safeguards FR-IX-023 / FR-I-016; path is ingest not Call 3 |
-| Call 1 latency | Deterministic summary; stub decomposer when structured needs land |
+| Call 1 latency | Deterministic summary + extractors; stub decomposer default |
 
 ---
 
@@ -143,8 +152,8 @@ Skipping Call 2 after Call 1 remains valid once Call 3 is reattached.
 | **S1b** | Echo request dates as `tentative_*` | **Done** |
 | **S1c** | `needs_summary[]` via decomposer | **Done** |
 | **S1d** | `expected_budget` extract; never invent | **Done** |
-| **S1e** | Free-text / file date extract when request omits dates | Planned **after S1d** |
-| **1.7** | Mark full FR-IX-023 as-built (OpenSpec + Postman) | After **S1c + S1d + S1e** |
+| **S1e** | Free-text / file date extract when request omits dates | **Done** |
+| **1.7** | Mark full FR-IX-023 as-built (OpenSpec + Postman) | **Done** |
 
 **FR-IX-023 order:** S1c → S1d → **S1e** → 1.7. Free-text dates are **not** part of S1b.
 
@@ -160,6 +169,7 @@ See [`implementation-plan.md`](./implementation-plan.md) Phase 1 (v3.4.0+).
 | **1.0.1** | 2026-08-11 | Clarify Call 1 ≠ multi-agent recommend synthesis / Workers |
 | **1.1.0** | 2026-08-11 | Lean public body: `ingest_id` + `user_id` + `user_requirement_summary`; internal path `/internal/v1/.../submitprojectspecification`; full FR-IX-023 remains TARGET |
 | **1.1.1** | 2026-08-11 | FR-IX-023 order: S1c → S1d → **S1e free-text dates** (after S1d) → 1.7 as-built; aligns with implementation-plan v3.4.0 |
+| **1.2.0** | 2026-08-11 | **S1e + 1.7 shipped:** free-text date extract; full FR-IX-023 Call 1 summary **as-built** in OpenSpec + Postman |
 
 ---
 
