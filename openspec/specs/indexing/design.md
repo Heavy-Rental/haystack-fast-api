@@ -158,7 +158,11 @@ Compact response: portal may only need identity + summary; technical index/KG fi
 
 ### How to test this capability (runbook)
 
-Working directory: `haystack-fast-api/` (uv project root). CI-safe defaults: `INDEXING_EMBEDDER=mock`, `PROJECT_AGENT_MODE=stub`, `KG_APPLY_TRANSFORMS=false`.
+Working directory: `haystack-fast-api/` (uv project root).
+
+**CI-safe defaults (runtime / manual):** `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `PROJECT_AGENT_MODE=stub`, `KG_APPLY_TRANSFORMS=false`.
+
+**Pytest isolation (as-built):** `tests/conftest.py` autouse forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `PROJECT_AGENT_MODE=stub`, and a temp `KG_ARTIFACT_DIR` so a developer’s host `.env` (e.g. dim `768` for OpenAI) does not fail the suite. There are **no** optional pytest markers or external prereqs for the default suite — `uv run pytest` is the full CI path. Vector retrieval tests must embed documents with the same mode/dim the query path uses (settings or explicit kwargs).
 
 #### Automated (default CI)
 
@@ -171,7 +175,7 @@ uv run pytest tests/test_indexing_tool.py -q
 uv run pytest tests/test_indexing_tool.py tests/test_recommendations_intake.py \
   tests/test_ingest_idempotency.py tests/test_correlation_middleware.py -q
 
-# Full suite
+# Full suite (no -m filter; no live LLM / Pgvector / Neo4j required)
 uv run pytest tests/ -q
 ```
 

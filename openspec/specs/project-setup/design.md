@@ -75,13 +75,33 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 ```bash
 uv run pytest
+# equivalent:
+uv run pytest tests/ -q
 ```
+
+**Default suite (as-built):** one job, no markers, no external LLM/embedder APIs, no Testcontainers. Host `.env` values for production-like embedder/LLM MUST NOT break pytest — isolation lives in `tests/conftest.py`.
 
 | Test module | Coverage |
 |-------------|----------|
 | `tests/test_config.py` | Default sync `database_url`; override |
-| `tests/test_health.py` | Health shape; ok/degraded |
-| `tests/conftest.py` | `TestClient` via `create_app()` |
+| `tests/test_health.py` | Health shape; ok/degraded (does not skip if Postgres is down) |
+| `tests/conftest.py` | `TestClient` via `create_app()`; **autouse** env isolation |
+| Full tree `tests/` | Capability packs (indexing, KG, pricing, recommend service, …) |
+
+#### `tests/conftest.py` isolation (autouse)
+
+| Env | Forced value | Purpose |
+|-----|--------------|---------|
+| `KG_ARTIFACT_DIR` | `tmp_path / "kg"` | Do not write into repo `artifacts/kg` |
+| `PROJECT_AGENT_MODE` | `stub` | Deterministic Stage-1 synthesis |
+| `INDEXING_EMBEDDER` | `mock` | Override host `openai` / `sentence-transformers` |
+| `INDEXING_EMBEDDING_DIM` | `384` | Override host dims (e.g. 768); keep mock store/query aligned |
+
+Also resets process-local ingest idempotency store and project-knowledge session registry per test, and clears `get_settings` cache.
+
+#### Optional / future CI (TARGET only)
+
+Feasibility docs may list `@pytest.mark.pgvector`, `@pytest.mark.neo4j`, `@pytest.mark.integration`. Those markers are **not** registered or used in the current suite. Do not document them as required prereqs for `uv run pytest` until implemented.
 
 ### Manual smoke
 

@@ -9,7 +9,7 @@
 | **Document type** | Architecture / infrastructure feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | **2.7.4** |
+| **Version** | **2.7.5** |
 | **Application** | `haystack-fast-api` |
 | **Related specs** | `openspec/specs/project-setup/`, `indexing/`, `knowledge-graph/`, `recommendation-pipeline/`, `dynamic-pricing/`, `equipment-recommendation/` |
 | **Related studies** | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) · [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) · [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) · [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) · [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) · [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) |
@@ -428,11 +428,18 @@ Without filters, tenants can see each other’s chunks — isolation is an **app
 | 3 | Wire factory into `build_indexing_pipeline` / `IndexingIngestService` |
 | 4 | Session registry uses the same store instance (or reconnection for Pgvector) |
 | 5 | `project_vector_search` uses embedder + retriever against that store |
-| 6 | Tests: default memory; one integration suite against Pgvector |
+| 6 | Tests: default memory; one integration suite against Pgvector (**TARGET** `@pytest.mark.pgvector`) |
 | 7 | Optional dual-write period (memory + pgvector) only if debugging — usually unnecessary |
 | 8 | Production default → `pgvector`; memory for local/CI |
 
-**Embedder constraint:** `INDEXING_EMBEDDING_DIM` (and model) must match the Pgvector column dimension used at table create time.
+**Embedder constraint:** `INDEXING_EMBEDDING_DIM` (and model) must match:
+
+1. the Pgvector column dimension used at table create time (I1), **and**
+2. the **query-side** embedder used by `project_vector_search` / retrieval against that store (same mode + dim as documents written at ingest).
+
+A store/query dim mismatch fails with a Haystack embedding-size error (not empty hits).
+
+**As-built CI:** `tests/conftest.py` forces `INDEXING_EMBEDDER=mock` and `INDEXING_EMBEDDING_DIM=384` so host `.env` (e.g. OpenAI dim 768) does not break the default unmarked suite. Optional pgvector/neo4j markers are **not registered yet** — see [`implementation-plan.md`](./implementation-plan.md) §7.0 and OpenSpec project-setup.
 
 **Promotion vs write-at-index:**  
 **Preferred target:** Indexing Pipeline **writes Pgvector directly** so durable multi-user storage is not an extra hop. The only DocumentStore backends in scope are **InMemory** (as-built/CI) and **Pgvector** (target).
@@ -980,8 +987,8 @@ SOURCE_HOST: postgres-primary
 1. `CREATE EXTENSION vector` on Postgres-Haystack; PgvectorDocumentStore smoke write/read.  
 2. Indexing pipeline flag `pgvector`: two `user_id`s, prove retrieval isolation.  
 3. TTL/delete job deletes one ingest without affecting the other user.  
-4. Embed dim mismatch fails fast with clear error.  
-5. Regression: full ingest pytest suite with memory flag still green.
+4. Embed dim mismatch fails fast with clear error (column vs `INDEXING_EMBEDDING_DIM`; query vs store).  
+5. Regression: full ingest pytest suite with memory flag still green (`uv run pytest tests/ -q`; conftest keeps mock dim 384).
 
 ---
 
@@ -1078,6 +1085,8 @@ SOURCE_HOST: postgres-primary
 | **2.7.1** | 2026-08-11 | §4.1.1: agent A–L sequential/parallel processing pointer |
 | **2.7.2** | 2026-08-11 | Call 1 lean body + full internal route paths; FR-IX-023 full TARGET remains |
 | **2.7.3** | 2026-08-11 | Call 1 FR-IX-023 **as-built** (S1a–S1e / Phase 1.7); free-text dates + needs + budget on lean body |
+| **2.7.4** | 2026-08-12 | Call numbering: Call 2 = recommend/quote; Call 3 = chatbot Q&A |
+| **2.7.5** | 2026-08-12 | §4.5 embedder: query/store dim must match; as-built pytest conftest mock dim 384; optional markers remain TARGET |
 
 ---
 
@@ -1097,6 +1106,7 @@ SOURCE_HOST: postgres-primary
 | **Indexing DocumentStore cutover** | **Yes — I1: pipeline writes PgvectorDocumentStore** |
 | Multi-user project files | **Pgvector + user_id/ingest_id filters + TTL** |
 | Durable store default | **Pgvector in Indexing Pipeline only** (InMemory for CI) |
+| Default pytest (as-built) | Unmarked suite; conftest mock embedder dim **384**; query/store dim match for vector tools |
 | **Call 1 lean public body?** | **GO (shipping)** — FR-IX-023 as-built lean envelope; no technical dump |
 | **Call 1 full needs/dates/budget?** | **GO (as-built)** — FR-IX-023 S1a–S1e; not Call 2 recommend quote |
 | **Multi-Agent after [4]** | **GO** — Coordinator + Delegator + Workers run **in-process tools**; Coordinator synthesizes |

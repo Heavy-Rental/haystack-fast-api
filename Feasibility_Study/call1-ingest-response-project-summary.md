@@ -5,7 +5,7 @@
 | **Document type** | API / product feasibility study |
 | **Status** | Complete (study) — lean public body + **FR-IX-023 Call 1 summary as-built** (S1a–S1e); not Call 2 recommend quote |
 | **Date** | 2026-08-11 |
-| **Version** | 1.2.1 |
+| **Version** | 1.2.2 |
 | **Endpoint** | `POST /internal/v1/recommendations/submitprojectspecification` |
 | **Question** | What should Call 1 return for Spring/portal without over-exposing indexing/KG internals, while enabling Call 2? |
 | **OpenSpec** | FR-IX-023 **as-built** (S1a–S1e) · contract `openspec/specs/indexing/contracts/ingest-from-project-spec.md` · proposal `openspec/changes/2026-08-10-call1-project-spec-summary/` |
@@ -169,6 +169,7 @@ See [`implementation-plan.md`](./implementation-plan.md) Phase 1 (v3.4.0+).
 | **1.1.0** | 2026-08-11 | Lean public body: `ingest_id` + `user_id` + `user_requirement_summary`; internal path `/internal/v1/.../submitprojectspecification`; full FR-IX-023 remains TARGET |
 | **1.1.1** | 2026-08-11 | FR-IX-023 order: S1c → S1d → **S1e free-text dates** (after S1d) → 1.7 as-built; aligns with implementation-plan v3.4.0 |
 | **1.2.0** | 2026-08-11 | **S1e + 1.7 shipped:** free-text date extract; full FR-IX-023 Call 1 summary **as-built** in OpenSpec + Postman |
+| **1.2.2** | 2026-08-12 | Cross-link: default pytest isolation (mock embedder dim 384, no optional markers) — [`implementation-plan.md`](./implementation-plan.md) §7.0 |
 
 ---
 

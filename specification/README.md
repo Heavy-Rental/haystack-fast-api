@@ -39,5 +39,6 @@ SoT: [`../openspec/AGENTS.md`](../openspec/AGENTS.md) · [`../Feasibility_Study_
 | — (S3 agent gate FR-IX-026) | [`openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/`](../openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/) |
 | Traceability | [`openspec/TRACEABILITY.md`](../openspec/TRACEABILITY.md) |
 | **How to test S3 gate** | [`openspec/specs/indexing/design.md` runbook](../openspec/specs/indexing/design.md#how-to-test-this-capability-runbook) · [spec verification](../openspec/specs/indexing/spec.md#how-to-test-fr-ix-026--s3--verification-instructions) · [legacy pointer](./SPEC-indexing-file-type-router.md#how-to-test-pointer--s3--fr-ix-026) |
+| **Default pytest isolation** | [`openspec/specs/project-setup/`](../openspec/specs/project-setup/) — no optional markers; conftest forces mock embedder dim 384 · [KG testing guide](../docs/testing/knowledge-graph-testing-guide.md) |
 
 Stub files in this directory keep old relative links working.
