@@ -13,7 +13,8 @@ See also: [specification/README.md](./README.md) · [openspec/AGENTS.md](../open
 | As-built ingest DTO | [ingest-from-project-spec contract](../openspec/specs/indexing/contracts/ingest-from-project-spec.md) |
 | **As-built** needs + dates + budget summary (FR-IX-023 S1a–S1e) | Same contract + [indexing spec](../openspec/specs/indexing/spec.md) |
 | **As-built S3** agent indexing gate (FR-IX-026) | [indexing spec](../openspec/specs/indexing/spec.md) · [design](../openspec/specs/indexing/design.md) · [contract execution path](../openspec/specs/indexing/contracts/ingest-from-project-spec.md) · archive [s3-agent-indexing-coordinator-gate](../openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/) |
-| Feasibility | [call1-ingest-response-project-summary.md](../Feasibility_Study/call1-ingest-response-project-summary.md) · [implementation-plan Phase 3](../Feasibility_Study/implementation-plan.md) |
+| **As-built S5-I0** DocumentStore factory (FR-IX-027) | [indexing spec](../openspec/specs/indexing/spec.md) · [design](../openspec/specs/indexing/design.md) · archive [s5-i0-document-store-factory](../openspec/changes/archive/2026-08-12-s5-i0-document-store-factory/) · [implementation-plan Phase 5 / 5.2](../Feasibility_Study/implementation-plan.md) |
+| Feasibility | [call1-ingest-response-project-summary.md](../Feasibility_Study/call1-ingest-response-project-summary.md) · [implementation-plan Phase 3](../Feasibility_Study/implementation-plan.md) · dual-plane [§4.5 / Track I](../Feasibility_Study/postgres-haystack-neo4j-realtime-sync.md) |
 | Change proposal (Call 1 summary) | [openspec/changes/2026-08-10-call1-project-spec-summary/](../openspec/changes/2026-08-10-call1-project-spec-summary/) |
 | Change archive (S3 gate) | [openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/](../openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/) |
 

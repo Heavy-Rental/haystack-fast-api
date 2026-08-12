@@ -5,10 +5,10 @@
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
 | **Date** | 2026-08-12 |
-| **Version** | 3.5.3 |
+| **Version** | 3.5.4 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.5.3** As-built default pytest isolation (conftest mock embedder dim 384; no optional markers yet); query/store embedding dim match; **3.5.2** Phase 3 / **S3 as-built** (agent indexing tool + Coordinator gate [4]; `INDEXING_VIA_AGENT_GATE` default off; S3.3 SuperComponent deferred); **3.5.1** Multi-agent studies renumbered Call 2 recommend / Call 3 Q&A; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
+| **Revision notes** | **3.5.4** Phase 5 / **S5-I0 as-built** (`INDEXING_DOCUMENT_STORE` + `build_document_store()`; default memory; ingest still InMemory; I1 TARGET); **3.5.3** As-built default pytest isolation (conftest mock embedder dim 384; no optional markers yet); query/store embedding dim match; **3.5.2** Phase 3 / **S3 as-built** (agent indexing tool + Coordinator gate [4]; `INDEXING_VIA_AGENT_GATE` default off; S3.3 SuperComponent deferred); **3.5.1** Multi-agent studies renumbered Call 2 recommend / Call 3 Q&A; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -71,7 +71,9 @@ Call 3: POST /internal/v1/recommendations/project-knowledge/query
 
 Full multi-agent C/W/D recommend graph remains future enrichment behind Call 2 DTO
 
-DocumentStore: InMemory only (per-ingest session; no INDEXING_DOCUMENT_STORE factory)
+DocumentStore: InMemory per-ingest session (default)
+  S5-I0 as-built: INDEXING_DOCUMENT_STORE + build_document_store()
+    (memory default | pgvector factory-ready; pipeline wire = I1 TARGET)
 Fleet: seed in app; D1 merge-sync in devcontainer config
   (postgres_haystack_sync, ~60s poll on develop)
 Neo4j: compose service may exist; no populate-from-db job; no agent Neo4j tools
@@ -605,14 +607,14 @@ Maps to dual-plane §10 Track D + §11 T-phases. **Primary work in config repo.*
 
 Maps to dual-plane §4.5. **Critical for multi-replica and Call 1→2 without sticky sessions.**
 
-| Step | Work | Exit criteria |
-|------|------|---------------|
-| **5.1 T5/D4** | Postgres-Haystack: `pgvector` image or `CREATE EXTENSION vector`; dim matches `INDEXING_EMBEDDING_DIM` | Extension present |
-| **5.2 I0** | Config `INDEXING_DOCUMENT_STORE=memory\|pgvector` (default **memory**); `build_document_store()` factory | CI stays memory |
-| **5.3 I1** | Wire factory into indexing pipeline + session registry; writer → Pgvector | Ingest with flag writes durable chunks |
-| **5.4** | All retrieval tools **must** filter `user_id` (+ `ingest_id`); isolation test two users | Cross-tenant retrieval fails |
-| **5.5** | Optional TTL/delete job for temporary project chunks | Delete one ingest without affecting another |
-| **5.6** | Integration suite (Testcontainers or local `postgres_haystack`); full memory suite still green | Dual-mode CI |
+| Step | Work | Exit criteria | Status |
+|------|------|---------------|--------|
+| **5.1 T5/D4** | Postgres-Haystack: `pgvector` image or `CREATE EXTENSION vector`; dim matches `INDEXING_EMBEDDING_DIM` | Extension present | Config / infra (not app) |
+| **5.2 I0** | Config `INDEXING_DOCUMENT_STORE=memory\|pgvector` (default **memory**); `build_document_store()` factory | CI stays memory | **As-built** (FR-IX-027) |
+| **5.3 I1** | Wire factory into indexing pipeline + session registry; writer → Pgvector | Ingest with flag writes durable chunks | **TARGET** |
+| **5.4** | All retrieval tools **must** filter `user_id` (+ `ingest_id`); isolation test two users | Cross-tenant retrieval fails | **TARGET** |
+| **5.5** | Optional TTL/delete job for temporary project chunks | Delete one ingest without affecting another | **TARGET** |
+| **5.6** | Integration suite (Testcontainers or local `postgres_haystack`); full memory suite still green | Dual-mode CI | **TARGET** |
 
 **Does not require Neo4j or Kafka.**
 
@@ -621,13 +623,13 @@ Maps to dual-plane §4.5. **Critical for multi-replica and Call 1→2 without st
 | Attribute | Detail |
 |-----------|--------|
 | **Independently testable?** | **Yes — I0 always; I1 optional job** |
-| **S5-I0 test implementation** | (1) factory `memory` default; (2) invalid flag errors; (3) full suite green without Postgres |
+| **S5-I0 test implementation** | (1) factory `memory` default; (2) invalid flag errors; (3) full suite green without Postgres — **as-built** in `tests/test_document_store_factory.py` |
 | **S5-I1 test implementation** | (1) two users isolation; (2) durable after reconnect; (3) dim mismatch fails fast; (4) TTL delete isolation; (5) Call 2 recommend + Call 3 Q&A against I1 session |
-| **Suggested modules** | `tests/test_document_store_factory.py`, `tests/test_pgvector_isolation.py` |
+| **Suggested modules** | `tests/test_document_store_factory.py` (**as-built**), `tests/test_pgvector_isolation.py` (**TARGET**) |
 | **Markers** | `@pytest.mark.pgvector` for I1 (**TARGET** — not registered in as-built suite) |
-| **CI job** | I0 **default**; I1 **pgvector** optional/nightly (**TARGET**) |
+| **CI job** | I0 **default** (as-built); I1 **pgvector** optional/nightly (**TARGET**) |
 | **Stubs** | Fake embedder fixed dim (must match `INDEXING_EMBEDDING_DIM` for query + store); Testcontainers pgvector |
-| **As-built note** | Default suite uses InMemory + mock embedder; conftest forces dim **384** so host `.env` cannot desync store/query |
+| **As-built note** | Default suite uses InMemory + mock embedder; conftest forces dim **384** so host `.env` cannot desync store/query. Factory supports `pgvector` via mocked constructor in unit tests (no live Postgres). |
 
 ---
 
@@ -857,7 +859,7 @@ Can partially overlap Phase 7 (SQL fleet tools first; Neo4j tools after populate
 | **2 / S2a–b** | Yes (split) | pytest / WireMock | In-mem idempotency | No |
 | **3 / S3** | Yes | InMemory | Stub graph/LLM | No |
 | **4 / S4** | Yes (config) | Two PG + sync | Fixture primary | No (app seed) |
-| **5 / S5-I0–I1** | I0 yes; I1 optional | Factory + pgvector | Memory default | No |
+| **5 / S5-I0–I1** | I0 yes (**as-built**); I1 optional | Factory + pgvector | Memory default | No |
 | **6 / S6** | Yes | Unit + fixture ORM | Mock model | No |
 | **7 / S7.0–7.7** | Yes **per stage** | Fixture tools + golden | Fake fleet/price/Neo4j | Soft E2E needs 4/6/8 |
 | **8 / S8** | Yes (optional CI) | Neo4j + seed SQL | Direct seed haystack | No (7 uses fake) |

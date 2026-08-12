@@ -56,6 +56,7 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 5. `DocumentCleaner` → `DocumentSplitter` → document embedder → `DocumentWriter`.
 6. Default process-local `InMemoryDocumentStore`; CI-safe default embedder (`MockDocumentEmbedder`).
 7. Lean public response fields `ingest_id`, `user_id`, `user_requirement_summary`, `warnings` (internal store still has embeddings).
+8. **S5-I0:** `INDEXING_DOCUMENT_STORE` + `build_document_store()` factory (`memory` default \| `pgvector`); pipeline cutover remains I1.
 
 **HR-76 (shipped):** required `user_id`; **mandatory** user-scoped KG after post-join chunks ([`../knowledge-graph/spec.md`](../knowledge-graph/spec.md)).
 
@@ -72,7 +73,7 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 
 ### Out of scope (still)
 
-- Persistent multi-instance DocumentStore
+- Persistent multi-instance DocumentStore **pipeline cutover** (I1 TARGET — factory exists as FR-IX-027 / I0)
 - Naive/hybrid RAG **query** HTTP
 - Recommend reattach on this route (T017)
 - `LinkContentFetcher` (T030)
@@ -200,6 +201,41 @@ Part 3 MAY use a process-local `InMemoryDocumentStore` by default; persistent st
 #### Scenario: Default store
 - **WHEN** the indexing pipeline writes documents without a persistent-store override
 - **THEN** a process-local `InMemoryDocumentStore` is used
+
+### Requirement: DocumentStore factory + backend flag (I0)
+The service SHALL expose `build_document_store()` and env **`INDEXING_DOCUMENT_STORE`** with values **`memory`** (default) or **`pgvector`**. Invalid values MUST raise a clear configuration error. Default CI and the as-built ingest path remain **InMemory** until I1 wires the factory into the pipeline writer and session registry.  
+(Trace: FR-IX-027 · Phase 5 / S5-I0 · dual-plane §4.5.4)
+
+#### Scenario: Factory defaults to memory
+- **WHEN** `INDEXING_DOCUMENT_STORE` is unset or set to `memory`
+- **AND** a caller invokes `build_document_store()` without an override
+- **THEN** an `InMemoryDocumentStore` is returned
+- **AND** no Postgres connection is required
+
+#### Scenario: Invalid store mode is rejected
+- **WHEN** `INDEXING_DOCUMENT_STORE` or `build_document_store(mode=…)` uses a value other than `memory` or `pgvector`
+- **THEN** a `ValueError` (or equivalent configuration error) is raised listing allowed values
+
+#### Scenario: pgvector mode is factory-ready without default ingest cutover
+- **WHEN** mode is `pgvector` and the `pgvector-haystack` integration is available
+- **THEN** the factory constructs a `PgvectorDocumentStore` configured with embedding dimension and connection settings
+- **AND** the default Call 1 ingest pipeline still uses process-local InMemory until I1 wiring
+
+#### Scenario: Process-local singleton stays memory
+- **WHEN** code uses `get_document_store()` / `reset_document_store()`
+- **THEN** the shared singleton remains process-local `InMemoryDocumentStore` (does not follow a host `pgvector` flag before I1)
+
+### How to test (FR-IX-027 / S5-I0) — verification instructions
+
+| Layer | Command / action | Pass |
+|-------|------------------|------|
+| **Unit / pack** | `uv run pytest tests/test_document_store_factory.py -q` | Factory memory default; invalid mode errors; pgvector branch mocked (no Postgres) |
+| **Config default** | `uv run pytest tests/test_config.py -q -k indexing_document_store` | Default `memory` |
+| **Regression** | `uv run pytest tests/ -q` | Full suite green without Postgres |
+| **Independent Test (I0)** | Factory + config only | No pipeline wire, no live pgvector, no Neo4j |
+
+Archive checklist: [`../../changes/archive/2026-08-12-s5-i0-document-store-factory/tasks.md`](../../changes/archive/2026-08-12-s5-i0-document-store-factory/tasks.md).  
+Design notes: [`design.md`](./design.md).
 
 ### Requirement: Offload sync pipeline work
 Async handlers MUST offload sync pipeline work with `run_in_threadpool`.  
@@ -688,7 +724,7 @@ Sources MUST be classified according to the following normative extension / MIME
 - Do not restore `results_by_need` / FR-010 as the default **Call 1** path without an explicit reattach SDD.
 - Do not treat KG as optional on success path; missing `user_id`, zero chunks, or KG failure → 400.
 - Do not invent a second public API style for ingest; field tables live in the contract file.
-- Do not silently replace process-local `InMemoryDocumentStore` with multi-instance persistence without a dedicated change.
+- Do not silently replace process-local `InMemoryDocumentStore` with multi-instance persistence without a dedicated change (I0 factory only; I1 wires pipeline).
 - Do not invent `expected_budget` or dates when not in request/document (FR-IX-023).
 - Do not conflate **needs summary** with **fleet recommendation** or **predicted rent price** on Call 1.
 - Do not cache failed ingest responses under `Idempotency-Key` (FR-IX-024).
@@ -704,6 +740,7 @@ Sources MUST be classified according to the following normative extension / MIME
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **0.9.0** | 2026-08-12 | **S5-I0 as-built:** FR-IX-027 `INDEXING_DOCUMENT_STORE` + `build_document_store()` (`memory` default \| `pgvector`); ingest still InMemory until I1 |
 | **0.8.1** | 2026-08-12 | FR-IX-015: query/store embedding dim must match; pytest conftest forces mock + dim 384 (host env isolation) |
 | **0.8.0** | 2026-08-12 | **S3 as-built:** FR-IX-026 optional Coordinator gate [4] + `run_indexing_from_request` behind `INDEXING_VIA_AGENT_GATE` (default off); lean body parity; SuperComponent S3.3 deferred |
 | **0.7.2** | 2026-08-12 | Call 2 recommend + Call 3 Q&A portal norms |

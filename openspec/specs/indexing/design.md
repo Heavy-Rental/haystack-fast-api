@@ -109,7 +109,8 @@ Default embedder is CI-safe (`MockDocumentEmbedder`); optional `openai` / `sente
 | `app/services/need_decomposer.py` / LLM | **as-built S1c:** needs_summary from project text |
 | `app/services/project_spec_budget.py` | **as-built S1d:** expected_budget extract |
 | `app/services/project_spec_dates.py` | **as-built S1e:** resolve_rental_dates (request preferred) |
-| `app/config.py` | `INDEXING_*`, `KG_*`, `IDEMPOTENCY_TTL_SECONDS`, `INDEXING_VIA_AGENT_GATE` |
+| `app/config.py` | `INDEXING_*` (incl. `INDEXING_DOCUMENT_STORE`), `KG_*`, `IDEMPOTENCY_TTL_SECONDS`, `INDEXING_VIA_AGENT_GATE` |
+| `app/pipelines/indexing/document_store.py` | **as-built S5-I0:** `build_document_store()` + mode normalize (FR-IX-027); singleton still InMemory |
 | `postman/` | Live collection |
 
 ### As-built extraction notes (FR-IX-023 / Phase 1.7)
@@ -131,13 +132,15 @@ Compact response: portal may only need identity + summary; technical index/KG fi
 | `data_kind_classifier.py` | `@component` using `FileTypeRouter` |
 | `pipeline.py` | `build_indexing_pipeline`, `run_indexing_pipeline`; dual-branch + joiners |
 | converters / cleaners / splitters | Per-MIME convert; CSV vs unstructured preprocess |
-| embedder factory + store singleton | Mock default; optional openai / sentence-transformers; test reset |
+| `embedder_factory.py` | Mock default embedder; optional openai / sentence-transformers |
+| `document_store.py` | **I0:** `build_document_store(mode=memory\|pgvector)`; `get_document_store` / `reset` stay process-local InMemory |
 
 ## O — Operations
 
 ### Config
 
 - `INDEXING_*` — embedder mode, splitter/store-related settings (see [`.env.example`](../../../.env.example))
+- `INDEXING_DOCUMENT_STORE` — **S5-I0 / FR-IX-027:** `memory` (default, CI) \| `pgvector` (factory-ready; pipeline wire is **I1**)
 - `INDEXING_VIA_AGENT_GATE` — **S3 / FR-IX-026:** `false` (default) direct service; `true` forced Coordinator gate
 - `KG_*` — artifact dir, transforms flag (owned by knowledge-graph capability; required for success path)
 - `IDEMPOTENCY_TTL_SECONDS` — optional TTL for process-local successful ingest cache (default `86400`; ≤0 disables expiry)
@@ -149,6 +152,7 @@ Compact response: portal may only need identity + summary; technical index/KG fi
 | Component + pipeline | `tests/test_indexing_*.py` (router, converters, dual-branch, write path) |
 | HTTP ingest fields | `tests/test_recommendations_intake.py` (FR-IX-023 lean body, not recommend envelope) |
 | Agent gate (S3 / FR-IX-026) | `tests/test_indexing_tool.py` (tool parity, flag on/off, MIME fail, `indexing_ok`) |
+| DocumentStore factory (S5-I0 / FR-IX-027) | `tests/test_document_store_factory.py` (memory default, invalid mode, mocked pgvector; no Postgres) |
 | Idempotency (S2a) | `tests/test_ingest_idempotency.py` (same key, missing key, multipart, failure not cached, single-flight, blank key, TTL unit) |
 | Correlation (S2a) | `tests/test_correlation_middleware.py` (echo, mint, log binds `correlation_id`, Q&A) |
 | Date extract (S1e) | `tests/test_project_spec_dates.py` + intake free-text date cases |
@@ -170,6 +174,9 @@ Working directory: `haystack-fast-api/` (uv project root).
 # S3 / FR-IX-026 pack only (flag on/off driven inside tests via monkeypatch)
 uv run pytest tests/test_indexing_tool.py -q
 # or: .venv/bin/pytest tests/test_indexing_tool.py -q
+
+# S5-I0 / FR-IX-027 DocumentStore factory (no Postgres)
+uv run pytest tests/test_document_store_factory.py -q
 
 # Full indexing + Call 1 regression (includes S1/S2a)
 uv run pytest tests/test_indexing_tool.py tests/test_recommendations_intake.py \
@@ -286,6 +293,7 @@ Re-run the same Call 1 `curl` as above.
 |----------|-----------|
 | Reroute public from-project-spec to indexing | Packt-style index before recommend reattach |
 | InMemoryDocumentStore default | CI-safe process-local; persistent later |
+| I0 factory before I1 pipeline wire | `INDEXING_DOCUMENT_STORE` + `build_document_store()` ship first; ingest stays InMemory until I1 |
 | MockDocumentEmbedder default | CI without external embedding APIs |
 | Mandatory KG after joiner | HR-76 identity + graph; hard-fail |
 | JSON/XLSX structured data_kind + unstructured clean path | Count kind vs preprocess topology |

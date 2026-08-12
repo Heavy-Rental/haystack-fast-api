@@ -56,6 +56,12 @@ class Settings(BaseSettings):
         default="sentence-transformers/all-MiniLM-L6-v2",
         alias="INDEXING_ST_MODEL",
     )
+    # DocumentStore backend factory (Phase 5 / I0): memory (default, CI) | pgvector
+    # Ingest pipeline still uses InMemory until I1 wires this factory through.
+    indexing_document_store: str = Field(
+        default="memory",
+        alias="INDEXING_DOCUMENT_STORE",
+    )
 
     # Knowledge graph (HR-76): mandatory after final_doc_joiner; transforms on generator only
     kg_artifact_dir: str = Field(default="artifacts/kg", alias="KG_ARTIFACT_DIR")
