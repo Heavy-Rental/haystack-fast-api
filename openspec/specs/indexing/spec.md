@@ -400,14 +400,14 @@ After S1a + S1b, complete FR-IX-023 in this **implementation order** (see [`Feas
 | Order | Stage | Work | Status |
 |-------|-------|------|--------|
 | 1 | **S1c** | `needs_summary[]` via decomposer after index+KG | **as-built** |
-| 2 | **S1d** | `expected_budget` extract; never invent | TARGET |
+| 2 | **S1d** | `expected_budget` extract; never invent | **as-built** |
 | 3 | **S1e** | Free-text / file date extract when request omits dates | TARGET |
 | 4 | **1.7** | Mark full FR-IX-023 as-built when S1c+S1d+S1e green | TARGET |
 
 MUST NOT use `options.include_pricing` as a budget amount (boolean only).  
 MUST NOT treat summary as ranked fleet recommendations or ML rent (`results_by_need` / Call 3).  
 (Trace: FR-IX-023)  
-**Status:** **partial as-built** (S1a–S1c); full FR-IX-023 after S1d + S1e; **S1e MUST run after S1d**.
+**Status:** **partial as-built** (S1a–S1d); full FR-IX-023 after **S1e**; **S1e MUST run after S1d**.
 
 ### Requirement: Needs summary on ingest response (as-built S1c)
 After successful index + mandatory KG, the live success body MUST include **`needs_summary`** (array), produced by the configured need decomposer (`NEED_DECOMPOSER=stub|llm`) on project text or extracted file content.  
@@ -427,11 +427,20 @@ Empty list + warning is allowed when no needs can be inferred; MUST NOT invent f
 - **THEN** `needs_summary` is an empty array
 - **AND** `warnings` MAY mention that needs_summary is empty
 
-#### Scenario: Budget extracted or null (S1d target)
-- **GIVEN** S1d implementation
+### Requirement: Expected budget on ingest response (as-built S1d)
+After successful index + mandatory KG, the live success body MUST include **`expected_budget`** as either:
+- an object with `amount`, optional `currency`, and `source` (e.g. `extracted`) when a confident pattern is found in project text / extracted file content; or  
+- **`null`** when missing or uncertain, with a warning that budget was not found.  
+
+MUST NOT invent a budget. MUST NOT treat `options.include_pricing` as a budget amount.  
+(Trace: partial FR-IX-023 / S1d)  
+**Status:** **as-built (S1d)**.
+
+#### Scenario: Budget extracted or null (S1d as-built)
+- **GIVEN** successful ingest
 - **WHEN** the project-spec does not state a budget
 - **THEN** `expected_budget` is null and a warning MAY state that budget was not found
-- **WHEN** the project-spec states a budget confidently
+- **WHEN** the project-spec states a budget confidently (e.g. `SGD 15000`)
 - **THEN** `expected_budget` includes amount (and currency when known) with a source marker (e.g. extracted)
 
 #### Scenario: Dates from document when request omits (S1e target — after S1d)
@@ -503,6 +512,7 @@ Sources MUST be classified according to the following normative extension / MIME
 | **0.5.1** | 2026-08-11 | **S1b as-built:** echo request dates as `tentative_start_date` / `tentative_end_date` (JSON + multipart); free-text date extract still TARGET |
 | **0.5.2** | 2026-08-11 | FR-IX-023 delivery order: S1c needs → S1d budget → **S1e free-text dates** (after S1d) → 1.7 as-built; aligns with implementation-plan Phase 1 |
 | **0.5.3** | 2026-08-11 | **S1c as-built:** `needs_summary[]` via need decomposer after index+KG; S1d/S1e still TARGET |
+| **0.5.4** | 2026-08-11 | **S1d as-built:** `expected_budget` extract-only (never invent); S1e free-text dates still TARGET |
 
 
 | Version | Date | Notes |

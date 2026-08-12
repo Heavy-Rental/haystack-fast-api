@@ -23,7 +23,11 @@ from app.core.exceptions import BadRequestError
 from app.pipelines.indexing.embedder_factory import build_document_embedder
 from app.pipelines.indexing.mime_map import MIME_TEXT_PLAIN, guess_mime_from_filename
 from app.pipelines.indexing.pipeline import build_indexing_pipeline, run_indexing_pipeline
-from app.schemas.indexing import IngestFromProjectSpecResponse, NeedSummaryItem
+from app.schemas.indexing import (
+    ExpectedBudget,
+    IngestFromProjectSpecResponse,
+    NeedSummaryItem,
+)
 from app.schemas.recommendations import DecomposedNeed
 from app.services.need_decomposer import NeedDecomposer
 from app.services.need_decomposer_factory import create_need_decomposer
@@ -31,6 +35,7 @@ from app.services.project_knowledge_session import (
     ProjectKnowledgeSession,
     get_project_knowledge_registry,
 )
+from app.services.project_spec_budget import extract_expected_budget
 
 logger = logging.getLogger(__name__)
 
@@ -386,6 +391,13 @@ class IndexingIngestService:
         if not needs_summary:
             public_warnings.append("needs_summary empty")
 
+        # S1d: expected_budget extract only — never invent.
+        budget_raw, budget_warnings = extract_expected_budget(summary_source)
+        public_warnings.extend(budget_warnings)
+        expected_budget: ExpectedBudget | None = None
+        if budget_raw is not None:
+            expected_budget = ExpectedBudget.model_validate(budget_raw)
+
         # Register dual knowledge sources for Stage-1 multi-agent tools.
         get_project_knowledge_registry().put(
             ProjectKnowledgeSession(
@@ -411,13 +423,16 @@ class IndexingIngestService:
                         end_date.isoformat() if end_date is not None else None
                     ),
                     "needs_summary": [item.model_dump() for item in needs_summary],
+                    "expected_budget": (
+                        expected_budget.model_dump() if expected_budget else None
+                    ),
                 },
             )
         )
 
         logger.info(
             "indexing_ingest ingest_id=%s user_id=%s data_kind=%s chunks=%s "
-            "written=%s kg_built=%s needs=%s",
+            "written=%s kg_built=%s needs=%s budget=%s",
             ingest_id,
             uid,
             data_kind,
@@ -425,6 +440,7 @@ class IndexingIngestService:
             documents_written,
             kg_built,
             len(needs_summary),
+            expected_budget.amount if expected_budget else None,
         )
 
         return IngestFromProjectSpecResponse(
@@ -434,5 +450,6 @@ class IndexingIngestService:
             tentative_start_date=start_date,
             tentative_end_date=end_date,
             needs_summary=needs_summary,
+            expected_budget=expected_budget,
             warnings=public_warnings,
         )

@@ -142,7 +142,7 @@ Skipping Call 2 after Call 1 remains valid once Call 3 is reattached.
 | **S1a (lean)** | `ingest_id`, `user_id`, `user_requirement_summary`, `warnings` | **Done** |
 | **S1b** | Echo request dates as `tentative_*` | **Done** |
 | **S1c** | `needs_summary[]` via decomposer | **Done** |
-| **S1d** | `expected_budget` extract; never invent | Planned |
+| **S1d** | `expected_budget` extract; never invent | **Done** |
 | **S1e** | Free-text / file date extract when request omits dates | Planned **after S1d** |
 | **1.7** | Mark full FR-IX-023 as-built (OpenSpec + Postman) | After **S1c + S1d + S1e** |
 

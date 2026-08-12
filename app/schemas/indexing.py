@@ -23,6 +23,20 @@ class NeedSummaryItem(BaseModel):
     )
 
 
+class ExpectedBudget(BaseModel):
+    """Budget extracted from project-spec text only (FR-IX-023 / S1d). Never invent."""
+
+    amount: float = Field(..., description="Extracted amount when confidently found")
+    currency: str | None = Field(
+        default=None,
+        description="ISO-like currency code when known (e.g. SGD)",
+    )
+    source: str = Field(
+        default="extracted",
+        description="Provenance marker (e.g. extracted); not request invent",
+    )
+
+
 class IngestFromProjectSpecResponse(BaseModel):
     """Lean success response for POST .../submitprojectspecification.
 
@@ -52,6 +66,13 @@ class IngestFromProjectSpecResponse(BaseModel):
         description=(
             "Structured needs from need decomposer after successful index+KG (S1c); "
             "empty list + warning when none inferred"
+        ),
+    )
+    expected_budget: ExpectedBudget | None = Field(
+        default=None,
+        description=(
+            "Budget extracted from project text/file when confident (S1d); "
+            "null if missing/uncertain — never invent; not include_pricing"
         ),
     )
     warnings: list[str] = Field(

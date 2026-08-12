@@ -11,6 +11,7 @@ LEAN_KEYS = {
     "tentative_start_date",
     "tentative_end_date",
     "needs_summary",
+    "expected_budget",
     "warnings",
 }
 TECHNICAL_KEYS = {
@@ -36,6 +37,7 @@ def _assert_lean_body(body: dict) -> None:
     assert "tentative_start_date" in body
     assert "tentative_end_date" in body
     assert isinstance(body.get("needs_summary"), list)
+    assert "expected_budget" in body
 
 
 def test_from_project_spec_json_unstructured(client: TestClient) -> None:
@@ -61,7 +63,32 @@ def test_from_project_spec_json_unstructured(client: TestClient) -> None:
     assert body["needs_summary"][0]["need_id"] == "need_1"
     assert "scissors" in body["needs_summary"][0]["description"].lower()
     assert body["needs_summary"][0]["quantity"] == 1
+    assert body["expected_budget"] is None
+    assert any("expected_budget not found" in w for w in body["warnings"])
     assert "results_by_need" not in body
+
+
+def test_expected_budget_extracted_when_present(client: TestClient) -> None:
+    response = client.post(
+        ENDPOINT,
+        json={
+            "user_id": "user_budget",
+            "project_text": (
+                "Need two scissors lifts for fit-out. "
+                "Project budget SGD 15,000 for rental equipment."
+            ),
+            "options": {"include_pricing": True},
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    _assert_lean_body(body)
+    assert body["expected_budget"] is not None
+    assert body["expected_budget"]["amount"] == 15000.0
+    assert body["expected_budget"]["currency"] == "SGD"
+    assert body["expected_budget"]["source"] == "extracted"
+    # include_pricing must not invent a budget by itself
+    assert body["expected_budget"]["amount"] != 1
 
 
 def test_missing_user_id_returns_400(client: TestClient) -> None:

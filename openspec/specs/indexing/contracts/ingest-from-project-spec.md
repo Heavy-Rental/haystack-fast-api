@@ -4,7 +4,7 @@
 |-------|--------|
 | **Capability** | [`../spec.md`](../spec.md) (indexing) |
 | **Design** | [`../design.md`](../design.md) |
-| **Status** | **as-built lean public body (S1a + S1b + S1c needs_summary)** + **TARGET** FR-IX-023 remainder (S1d budget, S1e free-text dates) |
+| **Status** | **as-built lean public body (S1a–S1d)** + **TARGET** FR-IX-023 remainder (**S1e** free-text dates only) |
 | **DTO (as-built)** | `IngestFromProjectSpecResponse` (`app/schemas/indexing.py`) |
 | **Standards** | OpenSpec behaviour · Spec-kit contract tables · OpenSPDD (prompt/spec before code) |
 
@@ -54,25 +54,34 @@ Sources: multipart file uploads are packaged as Haystack `ByteStream` with `mime
 | `needs_summary[].description` | string | Human-readable need |
 | `needs_summary[].equipment_hints` | string[] | Optional category/type hints |
 | `needs_summary[].quantity` | int \| null | Optional |
-| `warnings` | string[] | Soft issues (e.g. truncated summary, empty needs); empty when none |
+| `expected_budget` | object \| null | **S1d as-built:** extract only when confident; null + warning if not found; never invent |
+| `expected_budget.amount` | number | When extracted |
+| `expected_budget.currency` | string \| null | e.g. `SGD` |
+| `expected_budget.source` | string | e.g. `extracted` |
+| `warnings` | string[] | Soft issues (e.g. truncated summary, empty needs, budget not found); empty when none |
 
-### Example (as-built lean + S1b + S1c)
+### Example (as-built lean + S1b + S1c + S1d)
 
 ```json
 {
   "ingest_id": "ing_a1b2c3d4e5f6",
   "user_id": "user_demo",
-  "user_requirement_summary": "Indoor elevated work ~8m; need scissors lift on soft clay.",
+  "user_requirement_summary": "Indoor elevated work ~8m; need scissors lift on soft clay. Budget SGD 15000.",
   "tentative_start_date": "2026-09-01",
   "tentative_end_date": "2026-09-12",
   "needs_summary": [
     {
       "need_id": "need_1",
-      "description": "Indoor elevated work ~8m; need scissors lift on soft clay.",
+      "description": "Indoor elevated work ~8m; need scissors lift on soft clay. Budget SGD 15000.",
       "equipment_hints": [],
       "quantity": 1
     }
   ],
+  "expected_budget": {
+    "amount": 15000,
+    "currency": "SGD",
+    "source": "extracted"
+  },
   "warnings": []
 }
 ```
@@ -87,14 +96,14 @@ Sources: multipart file uploads are packaged as Haystack `ByteStream` with `mime
 
 ### As-built gaps vs full FR-IX-023 TARGET
 
-`needs_summary[]` is **as-built (S1c)**. Still missing: free-text date extraction when request omits dates (**S1e**), `expected_budget` (**S1d**). Request date **echo** is as-built (S1b).
+`needs_summary[]` (**S1c**) and `expected_budget` (**S1d**) are **as-built**. Still missing: free-text date extraction when request omits dates (**S1e**). Request date **echo** is as-built (S1b).
 
 **Implementation order** (normative — [`Feasibility_Study/implementation-plan.md`](../../../../Feasibility_Study/implementation-plan.md) Phase 1):
 
 1. **S1c** — `needs_summary[]` — **as-built**  
-2. **S1d** — `expected_budget` — TARGET  
+2. **S1d** — `expected_budget` — **as-built**  
 3. **S1e** — free-text / file date extract (when request omits dates) — TARGET **after S1d**  
-4. **1.7** — mark FR-IX-023 as-built in OpenSpec when S1c+S1d+S1e green  
+4. **1.7** — mark full FR-IX-023 as-built in OpenSpec when S1c+S1d+S1e green  
 
 ---
 
@@ -109,7 +118,7 @@ Additive enrichment of lean body. Default **SHOULD** stay compact (no public `do
 | `needs_summary[].equipment_hints` | string[] | Optional | S1c |
 | `needs_summary[].quantity` | int \| null | Optional | S1c |
 | `needs_summary[].need_id` | string \| null | Optional stable id for Call 3 | S1c |
-| `expected_budget` | object \| null | Extract only; **never invent** | **S1d TARGET** |
+| `expected_budget` | object \| null | Extract only; **never invent** | **S1d as-built** |
 | `expected_budget.amount` | number | When known | S1d |
 | `expected_budget.currency` | string \| null | e.g. `SGD` | S1d |
 | `expected_budget.source` | string | e.g. `extracted` | S1d |
