@@ -616,6 +616,23 @@ The application MUST accept optional **`X-Correlation-Id`** and/or W3C **`tracep
 - **THEN** the caller receives `BadRequestError` / HTTP 400
 - **AND** gate state has `indexing_ok=false` with no silent success `ingest_id`
 
+### How to test (FR-IX-026 / S3) — verification instructions
+
+Canonical runbook (commands + Postman): [`design.md` — How to test this capability](./design.md#how-to-test-this-capability-runbook).  
+Contract notes: [`contracts/ingest-from-project-spec.md` — Verification](./contracts/ingest-from-project-spec.md#verification-s3--fr-ix-026).  
+Archive checklist: [`../../changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/tasks.md`](../../changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/tasks.md).
+
+| Layer | Command / action | Pass |
+|-------|------------------|------|
+| **Unit / pack** | `uv run pytest tests/test_indexing_tool.py -q` | 9 passed (parity, flag on/off, MIME, `indexing_ok`) |
+| **Regression** | `uv run pytest tests/ -q` | Full suite green; flag default stays off |
+| **Manual flag off** | Start API without flag; POST Call 1 JSON | 200 lean FR-IX-023 body |
+| **Manual flag on** | `INDEXING_VIA_AGENT_GATE=true` + same POST | Same lean DTO; session usable for Call 2/3 |
+| **Manual negative** | Unsupported multipart (e.g. `.bin`) with/without flag | HTTP 400 `{"error","message"}` |
+| **Postman** | Collection in `postman/`; restart API with flag for gate path | Call 1 happy + negatives; Call 2/3 after ingest |
+
+**Independent Test (S3):** enable/disable `INDEXING_VIA_AGENT_GATE` only — no Pgvector, Neo4j, or live LLM required when `INDEXING_EMBEDDER=mock` and `KG_APPLY_TRANSFORMS=false`.
+
 ### Requirement: MIME classification map
 Sources MUST be classified according to the following normative extension / MIME map. Unclassified / other / unknown → **400**.  
 (Trace: MIME map §3; FR-IX-002, FR-IX-003)
