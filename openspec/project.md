@@ -19,7 +19,7 @@
 
 Build software that addresses core economic and operational challenges of the heavy equipment rental industry—high utilization, accurate pricing, asset visibility, and sound capital decisions—grounded in real industry economics and case research.
 
-**Product expression in this repository:** `haystack-fast-api` is a **FastAPI** service that exposes **Haystack** pipelines for **agentic equipment recommendation**, with **ML-assisted pricing** (`predict_price()`) for a rental portal / intake experience. The service ranks suitable, available equipment against structured needs and returns honest rationales—not opaque black-box matches.
+**Product expression in this repository:** `haystack-fast-api` is a **FastAPI** service that exposes **Haystack** pipelines for **agentic equipment recommendation**, with **ML-assisted pricing** (`predict_price()` / agent tool `predict_asset_price`) for a rental portal / intake experience. The service ranks suitable, available equipment against structured needs and returns honest rationales—not opaque black-box matches.
 
 ---
 

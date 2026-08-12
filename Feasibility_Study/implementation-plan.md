@@ -5,10 +5,10 @@
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
 | **Date** | 2026-08-12 |
-| **Version** | 3.5.5 |
+| **Version** | 3.5.6 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.5.5** Phase 5 / **S5-I1 as-built** (5.3–5.6: factory wire into ingest+session; tenant filters; TTL/delete; `@pytest.mark.pgvector` optional); **3.5.4** Phase 5 / **S5-I0 as-built** (`INDEXING_DOCUMENT_STORE` + `build_document_store()`; default memory); **3.5.3** As-built default pytest isolation (conftest mock embedder dim 384); query/store embedding dim match; **3.5.2** Phase 3 / **S3 as-built**; **3.5.1** Multi-agent Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
+| **Revision notes** | **3.5.6** Phase 6 / **S6 as-built** (`predict_asset_price` agent tool → `pricing_client`; 1e/2a already production); **3.5.5** Phase 5 / **S5-I1 as-built** (5.3–5.6: factory wire into ingest+session; tenant filters; TTL/delete; `@pytest.mark.pgvector` optional); **3.5.4** Phase 5 / **S5-I0 as-built** (`INDEXING_DOCUMENT_STORE` + `build_document_store()`; default memory); **3.5.3** As-built default pytest isolation (conftest mock embedder dim 384); query/store embedding dim match; **3.5.2** Phase 3 / **S3 as-built**; **3.5.1** Multi-agent Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -78,10 +78,11 @@ DocumentStore: InMemory per-ingest session (default)
 Fleet: seed in app; D1 merge-sync in devcontainer config
   (postgres_haystack_sync, ~60s poll on develop)
 Neo4j: compose service may exist; no populate-from-db job; no agent Neo4j tools
-Pricing: pricing_client → ml-experiments + category fallback
-  Phase 1e (pricing_repository util/lead-time + adapter wiring) — largely as-built
-  Phase 2a (app/services/pricing/ + per-asset clamp) — not done
-  predict_asset_price agent tool — not done
+Pricing: pricing_client → app.services.pricing.model.predict_price (production)
+  Phase 1e (repository util/lead-time + adapter wiring) — **as-built**
+  Phase 2a (app/services/pricing/ + per-asset clamp) — **as-built**
+  Phase 2b pipeline wire + Phase 2c internal quote API — **as-built**
+  predict_asset_price agent tool (S6) — **as-built** (same entrypoint; Phase 7 Workers not wired)
 Error JSON: {"error","message"} handlers already as-built
 Idempotency-Key / ingest correlation headers — **as-built S2a** (process-local store + middleware)
 Agent indexing tool + Coordinator gate [4] — **as-built S3** (flag default off)
@@ -634,29 +635,31 @@ Maps to dual-plane §4.5. **Critical for multi-replica and Call 1→2 without st
 
 ---
 
-### Phase 6 — Pricing production path (ML Phase 1e → 2a → agent tool)
+### Phase 6 — Pricing production path (ML Phase 1e → 2a → agent tool) — **as-built S6**
 
-Maps to `ml-pricing-multi-agent.md` + `docs/dynamic-pricing-execution-plan.md`.
+Maps to `ml-pricing-multi-agent.md` + `docs/dynamic-pricing-execution-plan.md`.  
+Archive: `openspec/changes/archive/2026-08-12-s6-predict-asset-price-tool/`.
 
-| Step | Work | Exit criteria |
-|------|------|---------------|
-| **6.1 Phase 1e** | **Largely as-built** — keep/regress `pricing_repository` (`period_utilization`, `lead_time_days`) + `pricing_client` / adapter wiring; fill any gaps only if tests show holes | Live util when `db`+dates present; defaults when not; suite green |
-| **6.2 Phase 2a** | **Todo** — `app/services/pricing/` package; per-asset min/max clamp; in-process `predict_price` (no public price HTTP) | Model + fallback; never silent zeros |
-| **6.3** | **Todo** — in-process agent tool `predict_asset_price` → pricing service; returns `daily_rate`, clamp metadata, `model_version` | Tool unit tests + stub mode for CI |
-| **6.4** | Keep service recommend path (`RecommendationService` / adapter) on same pricing entrypoint (single source of truth) | Service + agent share pricing |
+| Step | Work | Exit criteria | Status |
+|------|------|---------------|--------|
+| **6.1 Phase 1e** | `pricing` repository (`period_utilization`, `lead_time_days`) + `pricing_client` / adapter wiring | Live util when `db`+dates present; defaults when not; suite green | **As-built** |
+| **6.2 Phase 2a** | `app/services/pricing/` package; per-asset min/max clamp; in-process `predict_price` (no public price HTTP) | Model + clamp; never silent zeros | **As-built** (also 2b pipeline wire + 2c quote API) |
+| **6.3** | In-process agent tool `predict_asset_price` → `pricing_client`; returns `daily_rate`, clamp metadata, `model_version` | Tool unit tests + stub/mock mode for CI | **As-built** (`app/agents/tools.py`) |
+| **6.4** | Service recommend path (`RecommendationService` / adapter) on same pricing entrypoint | Service + agent share pricing | **As-built** |
 
-**Product accuracy** benefits from Phase 4 mirror; **tests do not require it**.
+**Product accuracy** benefits from Phase 4 mirror; **tests do not require it**.  
+**Not in S6:** Phase 7 Pricing Workers [7]×N graph fan-out; Phase 2d model recalibration.
 
-#### Test implementation — Stage S6
+#### Test implementation — Stage S6 (as-built)
 
 | Attribute | Detail |
 |-----------|--------|
 | **Independently testable?** | **Yes — without Phase 7 recommend graph** |
 | **Does not need** | Multi-agent synthesis, Neo4j, SuperComponent |
-| **Test implementation** | **Regression (1e):** (1) repository util/lead-time with fixture session; (2) client/adapter threads `db`+dates; (3) model missing → category fallback non-zero. **New (2a/tool):** (4) per-asset clamp min/max; (5) `predict_asset_price` golden shape; (6) silent zero forbidden |
-| **Suggested modules** | **Extend** `tests/test_pricing_repository.py`, `tests/test_pricing_client_phase1e.py`, `tests/test_pricing_phase1e_wiring.py`; **add** `tests/test_pricing_clamp.py`, `tests/test_predict_asset_price_tool.py` |
+| **Test implementation** | **Regression (1e/2a):** repository util/lead-time; client/adapter `db`+dates; model clamp. **Tool (S6):** (1) golden shape; (2) SoT parity with `predict_price_for_asset`; (3) `was_clamped` pass-through; (4) silent zero → `ValueError`; (5) tool name contract; (6) optional `asset_id` echo |
+| **Modules** | `tests/test_pricing_repository.py`, `tests/test_pricing_client_phase1e.py`, `tests/test_pricing_phase1e_wiring.py`, `tests/test_pricing_model.py`, `tests/test_pricing_phase2b_wiring.py`; **S6** `tests/test_predict_asset_price_tool.py` |
 | **CI job** | **default** |
-| **Stubs** | Fixture ORM rows; mock model; category fallback |
+| **Stubs** | Fixture ORM rows; mock `predict_price_for_asset` for zero/clamp edge cases |
 | **Optional integration** | Real `postgres_haystack` when S4 available |
 
 ---
@@ -1119,7 +1122,8 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | Internal recommendation routes | `/internal/v1/recommendations/...` |
 | As-built ingest + Stage-1 Q&A | Live (internal paths) |
 | Error JSON `{"error","message"}` | As-built |
-| Pricing Phase 1e | Largely as-built (`pricing_repository` + wiring); 2a + agent tool remain |
+| Pricing Phase 1e / 2a / 2b / 2c | **As-built** (`app/services/pricing/` + `pricing_client` + quote API) |
+| Phase 6 / S6 `predict_asset_price` | **As-built** — tool → `pricing_client` (single SoT); Phase 7 Workers not wired |
 | FR-010 service recommend (seed) | **As-built Call 2 MVP** via SessionRecommendService; full C/W/D is S7.x |
 | Full recommend multi-agent path | Not built (staged S7.0–S7.7) |
 | Pgvector / Neo4j populate | Not in app path |

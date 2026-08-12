@@ -117,7 +117,7 @@ KG-2 equipment stockpile (Stage 2)
 |------|----------|--------|
 | **11** | [`specs/recommendation-intake/spec.md`](./specs/recommendation-intake/spec.md) | Deferred `results_by_need` envelope |
 | **12** | [`specs/recommendation-pipeline/spec.md`](./specs/recommendation-pipeline/spec.md) | FR-010.1–8 **service-level** |
-| **13** | [`specs/dynamic-pricing/spec.md`](./specs/dynamic-pricing/spec.md) | `predict_price` for recommend |
+| **13** | [`specs/dynamic-pricing/spec.md`](./specs/dynamic-pricing/spec.md) | `predict_price` for recommend; S6 tool `predict_asset_price` (US-5) |
 | **13.5** | [`specs/domain-seed-data/spec.md`](./specs/domain-seed-data/spec.md) | Seed-data richness required for §13 to be verifiable — executed on the Spring Boot side, not this repo |
 
 ---

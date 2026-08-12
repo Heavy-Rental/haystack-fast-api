@@ -3,9 +3,9 @@
 | Field | Value |
 |-------|--------|
 | **Document type** | Architecture / ML integration feasibility study |
-| **Status** | Complete (study only — no implementation) |
-| **Date** | 2026-08-10 |
-| **Version** | 1.2.0 |
+| **Status** | Complete (study); **S6 tool as-built** (2026-08-12) — P1–P4 production path live; P5 = Phase 7 |
+| **Date** | 2026-08-10 (study); 2026-08-12 (S6 tool) |
+| **Version** | 1.2.2 |
 | **Application** | `haystack-fast-api` equipment recommendation |
 | **Question** | Can the **ML pricing model** supply structured context for Multi-Agent **recommend after [4]** when agents invoke tools **in-process** (including fleet data from Postgres-Haystack)? |
 | **Primary sources** | [`docs/dynamic-pricing-masterplan.md`](../docs/dynamic-pricing-masterplan.md) · [`docs/dynamic-pricing-execution-plan.md`](../docs/dynamic-pricing-execution-plan.md) · [`openspec/specs/dynamic-pricing/`](../openspec/specs/dynamic-pricing/) · `ml-experiments/` · `app/services/pricing_client.py` |
@@ -109,13 +109,22 @@ No separate tool-server process is required for multi-agent pricing.
 
 ## 6. Phasing
 
-| Phase | Work |
-|-------|------|
-| P1 | Keep as-built `pricing_client` on service path |
-| P2 | Phase 1e live utilization |
-| P3 | Phase 2a `app/services/pricing/` + per-asset clamp |
-| P4 | Wire `predict_asset_price` as multi-agent tool (in-process) |
-| P5 | Recommend graph: pricing **Workers [7]×N** + Coordinator **[8]** when `include_pricing` |
+| Phase | Work | Status |
+|-------|------|--------|
+| P1 | Keep as-built `pricing_client` on service path | **As-built** |
+| P2 | Phase 1e live utilization | **As-built** |
+| P3 | Phase 2a `app/services/pricing/` + per-asset clamp | **As-built** (+ 2b pipeline wire, 2c quote API) |
+| P4 | Wire `predict_asset_price` as multi-agent tool (in-process) | **As-built S6** — `app/agents/tools.py` → `pricing_client` |
+| P5 | Recommend graph: pricing **Workers [7]×N** + Coordinator **[8]** when `include_pricing` | **Todo** (Phase 7 / S7.x) |
+
+### As-built tool (P4 / S6)
+
+```text
+predict_asset_price(...) → pricing_client.predict_price_for_asset(...)
+                         → app.services.pricing.model.predict_price(...)
+```
+
+Returns `{ daily_rate, total_price, currency, deposit_rate, was_clamped, model_version, explanation }` (+ optional `asset_id` echo). Silent zeros raise `ValueError`. Tests: `tests/test_predict_asset_price_tool.py`. Archive: `openspec/changes/archive/2026-08-12-s6-predict-asset-price-tool/`.
 
 ---
 
@@ -126,6 +135,8 @@ No separate tool-server process is required for multi-agent pricing.
 | **1.0.0** | 2026-08-10 | Initial (with FastMCP packaging options) |
 | **1.1.0** | 2026-08-10 | **Remove FastMCP**; in-process multi-agent tool only |
 | **1.2.0** | 2026-08-11 | C/W/D roles: pricing Worker fan-out per need; Coordinator synthesis |
+| **1.2.1** | 2026-08-12 | Feasibility README pin (pre-S6 tool) |
+| **1.2.2** | 2026-08-12 | **S6 as-built**: `predict_asset_price` tool; P1–P4 marked done; P5 remains Phase 7 |
 
 ---
 

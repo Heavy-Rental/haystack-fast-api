@@ -25,7 +25,7 @@ These apply across studies unless a study explicitly narrows scope:
 |-------|--------|---------|
 | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane + Spring multi-call: Call 1 ingest · Call 2 recommend · Call 3 chatbot Q&A. **I0+I1 DocumentStore cutover as-built** (factory wire, tenant filters, TTL). | **2.7.7** |
 | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) | Spring ↔ FastAPI wire; Call 1/2/3 saga; resilience C1–C3. | **1.3.2** |
-| [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) | ML pricing as **in-process** agent tool; pricing **Worker** fan-out per need; Phase 1e/2a. | **1.2.1** |
+| [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) | ML pricing as **in-process** agent tool; pricing **Worker** fan-out per need; **S6 `predict_asset_price` as-built**. | **1.2.2** |
 | [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) | Synthesis **[8]** → assets + prices (**HTTP Call 2** recommend path). | **1.4.2** |
 | [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) | C/W/D roles; Call 2 recommend / Call 3 Q&A numbering aligned. | **2.1.1** |
 | [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) | Indexing Pipeline → Haystack SuperComponent (optional packaging for Coordinator gate **[4]**). | **1.2.1** |
@@ -35,7 +35,7 @@ These apply across studies unless a study explicitly narrows scope:
 
 | Document | Topic | Version |
 |----------|--------|---------|
-| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. **S3 as-built**; **S5-I0+I1 as-built** (factory + pipeline wire + isolation + TTL; optional `@pytest.mark.pgvector`); **§7.0 default pytest isolation** (mock dim 384). | **3.5.5** |
+| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. **S3 as-built**; **S5-I0+I1 as-built**; **S6 as-built** (`predict_asset_price` → `pricing_client`); **§7.0 default pytest isolation** (mock dim 384). | **3.5.6** |
 | [`phase2-s2a-haystack-implementation-plan.md`](./phase2-s2a-haystack-implementation-plan.md) | **Phase 2 / S2a only** — haystack-fast-api: `Idempotency-Key`, correlation logging, docs. **Implemented** (FR-IX-024/025; §7 test runbook + conftest isolation). | **1.1.3** |
 | [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) | **S2b** Spring client + portal Call 1→2 recommend. Export: [`../Feasibility_Study_Spring/`](../Feasibility_Study_Spring/). | **2.0.0** |
 
@@ -44,6 +44,8 @@ These apply across studies unless a study explicitly narrows scope:
 **Stage S5-I0 (haystack, as-built):** `INDEXING_DOCUMENT_STORE` + `build_document_store()` (`memory` default \| `pgvector`). OpenSpec FR-IX-027 · archive `openspec/changes/archive/2026-08-12-s5-i0-document-store-factory/`.
 
 **Stage S5-I1 (haystack, as-built):** `create_session_document_store()` wired into Call 1 + session; retrieval filters `user_id`+`ingest_id`; optional TTL/delete; dual-mode tests. OpenSpec FR-IX-028 · archive `openspec/changes/archive/2026-08-12-s5-i1-document-store-pipeline-wire/`.
+
+**Stage S6 (haystack, as-built):** in-process agent tool `predict_asset_price` → `pricing_client.predict_price_for_asset` (production model + per-asset clamp; never silent zeros). Phase 1e/2a/2b/2c already production. Phase 7 Workers [7]×N not wired. OpenSpec dynamic-pricing US-5 · archive `openspec/changes/archive/2026-08-12-s6-predict-asset-price-tool/`.
 
 ### Spring Boot handoff package
 
