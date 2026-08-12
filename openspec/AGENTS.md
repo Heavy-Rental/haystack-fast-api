@@ -17,9 +17,11 @@ This folder is the **SDD source of truth**. Standards:
 ```text
 Portal / Spring
   │  user_id (required) + project_text | file
+  │  optional: Idempotency-Key, X-Correlation-Id, traceparent (S2a)
   ▼
 POST /internal/v1/recommendations/submitprojectspecification
-  │
+  │  correlation middleware → log + echo X-Correlation-Id
+  │  if Idempotency-Key: process-local store hit → same ingest_id
   ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ INDEXING  (specs/indexing)                                  │
@@ -42,6 +44,7 @@ IngestFromProjectSpecResponse (lean public body — FR-IX-023 as-built S1a–S1e
   as-built: ingest_id, user_id, user_requirement_summary,
             tentative_start/end_date (request preferred; else free-text extract),
             needs_summary[], expected_budget | null, warnings[]
+  as-built S2a: Idempotency-Key replay (FR-IX-024); correlation echo (FR-IX-025)
   Not Call 1: ranked assets / ML rent (Call 3)
   Technical documents[] / kg_* stay internal (session meta)
 

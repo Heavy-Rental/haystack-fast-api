@@ -66,6 +66,13 @@ class Settings(BaseSettings):
     project_agent_mode: str = Field(default="stub", alias="PROJECT_AGENT_MODE")
     project_agent_top_k: int = Field(default=5, alias="PROJECT_AGENT_TOP_K")
 
+    # Call 1 ingest idempotency (S2a / C1) — process-local memory store
+    # TTL in seconds for cached successful lean responses (0 or negative = no expiry)
+    idempotency_ttl_seconds: float = Field(
+        default=86400.0,
+        alias="IDEMPOTENCY_TTL_SECONDS",
+    )
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:

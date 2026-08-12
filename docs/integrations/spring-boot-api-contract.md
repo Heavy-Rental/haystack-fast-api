@@ -25,7 +25,7 @@
 
 ## Conventions common to every endpoint
 
-- **Content-Type**: `application/json`, except `/from-project-spec` which also accepts `multipart/form-data` (for file upload).
+- **Content-Type**: `application/json`, except ingest which also accepts `multipart/form-data` (for file upload).
 - **Error shape**: every non-2xx response is `{"error": "<code>", "message": "<human-readable string>"}`.
 
   | HTTP status | `error` code |
@@ -37,6 +37,11 @@
   | 409 | `conflict` |
   | 422 | `bad_request` |
   | 500 | `internal_error` (unexpected server-side failure — treat as retryable/alertable, not a client bug) |
+
+- **Correlation (S2a as-built):** send optional `X-Correlation-Id` (and/or W3C `traceparent`). Haystack logs and **echoes** `X-Correlation-Id` on every response; mints a UUID when omitted.
+- **Idempotency on ingest (S2a as-built):** send optional `Idempotency-Key` (UUID per logical ingest) on Call 1. Scoped with `user_id`. Successful **200** lean bodies are replayed from a **process-local** store (same `ingest_id`); **4xx/5xx are not cached**. Safe for timeout retries. **Not multi-replica shared** yet.
+
+Normative OpenSpec: [`openspec/specs/indexing/contracts/ingest-from-project-spec.md`](../../openspec/specs/indexing/contracts/ingest-from-project-spec.md) (live path is `/internal/v1/recommendations/...`).
 
 ---
 
@@ -230,5 +235,6 @@ Synchronous, authoritative, guardrail-clamped price per asset for a proposed ren
 
 | Date | Note |
 |------|------|
+| 2026-08-12 | **S2a:** documented `Idempotency-Key` + `X-Correlation-Id` / `traceparent` conventions (process-local idempotency). |
 | 2026-08-11 | Initial draft, compiled from `app/schemas/*.py` and `app/api/*.py` as of `feature/ml-6-internal-pricing-api`. Covers all 4 live routes Spring Boot calls. |
 | 2026-08-11 (later) | Resolved the `results[].error` open item — kept as specified, no shape change. Dropped the Postman collection item — decided not to build one for this endpoint; the field tables and JSON examples in this doc are the integration reference. |

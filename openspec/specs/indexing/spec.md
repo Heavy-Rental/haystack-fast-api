@@ -462,6 +462,62 @@ When no confident dates exist, fields MUST be null (warning MAY state dates not 
 - **THEN** body MUST NOT require ranked `item` / `pricing.daily_rate` from fleet+ML path
 - **AND** Call 3 remains the path for recommended assets + predicted rent price
 
+### Requirement: Idempotent ingest via Idempotency-Key (as-built S2a)
+`POST /internal/v1/recommendations/submitprojectspecification` MUST accept optional header **`Idempotency-Key`**.
+
+When the header is present (non-blank):
+
+1. The server MUST scope the key with **`user_id`** (same key + different user → independent logical ingests).  
+2. On first **successful** 200, the server MUST store the lean `IngestFromProjectSpecResponse` (process-local memory; optional TTL).  
+3. On a later POST with the same scoped key, the server MUST return the **same** stored lean body (same `ingest_id`) **without** requiring a second full index + KG run.  
+4. Failed **4xx/5xx** MUST NOT be cached as success; a later successful POST with the same key is new work that may then be stored.  
+5. JSON and multipart MUST honour the same key.  
+6. Concurrent POSTs with the same scoped key SHOULD use single-flight (wait) rather than double-indexing.
+
+When the header is **missing** or blank, behaviour MUST remain “always new ingest” (distinct `ingest_id`s).  
+Multi-replica shared store is **out of scope** for S2a; single-process limit MUST be documented.  
+(Trace: FR-IX-024)  
+**Status:** **as-built (S2a)**.
+
+#### Scenario: Same key replays lean body
+- **GIVEN** a successful Call 1 with `Idempotency-Key` "k1" for `user_id` U
+- **WHEN** the same logical request is POSTed again with `Idempotency-Key` "k1" for U
+- **THEN** the response `ingest_id` equals the first response
+- **AND** a second full index+KG is not required
+
+#### Scenario: Different keys or missing key
+- **GIVEN** two successful POSTs with different `Idempotency-Key` values (or no key)
+- **WHEN** both complete
+- **THEN** two distinct `ingest_id`s are returned
+
+#### Scenario: Failure not cached as success
+- **GIVEN** a first POST with key "k" that returns 400
+- **WHEN** a later POST with key "k" succeeds
+- **THEN** the success body is returned and may be stored for subsequent replays
+
+### Requirement: Correlation id on request path (as-built S2a)
+The application MUST accept optional **`X-Correlation-Id`** and/or W3C **`traceparent`** on HTTP requests (ingest, project-knowledge Q&A, and health).
+
+1. When `X-Correlation-Id` is present, the server MUST use it; otherwise it MUST mint a UUID.  
+2. The correlation id MUST be bound into logging context for the request.  
+3. The response MUST echo **`X-Correlation-Id`**.  
+4. `traceparent`, when present, SHOULD be logged; C1 does not require full distributed-trace export.  
+5. Correlation MUST NOT change business payload shapes (FR-IX-023 lean body unchanged).  
+
+(Trace: FR-IX-025)  
+**Status:** **as-built (S2a)**.
+
+#### Scenario: Correlation header echoed and logged
+- **GIVEN** a client sends `X-Correlation-Id: corr-1`
+- **WHEN** any live route handles the request
+- **THEN** the response includes `X-Correlation-Id: corr-1`
+- **AND** request-path logs include the correlation id
+
+#### Scenario: Server mints correlation when missing
+- **GIVEN** no `X-Correlation-Id` header
+- **WHEN** a request is handled
+- **THEN** the response still includes a non-empty `X-Correlation-Id`
+
 ### Requirement: MIME classification map
 Sources MUST be classified according to the following normative extension / MIME map. Unclassified / other / unknown → **400**.  
 (Trace: MIME map §3; FR-IX-002, FR-IX-003)
@@ -508,6 +564,8 @@ Sources MUST be classified according to the following normative extension / MIME
 - Do not silently replace process-local `InMemoryDocumentStore` with multi-instance persistence without a dedicated change.
 - Do not invent `expected_budget` or dates when not in request/document (FR-IX-023).
 - Do not conflate **needs summary** with **fleet recommendation** or **predicted rent price**.
+- Do not cache failed ingest responses under `Idempotency-Key` (FR-IX-024).
+- Do not claim multi-replica idempotency while the store is process-local memory only.
 
 ---
 
@@ -515,6 +573,7 @@ Sources MUST be classified according to the following normative extension / MIME
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **0.7.0** | 2026-08-12 | **S2a as-built:** FR-IX-024 `Idempotency-Key` (process-local store); FR-IX-025 correlation headers; contract + design + tests |
 | **0.5.0** | 2026-08-11 | **S1a lean as-built:** public body `ingest_id` + `user_id` + `user_requirement_summary` + `warnings`; internal paths `/internal/v1/recommendations/...`; full FR-IX-023 still TARGET |
 | **0.5.1** | 2026-08-11 | **S1b as-built:** echo request dates as `tentative_start_date` / `tentative_end_date` (JSON + multipart); free-text date extract still TARGET |
 | **0.5.2** | 2026-08-11 | FR-IX-023 delivery order: S1c needs → S1d budget → **S1e free-text dates** (after S1d) → 1.7 as-built; aligns with implementation-plan Phase 1 |

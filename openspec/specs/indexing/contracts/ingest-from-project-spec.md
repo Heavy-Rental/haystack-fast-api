@@ -4,12 +4,40 @@
 |-------|--------|
 | **Capability** | [`../spec.md`](../spec.md) (indexing) |
 | **Design** | [`../design.md`](../design.md) |
-| **Status** | **as-built** lean Call 1 + **full FR-IX-023** project-spec summary (S1a–S1e) |
+| **Status** | **as-built** lean Call 1 + **full FR-IX-023** project-spec summary (S1a–S1e) + **S2a** idempotency/correlation |
 | **DTO (as-built)** | `IngestFromProjectSpecResponse` (`app/schemas/indexing.py`) |
 | **Standards** | OpenSpec behaviour · Spec-kit contract tables · OpenSPDD (prompt/spec before code) |
+| **Resilience** | Stage **S2a** / track **C1** — [`Feasibility_Study/phase2-s2a-haystack-implementation-plan.md`](../../../../Feasibility_Study/phase2-s2a-haystack-implementation-plan.md) |
 
 Live HTTP owner: **indexing** (not FR-010 recommend on the public route).  
 Internal pipeline still: dual-branch index → DocumentStore write → mandatory KG-1 → project-knowledge session register (for Call 2).
+
+---
+
+## Request headers (S2a as-built)
+
+| Header | Required | Notes |
+|--------|----------|--------|
+| `Idempotency-Key` | no | UUID (or opaque string) per **logical** ingest. When present, scoped with `user_id`. Successful **200** lean body is stored process-locally and **replayed** on retry (same `ingest_id`). Failed **4xx/5xx are not cached**. Missing key → always new ingest (legacy behaviour). |
+| `X-Correlation-Id` | no | End-to-end correlation. Logged on the request path; **echoed** on the response. If omitted, server mints a UUID. |
+| `traceparent` | no | Optional W3C Trace Context; logged when present (C1 logging-only). |
+
+**Idempotency rules (normative):**
+
+1. Applies to **successful ingest only** (HTTP 200 lean body).  
+2. Scope key = `user_id` + `Idempotency-Key` (same key under different users → different logical ingests).  
+3. JSON and multipart honour the same key.  
+4. Concurrent POSTs with the same scoped key use **single-flight** (wait for first producer; no double logical index).  
+5. Store is **process-local memory** (optional TTL via `IDEMPOTENCY_TTL_SECONDS`, default 24h). **Not multi-replica safe** without a later shared store.  
+6. Clients MAY retry **5xx** (and timed-out requests) with the **same** `Idempotency-Key`. Do **not** reuse a key for a different logical project-spec.
+
+### Example headers
+
+```http
+Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
+X-Correlation-Id: spring-req-abc123
+traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01
+```
 
 ---
 
@@ -17,7 +45,7 @@ Internal pipeline still: dual-branch index → DocumentStore write → mandatory
 
 | Field | Required | Notes |
 |-------|----------|--------|
-| `user_id` | **yes** | Tenant for meta + KG path |
+| `user_id` | **yes** | Tenant for meta + KG path; also scopes `Idempotency-Key` |
 | `user_name` | no | Audit only (not on lean public response) |
 | `project_text` and/or `file` | one non-empty source | JSON-only needs non-empty text |
 | `start_date` / `end_date` | no | Window valid if both set; echoed as `tentative_*` (S1b); free-text extract when omitted (S1e) |
@@ -118,9 +146,9 @@ Default response **SHOULD** stay compact (no public `documents[]` / `kg_*`).
 
 ---
 
-## Error notes (`400`)
+## Error notes (`400` / shared shape)
 
-Error body shape: `{"error","message"}` (shared handlers).
+Error body shape (as-built): `{"error":"<code>","message":"<text>"}` (shared handlers in `app/core/errors.py`).
 
 | Case | Notes |
 |------|--------|
@@ -130,6 +158,11 @@ Error body shape: `{"error","message"}` (shared handlers).
 | Zero documents after classification (hard conversion failure) | FR-IX-013 |
 | Zero written chunks | FR-IX-016 |
 | KG hard-fail | No lean success body; no session register for that ingest |
+| Validation / bad content-type | `bad_request` — **not** stored under `Idempotency-Key` |
+
+**Retry guidance (S2a):** Spring MAY retry **5xx** and transport timeouts with the same `Idempotency-Key`. **4xx** indicate client/input problems — fix the request before reusing a key (or use a new key for a new logical ingest).
+
+**Ops limits (document only in C1):** process-local idempotency map; multi-replica requires a shared store (out of scope S2a). Max upload size is deployment/proxy-dependent (Uvicorn/reverse-proxy); no app-level hard cap beyond MIME validation.
 
 ---
 
