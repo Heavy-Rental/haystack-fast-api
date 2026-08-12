@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added (S7.3 + S7.4 / Phase 7 — 2026-08-12)
+
+- Recommend LangGraph DAG (`app/agents/recommend_graph.py` / `recommend_nodes.py`): `check_gate → project_worker → delegator → execute_needs → synthesis`. Must-seq fleet→price within need; `RECOMMEND_FANOUT_CAP` (default 4) batches across needs. Gate false skips fleet/price tools.
+- Tool-free Coordinator stub synthesis (`app/agents/recommend_synthesis.py`): merge `fleet_by_need` + `prices_by_need` → `results_by_need`; empty fleet / missing prices → `item: null` + warning; no invent; F-2 on apply.
+- Isolated from Stage-1 Q&A (`app/agents/graph.py`) and from Call 2 HTTP (still `SessionRecommendService` MVP / S7.5).
+- Tests: `tests/test_recommend_graph_order.py`, `test_recommend_fanout.py`, `test_recommend_synthesis.py`.
+- OpenSpec archive: `openspec/changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/`.
+
 ### Added (S5-I1 / Phase 5.3–5.6 — 2026-08-12)
 
 - **FR-IX-028** — Call 1 wires `create_session_document_store()` (`INDEXING_DOCUMENT_STORE`: `memory` = fresh InMemory per ingest; `pgvector` = shared table `indexing_project_chunks`).

@@ -25,7 +25,7 @@ See [`spec.md`](./spec.md) Purpose, FRs FR-001+, NFRs, acceptance criteria, doma
 | RecommendationItem | Singular ranked choice per unit-need |
 | Pricing prediction | From `predict_price()` |
 | Knowledge graph | Ragas KG-1 (as-built after indexing) / KG-2 target |
-| Tool | Named in-process agent tool (S7.1 fleet catalog as-built; graph wire TARGET) |
+| Tool | Named in-process agent tool (S7.1 fleet catalog as-built; S7.3 graph invokes them) |
 | RecommendAgentState | Phase 7 STM partitions + F-2 validation (**S7.0 as-built**) |
 
 ## A — Approach
@@ -182,7 +182,7 @@ Storage: in-memory during build → JSON file; no Neo4j by default.
 
 See [`../recommendation-pipeline/design.md`](../recommendation-pipeline/design.md) full inventory. Key: `app/pipelines/*`, `app/services/recommendations.py`, `app/services/pricing_client.py`.
 
-### As-built multi-agent building blocks (Phase 7 S7.0–S7.1)
+### As-built multi-agent building blocks (Phase 7 S7.0–S7.4)
 
 | Module | Role |
 |--------|------|
@@ -190,9 +190,12 @@ See [`../recommendation-pipeline/design.md`](../recommendation-pipeline/design.m
 | `app/agents/fleet_tools.py` | **S7.1** `decompose_project_needs`, `retrieve_fleet_assets`, `filter_fleet_candidates`, `check_booking_availability` |
 | `app/agents/tool_factory.py` | **S7.1** DI catalog (`fake` seed default \| `sql` DTO backend); allowlist rejects unknown tools |
 | `app/agents/tools.py` | S3 `run_indexing_from_request`; S6 `predict_asset_price` |
-| Tests | `tests/test_recommend_agent_state.py`, `test_fleet_tools.py`, `test_tool_factory.py` |
+| `app/agents/recommend_graph.py` | **S7.3** `build_recommend_graph` / `run_recommend_graph` (isolated from Q&A) |
+| `app/agents/recommend_nodes.py` | **S7.3** gate, project worker, delegator, fleet/price workers, `execute_needs` |
+| `app/agents/recommend_synthesis.py` | **S7.4** tool-free stub Coordinator [8] |
+| Tests | `tests/test_recommend_agent_state.py`, `test_fleet_tools.py`, `test_tool_factory.py`, `test_recommend_graph_order.py`, `test_recommend_fanout.py`, `test_recommend_synthesis.py` |
 
-LangGraph recommend DAG / synthesis / HTTP enrich remain **S7.3–S7.5**.
+HTTP Call 2 multi-agent enrich remains **S7.5**. Prompts A–L remain **S7.7**.
 
 ## O — Operations
 

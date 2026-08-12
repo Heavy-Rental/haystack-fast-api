@@ -404,8 +404,9 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | Rank MVP | Deterministic + template rationale | CI without LLM; honest schema-gap text |
 | Unit loop vs one giant graph | Service loop for 4–8 | Matches parent architecture; easier testing |
 | Production pricing swap | Single `pricing_client` module | FR-022; agent tool `predict_asset_price` (S6) shares entrypoint |
-| Agent fleet tools (S7.1) | In-process allowlist via `fleet_tools` + `tool_factory` | Fake seed default; SQL DTO backend; free-form SQL rejected; graph not wired |
-| Recommend agent state (S7.0) | `RecommendAgentState` + F-2 validation | Partition ownership before S7.3 LangGraph wire |
+| Agent fleet tools (S7.1) | In-process allowlist via `fleet_tools` + `tool_factory` | Fake seed default; SQL DTO backend; free-form SQL rejected; invoked from S7.3 graph |
+| Recommend agent state (S7.0) | `RecommendAgentState` + F-2 validation | Partition ownership used by S7.3 nodes |
+| Recommend LangGraph + stub synthesis (S7.3/S7.4) | Isolated DAG + tool-free [8] | Call 2 HTTP still `RecommendationService` MVP (S7.5) |
 
 ---
 
@@ -431,6 +432,7 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | **1.2.1** | 2026-08-07 | Sequential README; live path notes user_id + mandatory KG |
 | **2.0.0** | 2026-08-10 | Migrated to OpenSpec Requirement/Scenario + design REASONS under `openspec/specs/recommendation-pipeline/` |
 | **2.1.0** | 2026-08-12 | Key decisions: S7.0 RecommendAgentState + S7.1 fleet tool catalog as-built (agent path building blocks; Call 2 MVP unchanged) |
+| **2.2.0** | 2026-08-12 | S7.3/S7.4 as-built: recommend DAG + stub synthesis; Call 2 HTTP still service MVP |
 
 When pipeline contracts change, update this SPEC + tests. Live HTTP → indexing/KG first.
 

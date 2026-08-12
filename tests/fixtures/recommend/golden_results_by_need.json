@@ -1,0 +1,21 @@
+{
+  "results_by_need": [
+    {
+      "need_id": "need_access",
+      "item": {
+        "equipment_type": "Scissors Lift",
+        "asset_id": "AST-SL-001",
+        "rank": 1,
+        "rationale": "Stub merge: Need scissor lift for 8m access → AST-SL-001.",
+        "pricing": {
+          "daily_rate": 185.0,
+          "total_price": 2590.0,
+          "currency": "SGD",
+          "model_version": "test-fixture"
+        },
+        "availability": "available"
+      },
+      "warnings": []
+    }
+  ]
+}

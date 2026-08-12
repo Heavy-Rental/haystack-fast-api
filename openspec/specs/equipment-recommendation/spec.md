@@ -263,7 +263,7 @@ Routers MUST stay thin; pipeline construction and SQL live in services/pipelines
 - **FR-018b**: Empty candidate/document lists → predictable empty outputs, no unhandled exceptions.
 - **FR-019**: Ranking generation MUST use Haystack LLM generation + `PromptBuilder` (or equivalent).
 - **FR-019a**: (Target) SuperComponents for recurring subgraphs.
-- **FR-019b**: (Target) Tools with short unique name + NL description. **As-built (S7.1):** allowlisted in-process tools `decompose_project_needs`, `retrieve_fleet_assets`, `filter_fleet_candidates`, `check_booking_availability` (+ S6 `predict_asset_price`) via `app/agents/fleet_tools.py` + `tool_factory.py`. Free-form SQL/Cypher rejected. Graph wire remains S7.3+.
+- **FR-019b**: (Target) Tools with short unique name + NL description. **As-built (S7.1):** allowlisted in-process tools `decompose_project_needs`, `retrieve_fleet_assets`, `filter_fleet_candidates`, `check_booking_availability` (+ S6 `predict_asset_price`) via `app/agents/fleet_tools.py` + `tool_factory.py`. Free-form SQL/Cypher rejected. **As-built (S7.3):** tools are invoked from the recommend LangGraph DAG. HTTP Call 2 enrich remains S7.5.
 - **FR-019c**: Pipelines assembled with explicit `.add_component` / `.connect` / `.run`.
 - **FR-019d**: (Target) File ingest branch by media type.
 - **FR-019e**: (Target) Hybrid retrieval when catalog knowledge exists.
@@ -285,7 +285,7 @@ Routers MUST stay thin; pipeline construction and SQL live in services/pipelines
 
 ### Requirement: Recommend agent state partitions (S7.0 as-built)
 
-The multi-agent recommend path SHALL use a shared `RecommendAgentState` (STM) with role-partitioned writes. Fleet Workers write only `fleet_by_need[need_id]`; Pricing Workers write only `prices_by_need[need_id]` for known candidate `asset_id`s; Coordinators write `recommendation` without inventing `asset_id`s outside fleet candidates. `run.indexing_ok == false` MUST block fleet (and pricing) partition writes. Illegal transitions raise a hard error (no partial corrupt write). Runtime: `app/agents/recommend_state.py` (`validate_state_transition`, `apply_partition_write`). LangGraph DAG wiring is Phase 7 S7.3+ and out of scope for this requirement's gate.
+The multi-agent recommend path SHALL use a shared `RecommendAgentState` (STM) with role-partitioned writes. Fleet Workers write only `fleet_by_need[need_id]`; Pricing Workers write only `prices_by_need[need_id]` for known candidate `asset_id`s; Coordinators write `recommendation` without inventing `asset_id`s outside fleet candidates. `run.indexing_ok == false` MUST block fleet (and pricing) partition writes. Illegal transitions raise a hard error (no partial corrupt write). Runtime: `app/agents/recommend_state.py` (`validate_state_transition`, `apply_partition_write`). LangGraph DAG wiring is **as-built S7.3** (`app/agents/recommend_graph.py`).
 
 **Status:** **as-built (S7.0)**.
 
@@ -302,6 +302,41 @@ The multi-agent recommend path SHALL use a shared `RecommendAgentState` (STM) wi
 - **GIVEN** fleet candidates that do not include `AST-UNKNOWN`
 - **WHEN** a pricing_worker writes a price for `AST-UNKNOWN`
 - **THEN** validation rejects the transition
+
+### Requirement: Recommend LangGraph DAG (S7.3 as-built)
+
+The recommend path SHALL run an isolated LangGraph DAG (not the Stage-1 Q&A graph): `check_gate → project_worker [5] → delegator → execute_needs ([6]→[7]×N) → synthesis [8]`. Within a need, fleet MUST complete before pricing. Across needs, fan-out width is `RECOMMEND_FANOUT_CAP` (default 4, min 1): cap 1 serializes each need pipeline; cap ≥ 2 batches fleets then prices. `run.indexing_ok == false` MUST skip project/fleet/price tools and emit a gate warning. Workers MUST NOT spawn sibling needs. Runtime: `app/agents/recommend_graph.py`, `app/agents/recommend_nodes.py`. HTTP Call 2 remains the service MVP (S7.5).
+
+**Status:** **as-built (S7.3)**.
+
+#### Scenario: Never price before fleet for the same need
+- **GIVEN** two fixture needs and recording tools
+- **WHEN** `run_recommend_graph` runs with `indexing_ok` true
+- **THEN** for each `need_id` the first pricing worker start is after that need's fleet worker start
+
+#### Scenario: Gate refuse blocks fleet and price
+- **GIVEN** `run.indexing_ok` is false
+- **WHEN** the recommend graph runs
+- **THEN** fleet and pricing tools are not called
+- **AND** `results_by_need` is empty with a gate warning
+
+### Requirement: Tool-free recommend synthesis (S7.4 as-built)
+
+Coordinator synthesis [8] MUST be tool-free. It SHALL merge `fleet_by_need` + `prices_by_need` into `recommendation.results_by_need` (singular `item` per need). Empty fleet or missing tool-backed prices → `item: null` + warning. MUST NOT invent `asset_id` or write `daily_rate <= 0`. Output shape MUST validate before F-2 apply. Runtime: `app/agents/recommend_synthesis.py` (`synthesize_recommendation`). Stub mode is the CI default; LLM rationale is S7.7.
+
+**Status:** **as-built (S7.4)**.
+
+#### Scenario: Golden merge copies tool rates only
+- **GIVEN** fixture candidates including `AST-SL-001` and a price row `daily_rate` 185
+- **WHEN** stub synthesis runs
+- **THEN** `results_by_need` contains `AST-SL-001` with `daily_rate` 185
+- **AND** no `asset_id` appears that was not in fleet candidates
+
+#### Scenario: Empty fleet yields null item
+- **GIVEN** no fleet candidates for a need
+- **WHEN** synthesis runs
+- **THEN** `item` is null
+- **AND** warnings mention no fleet match
 
 ### Requirement: Pricing integration (FR-020–FR-024)
 
@@ -586,6 +621,7 @@ Architecture, Ragas pattern, deps, and offline pipeline sketch: [`design.md`](./
 | 0.9.2 | 2026-08-07 | KG as-built pointer; sequential map |
 | 1.0.0 | 2026-08-10 | Migrated to OpenSpec under `openspec/specs/equipment-recommendation/`; architecture/day plan/deployment → design.md |
 | 1.1.0 | 2026-08-12 | **S7.0 + S7.1 as-built:** `RecommendAgentState` + F-2 partition validation; allowlisted fleet/needs tools + DI factory (FR-019b note). Graph (S7.3+) still TARGET. Archives `changes/archive/2026-08-12-s7-0-recommend-agent-state/`, `.../s7-1-fleet-tool-catalog/`. |
+| 1.2.0 | 2026-08-12 | **S7.3 + S7.4 as-built:** recommend LangGraph DAG (gate → [5] → Delegator → ([6]→[7])×N) + tool-free stub synthesis [8]. HTTP Call 2 still service MVP (S7.5). Archive `changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/`. |
 
 When behaviour, API paths, tool names, or schedule gates change, bump this table and align OpenAPI / tests / execution plan in the same change set.
 
