@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | Phase 2a/2b/2c **implemented**. Phase 6 / S6 **as-built (2026-08-12)** — in-process agent tool `predict_asset_price` → `pricing_client` (same entrypoint as pipeline); never silent zeros; `tests/test_predict_asset_price_tool.py`. Phase 2d-i **done**; Phase 2d-ii/iii remain. Phase 3 (real-data blend + scheduled retrain) not yet implemented. Phase 7 Pricing Workers graph not wired |
+| **Status** | Phase 2a/2b/2c **implemented**. Phase 6 / S6 **as-built (2026-08-12)** — in-process agent tool `predict_asset_price` → `pricing_client` (same entrypoint as pipeline); never silent zeros; `tests/test_predict_asset_price_tool.py`. Phase 2d-i **done**; Phase 2d-ii/iii remain. Phase 3 (real-data blend + scheduled retrain) not yet implemented. Phase 7 Pricing Workers [7]×N **as-built S7.3** (HTTP Call 2 enrich remains S7.5) |
 | **Feature module** | `app/services/pricing/` — **implemented** (2026-08-11): `model.py`, `train.py`, `feature_schema.py`, `pricing_tables.py`, `category_mapping.py`, `repository.py`, `read_resilience.py`, `artifacts/` |
 | **Standards** | OpenSpec · Spec-kit user stories · OpenSPDD (see [`design.md`](./design.md)) |
 | **Depends on** | [`../project-setup/spec.md`](../project-setup/spec.md); [`../domain-seed-data/spec.md`](../domain-seed-data/spec.md) (Phase 2 prep dependency — **executed & verified 2026-08-11**; the data side is no longer a blocker, only the category-name mapping code fix below remains) |

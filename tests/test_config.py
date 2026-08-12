@@ -52,3 +52,9 @@ def test_indexing_document_store_defaults_to_memory() -> None:
     settings = Settings()
     assert settings.indexing_document_store == "memory"
     assert settings.indexing_chunk_ttl_seconds == 0.0
+
+
+def test_recommend_fanout_cap_defaults_to_four() -> None:
+    """Phase 7 / S7.3: RECOMMEND_FANOUT_CAP defaults to 4 (min 1)."""
+    settings = Settings()
+    assert settings.recommend_fanout_cap == 4

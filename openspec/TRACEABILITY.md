@@ -30,6 +30,7 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | — (S6 new) | `openspec/changes/archive/2026-08-12-s6-predict-asset-price-tool/` | US-5 / Phase 6 agent pricing tool |
 | — (S7.0 new) | `openspec/changes/archive/2026-08-12-s7-0-recommend-agent-state/` | Phase 7 RecommendAgentState + F-2 partition validation |
 | — (S7.1 new) | `openspec/changes/archive/2026-08-12-s7-1-fleet-tool-catalog/` | Phase 7 fleet/needs in-process tool catalog + DI factory |
+| — (S7.3 + S7.4 new) | `openspec/changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/` | Phase 7 recommend LangGraph DAG + tool-free stub synthesis |
 | `app/agents/prompts.py` | `openspec/spdd/prompts/project-knowledge-agents.md` (index) | OpenSPDD first-class prompts |
 
 ## FR / requirement ID map
@@ -70,6 +71,9 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | S7.1 (as-built) | Equipment recommendation — fleet/needs allowlisted tools + DI factory | `specs/equipment-recommendation/spec.md`; `app/agents/fleet_tools.py` · `tool_factory.py`; `tests/test_fleet_tools.py` · `test_tool_factory.py`; impl-plan **Phase 7 / S7.1** · archive `changes/archive/2026-08-12-s7-1-fleet-tool-catalog/` |
 | S7.0 change archive | RecommendAgentState + validation tasks | `changes/archive/2026-08-12-s7-0-recommend-agent-state/` |
 | S7.1 change archive | Fleet tool catalog tasks | `changes/archive/2026-08-12-s7-1-fleet-tool-catalog/` |
+| S7.3 (as-built) | Equipment recommendation — recommend LangGraph DAG (gate → [5] → Delegator → ([6]→[7])×N) | `specs/equipment-recommendation/spec.md` + design; `app/agents/recommend_graph.py` · `recommend_nodes.py`; `tests/test_recommend_graph_order.py` · `test_recommend_fanout.py`; impl-plan **Phase 7 / S7.3** · archive `changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/` |
+| S7.4 (as-built) | Equipment recommendation — tool-free Coordinator synthesis [8] | `specs/equipment-recommendation/spec.md`; `app/agents/recommend_synthesis.py`; `tests/test_recommend_synthesis.py`; impl-plan **Phase 7 / S7.4** · same archive |
+| S7.3/S7.4 change archive | Recommend graph + synthesis tasks | `changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/` |
 | FR-001 … FR-053 (+ NFR, demo) | Equipment recommendation parent | `specs/equipment-recommendation/spec.md` |
 | Domain invariants | Domain | `specs/domain/spec.md` |
 | Setup / layering / stack | Project setup | `specs/project-setup/spec.md` |

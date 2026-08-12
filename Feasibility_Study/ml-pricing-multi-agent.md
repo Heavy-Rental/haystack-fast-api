@@ -3,9 +3,9 @@
 | Field | Value |
 |-------|--------|
 | **Document type** | Architecture / ML integration feasibility study |
-| **Status** | Complete (study); **S6 tool as-built** (2026-08-12) — P1–P4 production path live; P5 = Phase 7 |
+| **Status** | Complete (study); **S6 tool as-built**; **S7.3 Workers [7]×N as-built** (2026-08-12) — P5 graph fan-out live; HTTP Call 2 enrich remains S7.5 |
 | **Date** | 2026-08-10 (study); 2026-08-12 (S6 tool) |
-| **Version** | 1.2.2 |
+| **Version** | 1.2.3 |
 | **Application** | `haystack-fast-api` equipment recommendation |
 | **Question** | Can the **ML pricing model** supply structured context for Multi-Agent **recommend after [4]** when agents invoke tools **in-process** (including fleet data from Postgres-Haystack)? |
 | **Primary sources** | [`docs/dynamic-pricing-masterplan.md`](../docs/dynamic-pricing-masterplan.md) · [`docs/dynamic-pricing-execution-plan.md`](../docs/dynamic-pricing-execution-plan.md) · [`openspec/specs/dynamic-pricing/`](../openspec/specs/dynamic-pricing/) · `ml-experiments/` · `app/services/pricing_client.py` |
@@ -115,7 +115,7 @@ No separate tool-server process is required for multi-agent pricing.
 | P2 | Phase 1e live utilization | **As-built** |
 | P3 | Phase 2a `app/services/pricing/` + per-asset clamp | **As-built** (+ 2b pipeline wire, 2c quote API) |
 | P4 | Wire `predict_asset_price` as multi-agent tool (in-process) | **As-built S6** — `app/agents/tools.py` → `pricing_client` |
-| P5 | Recommend graph: pricing **Workers [7]×N** + Coordinator **[8]** when `include_pricing` | **Todo** (Phase 7 / S7.x) |
+| P5 | Recommend graph: pricing **Workers [7]×N** + Coordinator **[8]** when `include_pricing` | **As-built S7.3/S7.4** (graph + stub merge; HTTP Call 2 still S7.5) |
 
 ### As-built tool (P4 / S6)
 
@@ -136,6 +136,7 @@ Returns `{ daily_rate, total_price, currency, deposit_rate, was_clamped, model_v
 | **1.1.0** | 2026-08-10 | **Remove FastMCP**; in-process multi-agent tool only |
 | **1.2.0** | 2026-08-11 | C/W/D roles: pricing Worker fan-out per need; Coordinator synthesis |
 | **1.2.1** | 2026-08-12 | Feasibility README pin (pre-S6 tool) |
+| **1.2.3** | 2026-08-12 | **S7.3/S7.4 as-built**: pricing Workers [7]×N + stub [8]; P5 graph path live; HTTP still S7.5 |
 | **1.2.2** | 2026-08-12 | **S6 as-built**: `predict_asset_price` tool; P1–P4 marked done; P5 remains Phase 7 |
 
 ---

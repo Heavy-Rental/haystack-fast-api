@@ -73,8 +73,10 @@ Spring Boot (RestClient / WebClient saga)
         ─ ─ ─ ─ multi-agent recommend building blocks ─ ─ ─ ─
 S7.0 as-built: RecommendAgentState + F-2 partition validation
 S7.1 as-built: fleet/needs allowlisted tools + DI factory (fake/SQL)
-S7.2–S7.7 TARGET: Neo4j tools, LangGraph DAG, synthesis, HTTP enrich, prompts
-C/W/D full graph can replace MVP RecommendationService behind same Call 2 DTO
+S7.3 as-built: recommend LangGraph DAG (gate → [5] → Delegator → ([6]→[7])×N)
+S7.4 as-built: tool-free stub Coordinator synthesis [8]
+S7.2 / S7.5–S7.7 TARGET: Neo4j tools, HTTP Call 2 enrich, traces metrics, prompts A–L
+C/W/D graph can replace MVP RecommendationService behind same Call 2 DTO (S7.5)
 KG-2 equipment stockpile (Stage 2)
 ```
 

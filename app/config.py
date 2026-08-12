@@ -93,6 +93,10 @@ class Settings(BaseSettings):
         alias="INDEXING_VIA_AGENT_GATE",
     )
 
+    # Phase 7 / S7.3: max needs processed in one fleet (then price) batch.
+    # 1 = serialize each need pipeline (fleet→price); >=2 batches fleets first.
+    recommend_fanout_cap: int = Field(default=4, alias="RECOMMEND_FANOUT_CAP", ge=1)
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:

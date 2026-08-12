@@ -40,6 +40,7 @@ SoT: [`../openspec/AGENTS.md`](../openspec/AGENTS.md) · [`../Feasibility_Study_
 | — (S6 predict_asset_price US-5) | [`openspec/changes/archive/2026-08-12-s6-predict-asset-price-tool/`](../openspec/changes/archive/2026-08-12-s6-predict-asset-price-tool/) |
 | — (S7.0 RecommendAgentState) | [`openspec/changes/archive/2026-08-12-s7-0-recommend-agent-state/`](../openspec/changes/archive/2026-08-12-s7-0-recommend-agent-state/) |
 | — (S7.1 fleet tool catalog) | [`openspec/changes/archive/2026-08-12-s7-1-fleet-tool-catalog/`](../openspec/changes/archive/2026-08-12-s7-1-fleet-tool-catalog/) |
+| — (S7.3 + S7.4 graph + synthesis) | [`openspec/changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/`](../openspec/changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/) |
 | Traceability | [`openspec/TRACEABILITY.md`](../openspec/TRACEABILITY.md) |
 | **How to test S3 gate** | [`openspec/specs/indexing/design.md` runbook](../openspec/specs/indexing/design.md#how-to-test-this-capability-runbook) · [spec verification](../openspec/specs/indexing/spec.md#how-to-test-fr-ix-026--s3--verification-instructions) · [legacy pointer](./SPEC-indexing-file-type-router.md#how-to-test-pointer--s3--fr-ix-026) |
 | **Default pytest isolation** | [`openspec/specs/project-setup/`](../openspec/specs/project-setup/) — no optional markers; conftest forces mock embedder dim 384 · [KG testing guide](../docs/testing/knowledge-graph-testing-guide.md) |

@@ -10,7 +10,7 @@
 | **Document type** | Architecture vocabulary / agent role mapping (study only) |
 | **Status** | Complete (docs only — no runtime rename required) |
 | **Date** | 2026-08-11 |
-| **Version** | 2.1.2 |
+| **Version** | 2.1.3 |
 | **Application** | `haystack-fast-api` Multi-Agent Orchestrator (LangGraph) |
 | **Question** | How do **Coordinator**, **Worker**, and **Delegator** map onto the existing Orchestrator + domain agents + in-process tools design? |
 | **Authority** | **Authoritative for role vocabulary.** Dual-plane study remains authoritative for data planes, tool catalog, and sync. Implementation plan Phase 7 is authoritative for rollout steps. |
@@ -336,7 +336,7 @@ From `app/agents/state.py`:
 | Travel context | **Project + fleet context** | `project.needs`, `fleet_by_need` (from **`assets`/`bookings`** tools) |
 | Booking state | **Recommendation run** | `prices_by_need`, `recommendation.results_by_need`, `warnings`, `persistence.*` |
 
-#### Target `RecommendAgentState` (S7.0 **as-built** module; graph not wired yet)
+#### Target `RecommendAgentState` (S7.0 **as-built** module; S7.3 graph **as-built**)
 
 Runtime: `app/agents/recommend_state.py` — `RecommendAgentState`, `validate_state_transition`, `apply_partition_write`, `write_fleet_slice`, `write_price_rows`.
 
@@ -2809,7 +2809,7 @@ Today’s graph (`research_agent` → `graph_agent` → `synthesis_agent`) maps 
 | Worker [6] §10.5 | `FLEET_WORKER_*` | Writes `fleet_by_need[need_id]` |
 | Worker [7] §10.6 | `PRICING_WORKER_*` | Writes `prices_by_need[need_id]` |
 | §10.7 Research/Graph | Existing `RESEARCH_AGENT_*` / `GRAPH_AGENT_*` | `ProjectKnowledgeAgentState` |
-| Recommend state type | `RecommendAgentState` TypedDict + F-2 validation | **S7.0 as-built** (`app/agents/recommend_state.py`); graph wire S7.3–7.4 |
+| Recommend state type | `RecommendAgentState` TypedDict + F-2 validation | **S7.0 as-built** (`app/agents/recommend_state.py`); graph + stub [8] **S7.3–S7.4 as-built** |
 
 Phase 7.7 implements recommend prompts **from these templates (A–L)**. Stage-1 prompts remain until recommend mode ships; do not contaminate Q&A synthesis with fleet instructions. §10.0.1–§10.0.11 cover tools through **sequential/parallel processing**. Fleet LTM = **`postgres_haystack` synced from `postgres-primary`**. Inject tools via DI; assert traces; illegal transitions rejected; preserve session keys; tool-backed decisions only; **respect DAG: seq within need, parallel across needs (capped)**.
 
@@ -2837,8 +2837,8 @@ Indexing gate checklist: validate `user_id` + sources + MIME → run index servi
 | **S7.0** state + F-2 | STM partitions; illegal writes rejected | **As-built** |
 | **S7.1** fleet/needs tools | Execution layer; allowlist; fake/SQL DI | **As-built** |
 | **S7.2** Neo4j tools | Optional graph templates | Todo |
-| **S7.3** recommend LangGraph | DAG §10.0.10–§10.0.11: **seq** gate→[5]→plan; **par** across needs (capped); **seq** [6]→[7] within need; barrier [8] | Todo |
-| **S7.4** tool-free synthesis | Coordinator **[8]** sequential barrier — A–L; merge tool-backed partitions only | Todo |
+| **S7.3** recommend LangGraph | DAG §10.0.10–§10.0.11: **seq** gate→[5]→plan; **par** across needs (capped); **seq** [6]→[7] within need; barrier [8] | **As-built** |
+| **S7.4** tool-free synthesis | Coordinator **[8]** sequential barrier — A–L; merge tool-backed partitions only | **As-built** (stub merge; A–L prompts remain S7.7) |
 | **S7.5** HTTP Call 2 enrich | Same quote DTO; multi-agent behind flag | Todo |
 | **S7.6** `tool_traces` | `role` / `need_id` / duration; G-1 metrics feed K-3 / parallel width | Todo |
 | **S7.7** recommend prompts | **Derive from §10 A–L** (incl. **seq/par** L-1/L-2/L-3); tool DI; tests: within-need order + across-need parallel + no invent | Todo |
@@ -2908,6 +2908,7 @@ Indexing gate checklist: validate `user_id` + sources + MIME → run index servi
 | **1.8.0** | 2026-08-11 | **§10 I Context management** (hierarchy global/session/task + switching preserve/restore/merge); §10.0.8 |
 | **1.9.0** | 2026-08-11 | **§10 J Decision integration** (retrieval + patterns + optimization); §10.0.9; role decision authority |
 | **2.0.0** | 2026-08-11 | **§10 K Workflow optimization** (DAG, fan-out caps, resources, dynamic adjustment); §10.0.10 |
+| **2.1.3** | 2026-08-12 | **S7.3 + S7.4 as-built:** recommend LangGraph DAG + stub Coordinator [8]; §11 status table |
 | **2.1.2** | 2026-08-12 | **S7.0 + S7.1 as-built:** `RecommendAgentState` + F-2 validation; fleet tool catalog + DI factory; §11 status table |
 | **2.1.1** | 2026-08-12 | HTTP Call 2 = recommend, Call 3 = chatbot Q&A (align portal) |
 | **2.1.0** | 2026-08-11 | **§10 L Sequential and parallel processing** (must-seq vs may-par); §10.0.11 |
