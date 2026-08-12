@@ -320,6 +320,12 @@ uv run pytest tests/test_pricing_client_phase1e.py tests/test_pricing_phase2b_wi
 # category metrics regression vs design reference table (not yet re-run against this package)
 ```
 
+### Phase 2d-i real-bound measurement (implemented 2026-08-12)
+
+`ml-experiments/guardrail_calibration_check.py` is a read-only calibration probe. It uses the production `SessionLocal`, resolves `primary_snapshot`/`public` through `resolve_pricing_schema()`, joins `Asset` to `AssetCategory`, and normalizes names with `to_feature_name()`. For each real asset it mirrors the synthetic generator base-rate calculation, then keeps two comparisons separate: real bounds versus the implied category/size base, and real bound-to-base ratios versus `GUARDRAIL_MIN_RATIO_RANGE`/`GUARDRAIL_MAX_RATIO_RANGE`.
+
+The live run read all 27 assets from `primary_snapshot` with `degraded=false`. No category had a real minimum ratio inside 0.28–0.35; maximum-band hit rates were 50% for forklift, 0% for scissor lift, 14.3% for boom lift, and 0% for excavator. The script prints the table and writes an ignored chart under `ml-experiments/outputs/phase2d/`. It loads no model and mutates no database row, baseline CSV, or production artifact. These results are inputs to Phase 2d-ii, not recalibration changes themselves.
+
 ### Implementation branches
 
 | Branch | Scope |
@@ -328,6 +334,7 @@ uv run pytest tests/test_pricing_client_phase1e.py tests/test_pricing_phase2b_wi
 | `feature/ml-3-pricing-service` | **Done (2026-08-11)** — scaffolded package, ported schema, built `model.py`/`train.py`, real per-asset guardrail clamping, relocated Phase 1e's read models/repositories in as `repository.py`/`read_resilience.py`, fixed the category-name mismatch (`category_mapping.py`); 24 new unit tests, 144 total passing, live-verified against all 27 real assets |
 | `feature/ml-6-internal-pricing-api` | **Done (2026-08-11)** — `POST /internal/v1/pricing/quote` (`app/api/internal_pricing.py`, `app/schemas/pricing.py`, `repository.py::get_asset_for_pricing()`); 5 new unit tests, 149 total passing. Resequenced ahead of `feature/ml-4-integration-tests` (lean Phase 2b) — see "Internal quote API" above |
 | `feature/ml-4-integration-tests` | **Done (2026-08-11)** — pipeline wired (`pricing_client.py` swapped to `app.services.pricing.model.predict_price(...)`, `min_daily_rate`/`max_daily_rate` threaded through `predict_price_adapter.py`); pipeline-integration tests only (guardrail/feature-schema tests already covered) — `tests/test_pricing_client_phase1e.py` rewritten, `tests/test_pricing_phase2b_wiring.py` added (2 new tests); 154 total passing. Manual retrain endpoint stays moved to demo-prep subtask |
+| `HR-118-ml-real-bound-measurement` | **Done (2026-08-12)** — Phase 2d-i read-only real-bound measurement; 27 assets loaded undegraded from `primary_snapshot`, two calibration knobs compared, ignored chart generated; no production data/artifact changes; 188 tests passing |
 
 ## N — Norms
 
