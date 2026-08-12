@@ -563,8 +563,8 @@ Neo4j available to multi-agent fleet tools
 
 | Concern | As-built today | Proposed (target) |
 |---------|----------------|-------------------|
-| Who calls indexing? | FastAPI → `IndexingIngestService` directly | Multi-Agent **Coordinator gate [4]** (flag; forced non-agent tool); then recommend Workers |
-| Indexing graph packaging | `build_indexing_pipeline` + `run_*` | Optional **SuperComponent** wrapper (no KG inside) |
+| Who calls indexing? | **As-built dual path (S3):** default FastAPI → `IndexingIngestService` directly; optional `INDEXING_VIA_AGENT_GATE=true` → forced **Coordinator gate [4]** (`run_indexing_from_request` → same service). Modules: `app/agents/indexing_gate.py`, `app/agents/tools.py`. FR-IX-026. | Recommend Workers only after [4] success (S7); flag may become default later |
+| Indexing graph packaging | `build_indexing_pipeline` + `run_*` | Optional **SuperComponent** wrapper (no KG inside) — S3.3 still deferred |
 | Orchestrator role | Stage-1 Q&A graph only | **Recommend orchestrator**: Coordinator + Delegator + Workers + in-process tools after [4] |
 | Role vocabulary | Informal agent names | **Coordinator / Worker / Delegator** alias layer (dedicated study) |
 | **[4] as LLM Worker?** | N/A (service path) | **No** — forced non-agent tool edge |

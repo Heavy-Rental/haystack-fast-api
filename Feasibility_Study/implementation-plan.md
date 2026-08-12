@@ -4,11 +4,11 @@
 |-------|--------|
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
-| **Date** | 2026-08-11 |
-| **Version** | 3.5.1 |
+| **Date** | 2026-08-12 |
+| **Version** | 3.5.2 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.5.1** Multi-agent studies renumbered: Call 2 recommend / Call 3 Q&A (C/W/D, synthesis, dual-plane, Phase 7); **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
+| **Revision notes** | **3.5.2** Phase 3 / **S3 as-built** (agent indexing tool + Coordinator gate [4]; `INDEXING_VIA_AGENT_GATE` default off; S3.3 SuperComponent deferred); **3.5.1** Multi-agent studies renumbered Call 2 recommend / Call 3 Q&A; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -48,11 +48,15 @@ API routes under **`/internal/v1/recommendations`** (Spring-facing internal API)
 
 ```text
 Call 1: POST /internal/v1/recommendations/submitprojectspecification
-  → IndexingIngestService → InMemoryDocumentStore + mandatory KG-1 + session register
-  → lean public body (shipping contract):
+  → default: IndexingIngestService → InMemoryDocumentStore + mandatory KG-1 + session
+  → optional S3 (INDEXING_VIA_AGENT_GATE=true):
+       START → index_gate → END (forced non-LLM Coordinator [4])
+         → tool run_indexing_from_request → same IndexingIngestService
+  → lean public body (shipping contract; same on both paths):
        ingest_id, user_id, user_requirement_summary, warnings[]
   → technical indexing/KG fields NOT on public body (still run internally)
-  → FR-IX-023 Call 1 summary **as-built** (S1a–S1e: summary, date echo+extract, needs, budget)
+  → FR-IX-023 Call 1 summary **as-built** (S1a–S1e)
+  → FR-IX-026 optional agent gate **as-built S3** (default flag off; S3.3 SuperComponent deferred)
 
 Call 2: POST /internal/v1/recommendations/project-knowledge/getassetrecommendations
   → requires user_id + ingest_id from Call 1 (+ optional query)
@@ -77,6 +81,7 @@ Pricing: pricing_client → ml-experiments + category fallback
   predict_asset_price agent tool — not done
 Error JSON: {"error","message"} handlers already as-built
 Idempotency-Key / ingest correlation headers — **as-built S2a** (process-local store + middleware)
+Agent indexing tool + Coordinator gate [4] — **as-built S3** (flag default off)
 ```
 
 **Call 1 → Call 2 handoff (minimum):** Spring stores `user_id` + `ingest_id` from Call 1; Call 2 recommend sends those (+ optional `query`). See **§1.2.1**.
@@ -383,8 +388,8 @@ Use **stage IDs** in PRs and test names. Every stage below that ships code has a
 | **S1** | Call 1 lean body + FR-IX-023 increments (**S1a–S1e**) | 1 | app | — | **yes** |
 | **S2a** | Resilience C1 — FastAPI (idempotency, errors, correlation) | 2 | app | — | **yes** |
 | **S2b** | Resilience C1 — Spring client (timeouts, CB, saga) | 2 | Spring | WireMock | Spring CI |
-| **S3** | Agent indexing tool R1 + Coordinator gate **[4]** | 3 | app | — | **yes** |
-| **S3.3** | Indexing SuperComponent (optional) | 3 | app | S3 | **yes** |
+| **S3** | Agent indexing tool R1 + Coordinator gate **[4]** | 3 | app | — | **yes** (**as-built**) |
+| **S3.3** | Indexing SuperComponent (optional) | 3 | app | S3 | **yes** (deferred) |
 | **S4** | Fleet sync T0–T2 (`postgres_haystack` ← primary) | 4 | config | S0/D0 | config CI |
 | **S5-I0** | DocumentStore factory (memory default) | 5 | app | — | **yes** |
 | **S5-I1** | Pgvector cutover + isolation | 5 | app+config | S5-I0 | optional job |

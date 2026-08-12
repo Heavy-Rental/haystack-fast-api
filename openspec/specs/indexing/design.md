@@ -2,10 +2,11 @@
 
 ## R — Requirements
 
-See [`spec.md`](./spec.md) Purpose, Outcomes, and Requirements (FR-IX-001–025 + MIME classification map). Live HTTP owner for `POST /internal/v1/recommendations/submitprojectspecification`; conflict rule: live route wins here; KG rules in [`../knowledge-graph/spec.md`](../knowledge-graph/spec.md).
+See [`spec.md`](./spec.md) Purpose, Outcomes, and Requirements (FR-IX-001–026 + MIME classification map). Live HTTP owner for `POST /internal/v1/recommendations/submitprojectspecification`; conflict rule: live route wins here; KG rules in [`../knowledge-graph/spec.md`](../knowledge-graph/spec.md).
 
 **API field tables:** [`contracts/ingest-from-project-spec.md`](./contracts/ingest-from-project-spec.md).  
-**Resilience (S2a):** FR-IX-024 idempotency + FR-IX-025 correlation — process-local only in C1.
+**Resilience (S2a):** FR-IX-024 idempotency + FR-IX-025 correlation — process-local only in C1.  
+**Agent gate (S3):** FR-IX-026 optional Coordinator gate [4] behind `INDEXING_VIA_AGENT_GATE` (default off).
 
 ## E — Entities
 
@@ -35,10 +36,19 @@ Aligned with Packt Ch. 4 indexing flowchart
        │
        ├─ if Idempotency-Key present (scoped user_id + key):
        │     hit in-memory store? → return cached lean 200 (same ingest_id)
-       │     else run pipeline below → store only on 200
+       │     else run producer below → store only on 200
        │
        ▼
-  file_type_router → dual-branch convert/clean/split
+  INDEXING_VIA_AGENT_GATE?  (S3 / FR-IX-026; default false)
+       │
+       ├─ false (default) ──► IndexingIngestService (direct)
+       │
+       └─ true ──► START → index_gate → END  (forced non-LLM Coordinator [4])
+                      └─ tool run_indexing_from_request
+                            └─ IndexingIngestService (same as direct)
+       │
+       ▼
+  file_type_router → dual-branch convert/clean/split  (inside service)
        │
        ▼
   final_doc_joiner
@@ -46,7 +56,7 @@ Aligned with Packt Ch. 4 indexing flowchart
        └─► post-join chunks → KG (mandatory; see knowledge-graph SPEC)
        │
        ▼
-  IngestFromProjectSpecResponse (lean public body)
+  IngestFromProjectSpecResponse (lean public body — same on both paths)
        │  as-built S1a: ingest_id, user_id, user_requirement_summary, warnings
        │  as-built S1b: tentative_* echo request dates
        │  as-built S1c: needs_summary[] via need decomposer (stub/LLM)
@@ -54,6 +64,7 @@ Aligned with Packt Ch. 4 indexing flowchart
        │  as-built S1e: free-text/file dates if request omits (request preferred)
        │  FR-IX-023 Call 1 summary: as-built (Phase 1.7)
        │  as-built S2a: Idempotency-Key replay (FR-IX-024); correlation echo (FR-IX-025)
+       │  as-built S3: optional gate path (FR-IX-026); lean body unchanged
        ▼
   project-spec summary enrichment (after successful index + KG only)
        • needs_summary (decomposer / LLM)                     [S1c]
@@ -89,14 +100,16 @@ Default embedder is CI-safe (`MockDocumentEmbedder`); optional `openai` / `sente
 | `app/pipelines/indexing/*` | Dual-branch index graph, store, embedder |
 | `app/pipelines/kg/*` | Mandatory KG (HR-76) |
 | `app/services/indexing.py` | Index + mandatory KG (hard-fail) |
+| `app/agents/tools.py` | **as-built S3:** `run_indexing_from_request` (FR-IX-026) wraps service |
+| `app/agents/indexing_gate.py` | **as-built S3:** forced `START → index_gate → END`; `indexing_ok` + traces |
 | `app/services/ingest_idempotency.py` | **as-built S2a:** process-local `Idempotency-Key` store (FR-IX-024) |
 | `app/middleware/correlation.py` | **as-built S2a:** `X-Correlation-Id` / `traceparent` (FR-IX-025) |
-| `app/api/recommendations.py` | Thin HTTP; optional `Idempotency-Key` on ingest |
+| `app/api/recommendations.py` | Thin HTTP; optional `Idempotency-Key`; flag → gate vs direct |
 | `app/schemas/indexing.py` | Response DTO — FR-IX-023 as-built (S1a–S1e) |
 | `app/services/need_decomposer.py` / LLM | **as-built S1c:** needs_summary from project text |
 | `app/services/project_spec_budget.py` | **as-built S1d:** expected_budget extract |
 | `app/services/project_spec_dates.py` | **as-built S1e:** resolve_rental_dates (request preferred) |
-| `app/config.py` | `INDEXING_*`, `KG_*`, `IDEMPOTENCY_TTL_SECONDS` |
+| `app/config.py` | `INDEXING_*`, `KG_*`, `IDEMPOTENCY_TTL_SECONDS`, `INDEXING_VIA_AGENT_GATE` |
 | `postman/` | Live collection |
 
 ### As-built extraction notes (FR-IX-023 / Phase 1.7)
@@ -125,6 +138,7 @@ Compact response: portal may only need identity + summary; technical index/KG fi
 ### Config
 
 - `INDEXING_*` — embedder mode, splitter/store-related settings (see [`.env.example`](../../../.env.example))
+- `INDEXING_VIA_AGENT_GATE` — **S3 / FR-IX-026:** `false` (default) direct service; `true` forced Coordinator gate
 - `KG_*` — artifact dir, transforms flag (owned by knowledge-graph capability; required for success path)
 - `IDEMPOTENCY_TTL_SECONDS` — optional TTL for process-local successful ingest cache (default `86400`; ≤0 disables expiry)
 
@@ -134,6 +148,7 @@ Compact response: portal may only need identity + summary; technical index/KG fi
 |------|-----------------|
 | Component + pipeline | `tests/test_indexing_*.py` (router, converters, dual-branch, write path) |
 | HTTP ingest fields | `tests/test_recommendations_intake.py` (FR-IX-023 lean body, not recommend envelope) |
+| Agent gate (S3) | `tests/test_indexing_tool.py` (tool parity, flag on/off, MIME fail, `indexing_ok`) |
 | Idempotency (S2a) | `tests/test_ingest_idempotency.py` (same key, missing key, multipart, failure not cached, single-flight, blank key, TTL unit) |
 | Correlation (S2a) | `tests/test_correlation_middleware.py` (echo, mint, log binds `correlation_id`, Q&A) |
 | Date extract (S1e) | `tests/test_project_spec_dates.py` + intake free-text date cases |

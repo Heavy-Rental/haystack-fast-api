@@ -114,7 +114,7 @@ Agent Worker  ≠  Job worker  ≠  In-process tool
 
 | Step | C/W/D label | Notes |
 |------|-------------|--------|
-| **[4]** indexing | `coordinator.gate` | **Forced non-agent tool edge** under Coordinator. Not a Worker. Gate: no recommend Workers until success. |
+| **[4]** indexing | `coordinator.gate` | **Forced non-agent tool edge** under Coordinator. Not a Worker. Gate: no recommend Workers until success. **As-built (S3 / FR-IX-026):** `app/agents/indexing_gate.py` (`START→index_gate→END`) + `run_indexing_from_request`; env `INDEXING_VIA_AGENT_GATE` default **off** (direct service). |
 | **[5]** project / needs | `worker` | Shared / once per run; tools: `project_vector_search`, `project_kg_query`, `decompose_project_needs` |
 | **Delegator** | `delegator` | Explicit router; builds per-`need_id` work plan; may skip optional backends |
 | **[6]** fleet + graph | `worker` | **Fan-out per need**; tools: `retrieve_fleet_*`, `check_booking_availability`, `neo4j_cypher_read` |
@@ -133,6 +133,8 @@ Agent Worker  ≠  Job worker  ≠  In-process tool
 ---
 
 ## 5. Stage-1 as-built (today)
+
+**Indexing gate [4] (S3 as-built, separate from Q&A graph):** optional `run_indexing_gate` / `INDEXING_VIA_AGENT_GATE`; default Call 1 still hits `IndexingIngestService` directly. Q&A graph below remains post-ingest Call 3.
 
 ```text
 COORDINATOR: build_project_knowledge_graph / run_project_knowledge_agents

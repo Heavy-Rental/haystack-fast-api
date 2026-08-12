@@ -35,6 +35,8 @@ SoT: [`../openspec/AGENTS.md`](../openspec/AGENTS.md) · [`../Feasibility_Study_
 | `tasks-indexing-file-type-router.md` | [`openspec/changes/archive/2026-08-07-indexing-file-type-router/tasks.md`](../openspec/changes/archive/2026-08-07-indexing-file-type-router/tasks.md) |
 | `tasks-knowledge-graph.md` | [`openspec/changes/archive/2026-08-07-knowledge-graph-hr-76/tasks.md`](../openspec/changes/archive/2026-08-07-knowledge-graph-hr-76/tasks.md) |
 | `tasks-kg-multi-agent-stage1.md` | [`openspec/changes/archive/2026-08-08-kg-multi-agent-stage1/tasks.md`](../openspec/changes/archive/2026-08-08-kg-multi-agent-stage1/tasks.md) |
+| — (S2a) | [`openspec/changes/archive/2026-08-12-s2a-ingest-idempotency-correlation/`](../openspec/changes/archive/2026-08-12-s2a-ingest-idempotency-correlation/) |
+| — (S3 agent gate FR-IX-026) | [`openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/`](../openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/) |
 | Traceability | [`openspec/TRACEABILITY.md`](../openspec/TRACEABILITY.md) |
 
 Stub files in this directory keep old relative links working.
