@@ -30,6 +30,10 @@ Spring Boot (RestClient / WebClient saga)
   │
   │  ┌─────────────────────────────────────────────────────────────┐
   │  │ INDEXING  (specs/indexing)                                  │
+  │  │  Default: IndexingIngestService (direct)                    │
+  │  │  Optional S3 gate: INDEXING_VIA_AGENT_GATE=true             │
+  │  │    → START→index_gate→END (forced non-LLM Coordinator [4])  │
+  │  │    → tool run_indexing_from_request → same service          │
   │  │  FileTypeRouter → convert → dual clean/split                │
   │  │       text_splitter ──┐                                     │
   │  │       csv_splitter  ──┴→ final_doc_joiner                   │
@@ -48,6 +52,7 @@ Spring Boot (RestClient / WebClient saga)
   │    ingest_id, user_id, user_requirement_summary,
   │    tentative_start/end_date, needs_summary[], expected_budget | null, warnings[]
   │    S2a: Idempotency-Key replay (FR-IX-024); correlation echo (FR-IX-025)
+  │    S3: optional agent gate (flag default off); same lean DTO
   │    Spring persists user_id + ingest_id
   │
   └─ Call 2 RECOMMEND (portal project-spec submit second hop) ───────

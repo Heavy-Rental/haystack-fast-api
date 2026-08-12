@@ -574,6 +574,48 @@ The application MUST accept optional **`X-Correlation-Id`** and/or W3C **`tracep
 - **WHEN** a request is handled
 - **THEN** the response still includes a non-empty `X-Correlation-Id`
 
+### Requirement: Optional Coordinator gate path for Call 1 (as-built S3)
+`POST /internal/v1/recommendations/submitprojectspecification` MUST support an optional **Coordinator gate [4]** path for indexing:
+
+1. Env flag **`INDEXING_VIA_AGENT_GATE`** (bool; default **`false`**).
+2. When **false** (default): Call 1 MUST use direct `IndexingIngestService` (as-built baseline).
+3. When **true**: Call 1 MUST run forced non-LLM LangGraph **`START → index_gate → END`**, which MUST invoke the in-process tool **`run_indexing_from_request`** wrapping the same `IndexingIngestService` (meta stamp, mandatory KG hard-fail, session registry).
+4. The gate MUST NOT use LLM tool selection, free ReAct, or put raw file bytes into LLM context.
+5. Lean public body (FR-IX-023) MUST be identical on both paths; Spring wire MUST NOT require flag-specific DTO fields.
+6. MIME / KG / empty-source hard-fail MUST remain HTTP **400** / `BadRequestError` on both paths.
+7. Gate state SHOULD expose **`indexing_ok`** (true on success; **false** on failure with no silent success `ingest_id`) for later multi-agent recommend (S7).
+8. S2a `Idempotency-Key` and correlation MUST still wrap the producer (gate or direct) unchanged.
+
+(Trace: FR-IX-026)  
+**Status:** **as-built (S3)**.  
+**Impl:** `app/agents/tools.py`, `app/agents/indexing_gate.py`, `app/api/recommendations.py`, `tests/test_indexing_tool.py`.  
+**Note:** SuperComponent packaging (S3.3) remains optional/deferred — not required for FR-IX-026.
+
+#### Scenario: Flag off keeps direct service path
+- **GIVEN** `INDEXING_VIA_AGENT_GATE` is false or unset
+- **WHEN** a client POSTs a valid project-spec
+- **THEN** the lean FR-IX-023 body is returned
+- **AND** the path does not require the gate graph
+
+#### Scenario: Flag on uses forced non-LLM gate
+- **GIVEN** `INDEXING_VIA_AGENT_GATE` is true
+- **WHEN** a client POSTs a valid project-spec
+- **THEN** `START → index_gate → END` runs without LLM tool selection
+- **AND** the lean DTO matches the direct-service shape
+- **AND** a project-knowledge session is registered for the returned `ingest_id`
+
+#### Scenario: Tool parity with IndexingIngestService
+- **GIVEN** the same `user_id` + `project_text` fixture
+- **WHEN** `run_indexing_from_request` and `IndexingIngestService.ingest_from_project_spec` both run
+- **THEN** both produce lean fields (`ingest_id`, `user_id`, non-empty summary)
+- **AND** the tool path registers a `ProjectKnowledgeSession`
+
+#### Scenario: Gate MIME hard-fail and indexing_ok false
+- **GIVEN** an unsupported file type (e.g. `.bin` / `.exe`)
+- **WHEN** the tool or gated graph path runs
+- **THEN** the caller receives `BadRequestError` / HTTP 400
+- **AND** gate state has `indexing_ok=false` with no silent success `ingest_id`
+
 ### Requirement: MIME classification map
 Sources MUST be classified according to the following normative extension / MIME map. Unclassified / other / unknown → **400**.  
 (Trace: MIME map §3; FR-IX-002, FR-IX-003)
@@ -624,6 +666,9 @@ Sources MUST be classified according to the following normative extension / MIME
 - Do not cache failed ingest responses under `Idempotency-Key` (FR-IX-024).
 - Do not claim multi-replica idempotency while the store is process-local memory only.
 - Do not treat Call 2 or Call 3 as substitutes for Call 1 ingest.
+- Do not make `INDEXING_VIA_AGENT_GATE` default-on without an explicit ops decision (FR-IX-026).
+- Do not own the indexing gate as an LLM Worker / free ReAct tool-call (forced non-agent Coordinator edge only).
+- Do not put raw file bytes into LLM context on the gate path.
 
 ---
 
@@ -631,6 +676,7 @@ Sources MUST be classified according to the following normative extension / MIME
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **0.8.0** | 2026-08-12 | **S3 as-built:** FR-IX-026 optional Coordinator gate [4] + `run_indexing_from_request` behind `INDEXING_VIA_AGENT_GATE` (default off); lean body parity; SuperComponent S3.3 deferred |
 | **0.7.2** | 2026-08-12 | Call 2 recommend + Call 3 Q&A portal norms |
 | **0.7.1** | 2026-08-12 | Portal dual-hop norms/safeguards (Call 1 first; Call 2 not ingest) |
 | **0.7.0** | 2026-08-12 | **S2a as-built:** FR-IX-024 `Idempotency-Key` (process-local store); FR-IX-025 correlation headers; contract + design + tests |

@@ -4,15 +4,34 @@
 |-------|--------|
 | **Capability** | [`../spec.md`](../spec.md) (indexing) |
 | **Design** | [`../design.md`](../design.md) |
-| **Status** | **as-built** lean Call 1 + **full FR-IX-023** project-spec summary (S1a–S1e) + **S2a** idempotency/correlation + portal dual-hop note |
+| **Status** | **as-built** lean Call 1 + **full FR-IX-023** (S1a–S1e) + **S2a** idempotency/correlation + **S3** optional agent gate + portal dual-hop note |
 | **DTO (as-built)** | `IngestFromProjectSpecResponse` (`app/schemas/indexing.py`) |
 | **Standards** | OpenSpec behaviour · Spec-kit contract tables · OpenSPDD (prompt/spec before code) |
 | **Resilience** | Stage **S2a** / track **C1** — [`Feasibility_Study/phase2-s2a-haystack-implementation-plan.md`](../../../../Feasibility_Study/phase2-s2a-haystack-implementation-plan.md) |
+| **Agent gate (S3)** | FR-IX-026 — [`../spec.md`](../spec.md) · `app/agents/indexing_gate.py` · `app/agents/tools.py` |
 
 Live HTTP owner: **indexing** (not FR-010 recommend on the public route).  
 Internal pipeline still: dual-branch index → DocumentStore write → mandatory KG-1 → project-knowledge session register (for Call 2).
 
-**Portal caller (Spring saga):** React `POST /api/recommendations/project-spec` → Spring **Call 1** hits **this** endpoint first, then Call 2 Q&A; React’s primary UX body for that portal request is Call 2 (see `Feasibility_Study_Spring/portal-to-haystack-mapping.md`). This route is **not** skipped for project-spec submit.
+**Portal caller (Spring saga):** React `POST /api/recommendations/project-spec` → Spring **Call 1** hits **this** endpoint first, then Call 2 recommend; React’s primary UX body for that portal request is Call 2 (see `Feasibility_Study_Spring/portal-to-haystack-mapping.md`). This route is **not** skipped for project-spec submit.
+
+---
+
+## Call 1 execution path (S3 as-built)
+
+| Path | When | Behaviour |
+|------|------|-----------|
+| **Direct service (default)** | `INDEXING_VIA_AGENT_GATE=false` or unset | `IndexingIngestService.ingest_from_project_spec` |
+| **Coordinator gate [4]** | `INDEXING_VIA_AGENT_GATE=true` | Forced non-LLM LangGraph `START → index_gate → END` → in-process tool `run_indexing_from_request` → **same** `IndexingIngestService` |
+
+| Rule | Detail |
+|------|--------|
+| Public body | Identical lean FR-IX-023 on both paths |
+| Errors | MIME / KG / empty source → **400** / `{"error","message"}` on both paths |
+| S2a headers | `Idempotency-Key` + correlation still wrap the producer (outside the gate) |
+| LLM | Gate MUST NOT use LLM tool-calling; files never enter LLM context as raw bytes |
+| Modules | `app/agents/indexing_gate.py`, `app/agents/tools.py` (`run_indexing_from_request`) |
+| SuperComponent | Optional packaging (S3.3) — **not** required for this contract |
 
 ---
 

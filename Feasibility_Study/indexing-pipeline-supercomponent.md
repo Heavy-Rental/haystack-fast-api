@@ -220,16 +220,17 @@ Multi-Agent Orchestrator (Coordinator)
 
 ## 7. Phasing (optional)
 
-| Phase | Work | Depends on |
-|-------|------|------------|
-| **S0** | This study | — |
-| **S1** | Add `IndexingPipelineSuperComponent` wrapping `build_indexing_pipeline` | — |
-| **S2** | `IndexingIngestService` uses SC; preserve KG + DTO | S1 |
-| **S3** | Agent tool calls same service (not raw SC) | R1 |
-| **S4** | Optional: nest SC in outer Haystack pipeline | Product need |
-| **S5** | I1: SC writer → Pgvector store | I1 |
+| Phase | Work | Depends on | Status |
+|-------|------|------------|--------|
+| **S0** | This study | — | Done (study) |
+| **R1 / impl S3** | Agent tool `run_indexing_from_request` + Coordinator gate (service wrap; not raw SC) | — | **As-built** (FR-IX-026; flag default off) |
+| **S1** | Add `IndexingPipelineSuperComponent` wrapping `build_indexing_pipeline` | — | Deferred (optional S3.3) |
+| **S2** | `IndexingIngestService` uses SC; preserve KG + DTO | S1 | Deferred |
+| **S3** (SC study numbering) | Agent tool calls same service (not raw SC) | R1 | **Done via R1** (tool → service; SC not required) |
+| **S4** | Optional: nest SC in outer Haystack pipeline | Product need | Deferred |
+| **S5** | I1: SC writer → Pgvector store | I1 | Deferred |
 
-**Not on critical path** for fleet sync T0–T1 or Stage-1 Q&A.
+**Not on critical path** for fleet sync T0–T1 or Stage-1 Q&A. SuperComponent packaging remains optional after R1.
 
 ---
 

@@ -12,10 +12,13 @@ See also: [specification/README.md](./README.md) · [openspec/AGENTS.md](../open
 |-------|-----------|
 | As-built ingest DTO | [ingest-from-project-spec contract](../openspec/specs/indexing/contracts/ingest-from-project-spec.md) |
 | **As-built** needs + dates + budget summary (FR-IX-023 S1a–S1e) | Same contract + [indexing spec](../openspec/specs/indexing/spec.md) |
-| Feasibility | [call1-ingest-response-project-summary.md](../Feasibility_Study/call1-ingest-response-project-summary.md) |
-| Change proposal | [openspec/changes/2026-08-10-call1-project-spec-summary/](../openspec/changes/2026-08-10-call1-project-spec-summary/) |
+| **As-built S3** agent indexing gate (FR-IX-026) | [indexing spec](../openspec/specs/indexing/spec.md) · [design](../openspec/specs/indexing/design.md) · [contract execution path](../openspec/specs/indexing/contracts/ingest-from-project-spec.md) · archive [s3-agent-indexing-coordinator-gate](../openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/) |
+| Feasibility | [call1-ingest-response-project-summary.md](../Feasibility_Study/call1-ingest-response-project-summary.md) · [implementation-plan Phase 3](../Feasibility_Study/implementation-plan.md) |
+| Change proposal (Call 1 summary) | [openspec/changes/2026-08-10-call1-project-spec-summary/](../openspec/changes/2026-08-10-call1-project-spec-summary/) |
+| Change archive (S3 gate) | [openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/](../openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/) |
 
 **Not** ranked assets on Call 1 — that is **Call 2** `getassetrecommendations` (recommend quote).
 
 **Portal:** React `project-spec` → **Call 1 first** (this capability), then Call 2 recommend; Call 3 chatbot optional.  
+Optional Call 1 path: `INDEXING_VIA_AGENT_GATE=true` → forced non-LLM Coordinator gate (same lean DTO).  
 See [openspec/AGENTS.md](../openspec/AGENTS.md) · [portal-to-haystack-mapping.md](../Feasibility_Study_Spring/portal-to-haystack-mapping.md).

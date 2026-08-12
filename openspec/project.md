@@ -50,9 +50,9 @@ The industry is capital-intensive. Success depends on:
 
 **MVP shape (product target):** free-text and/or project file (+ optional rental window) → LLM need decompose → quantity expansion to unit-needs → `Asset` SQL candidates → `Booking` / `BookingItem` availability → `predict_price()` → Haystack rank & rationale → **exactly one** `RecommendationItem` **per unit-need** (singular `item`).
 
-**As-built public routes:** Call 1 `POST .../submitprojectspecification` (lean FR-IX-023 + S2a idempotency/correlation). **Call 2 recommend:** `POST .../project-knowledge/getassetrecommendations` (quote / `items[]` via session + `RecommendationService` MVP). **Call 3 chatbot Q&A:** `POST .../project-knowledge/query` (`answer` + hits). **Portal:** React `project-spec` → Call 1 → Call 2 quote → React. Mapping: `Feasibility_Study_Spring/portal-to-haystack-mapping.md`.
+**As-built public routes:** Call 1 `POST .../submitprojectspecification` (lean FR-IX-023 + S2a idempotency/correlation + optional **S3** Coordinator gate behind `INDEXING_VIA_AGENT_GATE`, default off). **Call 2 recommend:** `POST .../project-knowledge/getassetrecommendations` (quote / `items[]` via session + `RecommendationService` MVP). **Call 3 chatbot Q&A:** `POST .../project-knowledge/query` (`answer` + hits). **Portal:** React `project-spec` → Call 1 → Call 2 quote → React. Mapping: `Feasibility_Study_Spring/portal-to-haystack-mapping.md`.
 
-**Target (later):** reattach recommend HTTP; equipment KG-2 + stockpile tools; Naive/hybrid RAG over manuals; async ML training. Normative detail lives in capability specs—not here.
+**Target (later):** reattach full multi-agent recommend graph (S7); equipment KG-2 + stockpile tools; Naive/hybrid RAG over manuals; async ML training. Normative detail lives in capability specs—not here.
 
 ---
 
@@ -66,7 +66,7 @@ The industry is capital-intensive. Success depends on:
 | Persistence (runtime) | PostgreSQL on host **`db`**; SQLAlchemy **sync** + **psycopg** |
 | Auth | None (deferred) |
 | Pipelines | Haystack under `app/pipelines/` (indexing, kg, recommend components) |
-| Agents | LangGraph Stage-1 under `app/agents/`; prompts OpenSPDD-first |
+| Agents | LangGraph under `app/agents/`: Stage-1 Q&A + **S3** indexing gate (`indexing_gate.py`); prompts OpenSPDD-first |
 
 Environment, packaging, database host defaults, layering rules, and runbooks: [`specs/project-setup/`](./specs/project-setup/).
 

@@ -185,6 +185,8 @@ Converters (FileTypeRouter / specific converters)
 ```text
 React  POST /api/recommendations/project-spec
   → Call 1  submitprojectspecification
+       (default: IndexingIngestService; optional S3 gate INDEXING_VIA_AGENT_GATE
+        → run_indexing_from_request → same service; KG-1 path unchanged after index)
   → Call 2  getassetrecommendations  → quote (primary to React)
   → Call 3  project-knowledge/query   → chatbot Q&A (optional)
 ```
