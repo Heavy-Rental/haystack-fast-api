@@ -6,9 +6,9 @@
 | **Stage** | **S2a** — Resilience C1, FastAPI half |
 | **Repo** | `haystack-fast-api` |
 | **Phase** | Phase 2 (main plan) · Track **C1** (resilience study) |
-| **Version** | 1.1.2 |
+| **Version** | 1.1.3 |
 | **Date** | 2026-08-12 |
-| **Status** | **Implemented** (2026-08-12) — FR-IX-024 / FR-IX-025 as-built; audit gap-fill; test runbook in §7 |
+| **Status** | **Implemented** (2026-08-12) — FR-IX-024 / FR-IX-025 as-built; audit gap-fill; test runbook in §7; conftest isolation aligned with suite |
 | **Sibling plan** | [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) |
 | **Parent** | [`implementation-plan.md`](./implementation-plan.md) Phase 2 |
 | **Study** | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) |
@@ -205,16 +205,18 @@ uv run pytest tests/test_ingest_idempotency.py tests/test_correlation_middleware
 uv run pytest tests/test_ingest_idempotency.py tests/test_correlation_middleware.py \
   tests/test_health.py tests/test_recommendations_intake.py -q
 
-# Full suite
+# Full suite (no optional -m filter; no external service prereqs)
 uv run pytest -q
+# equivalent: uv run pytest tests/ -q
 ```
 
 | Module | Checks |
 |--------|--------|
 | `tests/test_ingest_idempotency.py` | Same key → same `ingest_id`; no double service run; different/missing keys; multipart; 400 not cached; `user_id` scope; blank key; concurrent single-flight; TTL; error + FR-IX-023 shape |
 | `tests/test_correlation_middleware.py` | Echo / mint `X-Correlation-Id`; log binds id; Q&A + `traceparent` |
+| `tests/conftest.py` (autouse) | Forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `PROJECT_AGENT_MODE=stub`, temp `KG_ARTIFACT_DIR`; resets idempotency + project-knowledge stores |
 
-Defaults are CI-safe. No live LLM / Neo4j required for S2a.
+Defaults are CI-safe. No live LLM / Neo4j / Pgvector required for S2a. Host `.env` embedder dims (e.g. 768) are overridden by conftest for pytest. Optional markers (`@pytest.mark.pgvector`, …) are **not** used in the as-built suite — see parent plan §7.0.
 
 #### 7.2 Manual HTTP (curl)
 
@@ -358,6 +360,7 @@ Do **not** encourage production ingest retry until S2a-1 is live.
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **1.1.3** | 2026-08-12 | §7.1: conftest isolation (mock embedder dim 384); full suite has no optional markers/prereqs |
 | **1.1.2** | 2026-08-12 | §7 How to test runbook: pytest, curl, Postman, expected results, env |
 | **1.1.1** | 2026-08-12 | Audit gap-fill: Spec-kit tasks+archive, single-flight/TTL/blank-key tests, Postman collection headers, CHANGELOG |
 | **1.1.0** | 2026-08-12 | Implemented: store + middleware + OpenSpec FR-IX-024/025 + tests |

@@ -3,12 +3,13 @@
 from haystack.dataclasses import Document
 from haystack.document_stores.in_memory import InMemoryDocumentStore
 
-from app.pipelines.indexing.embedder_factory import build_document_embedder
-from app.pipelines.indexing.retrieval import run_vector_search
 from app.agents.tools import (
     TOOL_PROJECT_VECTOR_SEARCH,
     build_project_vector_search_tool,
 )
+from app.config import Settings
+from app.pipelines.indexing.embedder_factory import build_document_embedder
+from app.pipelines.indexing.retrieval import run_vector_search
 from app.services.project_knowledge_session import ProjectKnowledgeSession
 
 
@@ -36,8 +37,11 @@ def test_run_vector_search_returns_chunk() -> None:
 
 
 def test_vector_tool_wrapper() -> None:
+    # Tool reads embedder mode/dim from Settings — keep store embeddings in sync.
+    dim = 8
+    settings = Settings(INDEXING_EMBEDDER="mock", INDEXING_EMBEDDING_DIM=dim)
     store = InMemoryDocumentStore()
-    embedder = build_document_embedder(mode="mock", dimension=8)
+    embedder = build_document_embedder(mode="mock", dimension=dim)
     docs = embedder.run(
         documents=[Document(content="Boom lift for facade work")]
     )["documents"]
@@ -47,17 +51,12 @@ def test_vector_tool_wrapper() -> None:
         ingest_id="ing",
         document_store=store,
     )
-    tool = build_project_vector_search_tool(session, default_top_k=2)
+    tool = build_project_vector_search_tool(
+        session, settings=settings, default_top_k=2
+    )
     assert tool.name == TOOL_PROJECT_VECTOR_SEARCH
     assert "DocumentStore" in tool.description or "document" in tool.description.lower()
-    # Bind mock dim via settings is default 384 — write with matching dim
-    store2 = InMemoryDocumentStore()
-    emb384 = build_document_embedder(mode="mock", dimension=384)
-    store2.write_documents(
-        emb384.run(documents=[Document(content="Boom lift for facade work")])[
-            "documents"
-        ]
-    )
-    session.document_store = store2
     hits = tool("boom lift")
     assert isinstance(hits, list)
+    assert len(hits) >= 1
+    assert "boom" in hits[0]["content"].lower()

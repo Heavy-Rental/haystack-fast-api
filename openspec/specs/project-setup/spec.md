@@ -102,11 +102,38 @@ The normative stack SHALL include: FastAPI, Uvicorn, haystack-ai, langgraph, SQL
 - **WHEN** a dependency or primary DB strategy changes intentionally
 - **THEN** this capability and change-control are updated in the same change set
 
+### Requirement: Default pytest suite is CI-safe and env-isolated
+Default automated tests SHALL run with `uv run pytest` (or `uv run pytest tests/`) without optional markers, Testcontainers, live LLM keys, or external embedder APIs. Shared fixtures in `tests/conftest.py` SHALL isolate host/`.env` overrides that would otherwise make the suite host-dependent.
+
+As-built isolation (autouse fixture):
+
+| Env forced in pytest | Value | Why |
+|----------------------|-------|-----|
+| `KG_ARTIFACT_DIR` | temp path under `tmp_path` | Keep KG writes out of repo `artifacts/` |
+| `PROJECT_AGENT_MODE` | `stub` | Deterministic multi-agent synthesis |
+| `INDEXING_EMBEDDER` | `mock` | No OpenAI / sentence-transformers at test time |
+| `INDEXING_EMBEDDING_DIM` | `384` | Match mock default; avoid host dim (e.g. 768) breaking retrieval |
+
+**As-built:** no `@pytest.mark.skip` / `skipif`, and no registered optional markers (`pgvector`, `neo4j`, `integration`, …) in the current suite. Planned optional integration jobs in feasibility docs remain **TARGET** until implemented.  
+(Trace: design.md Test runbook; knowledge-graph vector tool dim match)
+
+#### Scenario: Full suite without host embedder env
+- **GIVEN** a developer shell or `.env` sets `INDEXING_EMBEDDING_DIM` (or non-mock `INDEXING_EMBEDDER`) for local API work
+- **WHEN** `uv run pytest tests/ -q` runs
+- **THEN** the suite still uses mock embedder + dim **384** via conftest isolation
+- **AND** tests that build query embedders from settings keep the same mode/dim as documents they write
+
+#### Scenario: No optional prereq markers in default suite
+- **WHEN** an engineer inspects pytest config and test modules for skip/optional markers
+- **THEN** default CI has no `-m` filter requirement and no tests that skip unless Postgres/Neo4j/LLM are present
+- **AND** `/health` tests accept both `database=up` and `database=down` without skipping
+
 ## Norms (OpenSPDD)
 
 - Prefer `uv add` / `uv sync` / `uv run` over ad-hoc pip.
 - Prefer reusing existing error codes: `bad_request`, `unauthorized`, `not_found`, `conflict`, `internal_error`.
 - Schema management starts simple; **Alembic** requires an explicit feature SDD.
+- Prefer host-env isolation in `tests/conftest.py` over requiring developers to unset local embedder/LLM vars before pytest.
 
 ## Safeguards (OpenSPDD)
 
@@ -115,6 +142,8 @@ The normative stack SHALL include: FastAPI, Uvicorn, haystack-ai, langgraph, SQL
 - Do not treat installing `psycopg2` as the fix for bare `postgresql://` URLs; normalize to `+psycopg` instead.
 - Do not add GraphQL (or a second public API style) without an environment decision.
 - Do not commit production secrets.
+- Do not add optional pytest markers that gate default CI green without updating this capability and the CI job matrix.
+- Do not write tests that hardcode an embedder dimension different from the settings the code under test reads, unless the test passes an explicit matching `Settings` (or equivalent) object.
 
 ## Change control
 
@@ -124,3 +153,4 @@ The normative stack SHALL include: FastAPI, Uvicorn, haystack-ai, langgraph, SQL
 | 2.0.0 | 2026-08-10 | Migrated to OpenSpec Requirement/Scenario + OpenSPDD Norms/Safeguards; runbooks → design.md |
 | 2.0.1 | 2026-08-10 | Document bare `DATABASE_URL` → `postgresql+psycopg` normalization (psycopg v3) |
 | 2.0.2 | 2026-08-10 | Corrected hostname throughout: **`postgres-haystack`** (hyphen), not `postgres_haystack` (underscore) — confirmed via DNS on `HR-87-ml-2-d-production-db-wiring-for-period-utilization` (legacy `specification/SPEC-project-setup.md`, before it was stubbed to point here); `db` is ambiguous on this network and MUST NOT be used. `.env.example`/`app/config.py` `POSTGRES_HOSTNAME` default updated to match. |
+| 2.1.0 | 2026-08-12 | **Pytest isolation as-built:** conftest forces mock embedder + dim 384 (+ stub agents / temp KG dir); default suite has no optional prereq markers; vector-tool tests must match query/store embedding dim |

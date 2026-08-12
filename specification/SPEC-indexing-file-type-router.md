@@ -39,12 +39,18 @@ Canonical instructions live under OpenSpec (do not fork long runbooks here):
 
 ```bash
 cd haystack-fast-api
-# Automated S3 pack
+# Automated S3 pack (conftest forces INDEXING_EMBEDDER=mock + dim 384; no optional markers)
 uv run pytest tests/test_indexing_tool.py -q
+
+# Full suite — no external prereqs
+uv run pytest tests/ -q
 
 # Manual flag on
 export INDEXING_VIA_AGENT_GATE=true
 export INDEXING_EMBEDDER=mock
+export INDEXING_EMBEDDING_DIM=384
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 # then POST .../submitprojectspecification (same lean body as flag off)
 ```
+
+**Pytest isolation (as-built):** see [project-setup spec](../openspec/specs/project-setup/spec.md) (default suite env isolation) and [indexing design runbook](../openspec/specs/indexing/design.md#how-to-test-this-capability-runbook).

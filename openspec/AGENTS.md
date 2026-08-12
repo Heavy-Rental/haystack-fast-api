@@ -88,8 +88,10 @@ KG-2 equipment stockpile (Stage 2)
 | **1** | [`project.md`](./project.md) | Vision, identity, as-built vs target |
 | **2** | [`specs/domain/spec.md`](./specs/domain/spec.md) | Ubiquitous language & invariants |
 | **3** | [`.specify/memory/constitution.md`](../.specify/memory/constitution.md) | Immutable principles |
-| **4** | [`specs/project-setup/spec.md`](./specs/project-setup/spec.md) | Stack, env, layering (behaviour) |
-| **5** | [`specs/project-setup/design.md`](./specs/project-setup/design.md) | Layout, uv runbooks |
+| **4** | [`specs/project-setup/spec.md`](./specs/project-setup/spec.md) | Stack, env, layering (behaviour); **default pytest isolation** |
+| **5** | [`specs/project-setup/design.md`](./specs/project-setup/design.md) | Layout, uv runbooks, `conftest` isolation table |
+
+**Pytest (as-built):** `uv run pytest` / `uv run pytest tests/ -q` is the full default suite — **no** optional markers or external prereqs. `tests/conftest.py` forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `PROJECT_AGENT_MODE=stub`, and a temp `KG_ARTIFACT_DIR`. Query embedders for vector tools must match the session store dimension (see knowledge-graph + indexing specs).
 
 ---
 

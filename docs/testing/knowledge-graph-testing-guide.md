@@ -24,17 +24,20 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 Confirm: `GET http://localhost:8000/health` and OpenAPI at `/docs`.
 
-**CI-safe defaults** (no LLM / embedder API keys required):
+**CI-safe defaults** (no LLM / embedder API keys required for live API):
 
 | Env | Default | Purpose |
 |-----|---------|---------|
 | `INDEXING_EMBEDDER` | `mock` | Deterministic embeddings for store + retrieval |
+| `INDEXING_EMBEDDING_DIM` | `384` | Must match store and query embedder |
 | `KG_APPLY_TRANSFORMS` | `false` | Document nodes only (full Ragas transforms optional) |
 | `PROJECT_AGENT_MODE` | `stub` | Deterministic synthesis from tool hits |
 | `PROJECT_AGENT_TOP_K` | `5` | Retrieval depth |
-| `KG_ARTIFACT_DIR` | `artifacts/kg` | User-scoped JSON snapshots |
+| `KG_ARTIFACT_DIR` | `artifacts/kg` | User-scoped JSON snapshots (runtime) |
 
 Working directory for all commands: **`haystack-fast-api/`** (app root).
+
+**Pytest note:** `tests/conftest.py` autouse isolates the suite from host `.env` by forcing `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `PROJECT_AGENT_MODE=stub`, and a temp `KG_ARTIFACT_DIR`. There are **no** optional pytest markers or external prereqs for the default suite. `project_vector_search` tests must use the same embedding mode/dim for documents and the query path (a host dim of e.g. `768` previously broke retrieval if tests assumed `384`).
 
 ---
 
@@ -54,7 +57,7 @@ uv run pytest \
   tests/test_project_knowledge_agents.py \
   tests/test_project_knowledge_api.py -v
 
-# Full suite (includes indexing + recommend service tests)
+# Full suite (includes indexing + recommend service tests; no -m filter)
 uv run pytest tests/ -v
 ```
 
@@ -62,12 +65,12 @@ uv run pytest tests/ -v
 |-----------|--------|
 | `tests/test_knowledge_graph.py` | Bridge/generator/saver; ingest always builds KG; hard-fail on KG error; per-user artifact paths |
 | `tests/test_project_knowledge_session.py` | Registry put/get/delete; load KG from JSON artifact |
-| `tests/test_project_vector_tool.py` | Dense retrieval over ingest-scoped `InMemoryDocumentStore` |
+| `tests/test_project_vector_tool.py` | Dense retrieval over ingest-scoped `InMemoryDocumentStore` (store/query dim match) |
 | `tests/test_project_kg_query_tool.py` | KG-1 substring / document-node query |
 | `tests/test_project_knowledge_agents.py` | One LangGraph run invokes **both** tools; synthesis cites Vector + Graph |
 | `tests/test_project_knowledge_api.py` | HTTP ingest → Q&A 200 dual-source; missing session **404** |
 
-**Expect:** all listed tests pass with `PROJECT_AGENT_MODE=stub` and mock embedder.
+**Expect:** all listed tests pass under conftest isolation (stub agents + mock embedder).
 
 ---
 

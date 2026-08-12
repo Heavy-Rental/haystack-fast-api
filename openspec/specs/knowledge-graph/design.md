@@ -245,7 +245,9 @@ It does **not** change the normative 6-day MVP behaviour (SQL candidates, availa
 |-----|---------|--------|
 | `PROJECT_AGENT_MODE` | `stub` | `stub` \| `llm` |
 | `PROJECT_AGENT_TOP_K` | `5` | Default retrieval depth |
-| `INDEXING_EMBEDDER` / dim | mock / 384 | Query embedder must match index |
+| `INDEXING_EMBEDDER` / dim | mock / 384 | Query embedder **must** match index (same mode + dimension) |
+
+**Pytest isolation:** `tests/conftest.py` forces mock embedder, dim **384**, stub agents, and a temp `KG_ARTIFACT_DIR` so host `.env` values used for live OpenAI/ST embedding do not break Stage-1 tool tests. Default suite has **no** optional markers or external service prereqs.
 
 ---
 
@@ -267,13 +269,16 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 # Part A
 uv run pytest tests/test_knowledge_graph.py -v
 
-# Part B
+# Part B (includes vector tool — store/query dim must match)
 uv run pytest \
   tests/test_project_knowledge_session.py \
   tests/test_project_vector_tool.py \
   tests/test_project_kg_query_tool.py \
   tests/test_project_knowledge_agents.py \
   tests/test_project_knowledge_api.py -v
+
+# Full suite (no -m filter)
+uv run pytest tests/ -q
 ```
 
 ### Live HTTP (same process)
@@ -302,6 +307,7 @@ Postman folder **04 Stage-1 multi-agent Q&A**: [`../../../postman/README.md`](..
 - Layering: thin routers; services orchestrate; Haystack under `app/pipelines`; LangGraph under `app/agents`.
 - Conflict ownership: indexing owns live ingest field list jointly with this Part A for `kg_*`; this capability owns when KG runs, tools, and Q&A route.
 - Prefer distinctive fixture phrases under mock embeddings (e.g. “20-ton excavator”, “soft clay”).
+- Align vector query embedder mode/dim with the session store; rely on pytest conftest isolation for host `.env`.
 
 ---
 
@@ -315,6 +321,7 @@ Forbidden without a dedicated Stage-2 (or later) SDD change:
 - Mandatory Neo4j for KG-1 Stage 1
 - Claiming dual-source resume after process restart without DocumentStore snapshots
 - Replacing Asset SQL / Booking / `predict_price()` with KG on the default recommend path
+- Vector-tool tests that write store embeddings at a different dimension than the settings-backed query embedder
 
 ---
 

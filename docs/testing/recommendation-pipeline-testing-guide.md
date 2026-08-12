@@ -35,6 +35,8 @@ uv sync --all-groups
 | Pricing model | Optional `ml-experiments/artifacts/model.pkl`; fallback pricing still works |
 | Async offload | Live route offloads `IndexingIngestService` via `run_in_threadpool` |
 | Pricing fields | On **service-level** recommend path: `daily_rate` + `total_price`; no fabricated `weekly_rate`. Not on live HTTP ingest response. |
+| Pytest prereqs | **None optional** — default suite has no markers / skip-if-service patterns; `tests/conftest.py` forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `PROJECT_AGENT_MODE=stub` so host `.env` does not break CI |
+| Embed dim | Query embedder for vector tools must match document store dim (see knowledge-graph testing guide) |
 
 ### Live HTTP vs service recommend
 
@@ -66,7 +68,7 @@ uv run pytest tests/test_llm_need_decomposer.py -v
 # Knowledge graph assembly + Stage-1 multi-agent (see knowledge-graph-testing-guide.md)
 uv run pytest tests/test_knowledge_graph.py tests/test_project_knowledge_*.py -v
 
-# Full suite
+# Full suite (no optional -m filter; no live LLM / Neo4j / Pgvector required)
 uv run pytest tests/ -v
 ```
 
@@ -79,8 +81,9 @@ uv run pytest tests/ -v
 | `tests/test_recommendations_intake.py` | Public POST JSON/multipart **ingest** (indexing), 400 validation |
 | `tests/test_llm_need_decomposer.py` | JSON parse, mocked chat completions, factory stub/llm |
 | `tests/test_knowledge_graph.py` + `tests/test_project_knowledge_*.py` | Mandatory KG-1 + multi-agent Q&A — **normative steps in** [`knowledge-graph-testing-guide.md`](./knowledge-graph-testing-guide.md) |
+| `tests/conftest.py` | Autouse isolation: mock embedder dim 384, stub agents, temp KG dir |
 
-**Expect:** all tests pass.
+**Expect:** all tests pass under conftest isolation (host `INDEXING_*` overrides do not apply).
 
 ---
 
@@ -299,6 +302,7 @@ NEED_DECOMPOSER=stub
 | **1.2.0** | 2026-08-07 | Live curl requires `user_id`; kg_built note; sequential map |
 | **1.3.0** | 2026-08-08 | Pointers to knowledge-graph multi-agent testing + Postman folder 04 |
 | **1.4.0** | 2026-08-10 | Moved under `docs/testing/`; links to openspec (OpenSpec · Spec-kit · OpenSPDD) |
+| **1.5.0** | 2026-08-12 | Document default pytest isolation (mock embedder + dim 384; no optional markers/prereqs) |
 
 **Reading order:** [Map](../../openspec/AGENTS.md) · live contract [Indexing](../../openspec/specs/indexing/spec.md) · [Knowledge graph testing](./knowledge-graph-testing-guide.md) · [Postman live](../../postman/README.md)
 

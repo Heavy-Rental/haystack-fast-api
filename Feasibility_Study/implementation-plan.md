@@ -5,10 +5,10 @@
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
 | **Date** | 2026-08-12 |
-| **Version** | 3.5.2 |
+| **Version** | 3.5.3 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.5.2** Phase 3 / **S3 as-built** (agent indexing tool + Coordinator gate [4]; `INDEXING_VIA_AGENT_GATE` default off; S3.3 SuperComponent deferred); **3.5.1** Multi-agent studies renumbered Call 2 recommend / Call 3 Q&A; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
+| **Revision notes** | **3.5.3** As-built default pytest isolation (conftest mock embedder dim 384; no optional markers yet); query/store embedding dim match; **3.5.2** Phase 3 / **S3 as-built** (agent indexing tool + Coordinator gate [4]; `INDEXING_VIA_AGENT_GATE` default off; S3.3 SuperComponent deferred); **3.5.1** Multi-agent studies renumbered Call 2 recommend / Call 3 Q&A; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -82,6 +82,16 @@ Pricing: pricing_client → ml-experiments + category fallback
 Error JSON: {"error","message"} handlers already as-built
 Idempotency-Key / ingest correlation headers — **as-built S2a** (process-local store + middleware)
 Agent indexing tool + Coordinator gate [4] — **as-built S3** (flag default off)
+
+Default pytest (as-built):
+  uv run pytest / uv run pytest tests/ -q
+  → no optional markers / skip-if-service patterns in the suite
+  → tests/conftest.py autouse forces:
+       INDEXING_EMBEDDER=mock, INDEXING_EMBEDDING_DIM=384,
+       PROJECT_AGENT_MODE=stub, KG_ARTIFACT_DIR=tmp
+  → host .env (e.g. dim 768 for OpenAI) MUST NOT break CI
+  → project_vector_search: query embedder mode/dim MUST match session store
+  → planned @pytest.mark.pgvector|neo4j|integration remain TARGET (not registered)
 ```
 
 **Call 1 → Call 2 handoff (minimum):** Spring stores `user_id` + `ingest_id` from Call 1; Call 2 recommend sends those (+ optional `query`). See **§1.2.1**.
@@ -177,7 +187,7 @@ These rules apply to **every** phase so work can merge and stay green without wa
 |-----------|----------|
 | **P1. Stub the next hop** | Any dependency on a later phase is replaced by a fake, seed, or in-memory substitute in that phase’s test suite. |
 | **P2. Feature-flag production paths** | New paths default off or degrade gracefully so CI stays on as-built defaults. |
-| **P3. Dual-mode CI** | Default job: no external Neo4j/Kafka/real primary. Optional/nightly job: Postgres+pgvector (and later Neo4j) via Testcontainers or compose. |
+| **P3. Dual-mode CI** | Default job: no external Neo4j/Kafka/real primary; **as-built** suite is one unmarked job (`uv run pytest`) with conftest isolation (mock embedder + dim 384). Optional/nightly jobs (**TARGET**): Postgres+pgvector (and later Neo4j) via Testcontainers or compose — **markers not registered yet**. |
 | **P4. Contract at boundaries** | Each phase publishes a stable interface (schema, tool signature, DTO, env flag). Later phases depend on the contract, not on private internals. |
 | **P5. Golden fixtures** | Prefer fixed JSON fixtures (needs, tool hits, prices) over live LLM/model nondeterminism. |
 | **P6. Phase exit = automated gate** | A phase is “done” only when its **Independent test pack** is green without requiring unfinished later phases. |
@@ -614,9 +624,10 @@ Maps to dual-plane §4.5. **Critical for multi-replica and Call 1→2 without st
 | **S5-I0 test implementation** | (1) factory `memory` default; (2) invalid flag errors; (3) full suite green without Postgres |
 | **S5-I1 test implementation** | (1) two users isolation; (2) durable after reconnect; (3) dim mismatch fails fast; (4) TTL delete isolation; (5) Call 2 recommend + Call 3 Q&A against I1 session |
 | **Suggested modules** | `tests/test_document_store_factory.py`, `tests/test_pgvector_isolation.py` |
-| **Markers** | `@pytest.mark.pgvector` for I1 |
-| **CI job** | I0 **default**; I1 **pgvector** optional/nightly |
-| **Stubs** | Fake embedder fixed dim; Testcontainers pgvector |
+| **Markers** | `@pytest.mark.pgvector` for I1 (**TARGET** — not registered in as-built suite) |
+| **CI job** | I0 **default**; I1 **pgvector** optional/nightly (**TARGET**) |
+| **Stubs** | Fake embedder fixed dim (must match `INDEXING_EMBEDDING_DIM` for query + store); Testcontainers pgvector |
+| **As-built note** | Default suite uses InMemory + mock embedder; conftest forces dim **384** so host `.env` cannot desync store/query |
 
 ---
 
@@ -720,7 +731,7 @@ Maps to dual-plane §4.1 [5]–[8], [`multi-agent-synthesis-recommend-output.md`
 | **Test implementation** | (1) Mock tools record call sequence: never price before fleet for same need; (2) multi-need → fleet tool once per `need_id`; (3) [4] fail → no fleet/price calls; (4) fan-out cap=1 serializes needs; (5) Stage-1 Q&A graph still green (mode isolation) |
 | **Suggested modules** | `tests/test_recommend_graph_order.py`, `tests/test_recommend_fanout.py` |
 | **Fixtures** | Recording fake tools |
-| **CI job** | **default** (`@pytest.mark.recommend_graph` included in default) |
+| **CI job** | **default** (fixture graph tests run unmarked in as-built suite; `@pytest.mark.recommend_graph` remains **TARGET** label only if later filtered) |
 | **C/W/D** | K, L (must-seq / may-par), F-1 |
 
 ---
@@ -981,30 +992,46 @@ Parallel outside this repo (each with own tests):
 
 Process: **§2.1 TDD** + **§2.2 BDD** + **§2.3 stage PR workflow**. Layer tactics below implement those principles.
 
+### 7.0 As-built default suite (today)
+
+Normative OpenSpec companions: [`../openspec/specs/project-setup/`](../openspec/specs/project-setup/) · indexing FR-IX-015 · knowledge-graph FR-KG-014 · `docs/testing/`.
+
+| Item | As-built |
+|------|----------|
+| **Command** | `uv run pytest` or `uv run pytest tests/ -q` from app root |
+| **Markers / skips** | **None** — no `@pytest.mark.skip`/`skipif`, no registered optional markers |
+| **External prereqs** | **None** for default green (no live LLM, Neo4j, Pgvector, Testcontainers) |
+| **`tests/conftest.py` autouse** | Forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `PROJECT_AGENT_MODE=stub`, temp `KG_ARTIFACT_DIR`; clears settings cache; resets session + idempotency stores |
+| **Embed dim rule** | Query embedder for `project_vector_search` **must** use same mode/dim as documents in the session store (mismatch → Haystack embedding-size error) |
+| **Health tests** | Do not skip if Postgres is down — accept `database=up\|down` |
+| **Host `.env`** | May set dim 768 / OpenAI for **manual** API work; **must not** break pytest (conftest overrides) |
+
+Optional markers and dual-mode jobs below remain **TARGET** until a stage PR registers them in `pyproject.toml` and implements the packs.
+
 | Layer | Approach |
 |-------|----------|
 | **Process** | **TDD** red→green→refactor for units/contracts; **BDD** G/W/T for API, agent outcomes, resilience |
 | **Unit** | Schema, decomposer stub, pricing clamp, state validation, synthesis merge from fixtures |
 | **Pipeline** | Indexing MIME/branch; SC smoke if added |
 | **API** | Call 1 summary; Call 2 recommend quote; Call 3 Q&A—prefer scenario-named tests |
-| **Isolation** | Two `user_id`s on Pgvector; TTL delete |
+| **Isolation** | Two `user_id`s on Pgvector; TTL delete (**TARGET** I1); as-built: process-local InMemory + conftest env isolation |
 | **Agent** | `PROJECT_AGENT_MODE=stub`; forced [4] edge; fixture tools; no invent |
-| **Integration (optional CI)** | Testcontainers Postgres/pgvector/Neo4j; real haystack seed |
+| **Integration (optional CI)** | Testcontainers Postgres/pgvector/Neo4j; real haystack seed — **TARGET** |
 | **Manual** | Postman; Spring WebClient spike |
-| **Markers** | `@pytest.mark.pgvector`, `@pytest.mark.neo4j`, `@pytest.mark.integration`, `@pytest.mark.recommend_graph` |
+| **Markers** | `@pytest.mark.pgvector`, `@pytest.mark.neo4j`, `@pytest.mark.integration`, `@pytest.mark.recommend_graph` — **TARGET only** (not in as-built suite) |
 | **Fixtures dir** | Prefer `tests/fixtures/recommend/` for golden needs/fleet/prices/results (`Then` payloads) |
 | **Naming** | Prefer `tests/test_<stage_topic>_*.py` aligned with stage IDs; scenario titles mirror BDD |
 | **Optional Gherkin** | `tests/features/*.feature` + pytest-bdd only if team adopts; not required |
 
 ### Recommended CI jobs
 
-| Job | When | Covers stages |
-|-----|------|---------------|
-| **default** | Every PR | S1, S2a, S3, S5-I0, S6 unit, **S7.0–S7.7** fixture graph; memory; no Neo4j |
-| **pgvector** | Main / nightly / labeled | S5-I1 |
-| **neo4j** | Nightly / labeled | S8 |
-| **config-sync** | Config repo PR | S4 |
-| **spring-client** | Spring repo PR | S2b |
+| Job | When | Covers stages | Status |
+|-----|------|---------------|--------|
+| **default** | Every PR | Full `tests/` (S1, S2a, S3, KG/vector tools, pricing unit, recommend MVP, …); memory; mock embedder dim 384 via conftest; no Neo4j | **As-built** |
+| **pgvector** | Main / nightly / labeled | S5-I1 | **TARGET** |
+| **neo4j** | Nightly / labeled | S8 | **TARGET** |
+| **config-sync** | Config repo PR | S4 | **TARGET** |
+| **spring-client** | Spring repo PR | S2b | **TARGET** (Spring repo) |
 
 ---
 
@@ -1020,7 +1047,8 @@ Process: **§2.1 TDD** + **§2.2 BDD** + **§2.3 stage PR workflow**. Layer tact
 | Phase 6 blocked waiting on live mirror | Seed/fixture ORM rows for repository tests |
 | Sticky sessions still required | Prioritize I1 for multi-replica |
 | Neo4j populate wipes DocumentStore | Label isolation + automated test in Phase 8 |
-| Integration tests flaky in default CI | Markers + optional jobs only |
+| Integration tests flaky in default CI | Markers + optional jobs only (**TARGET**); default suite stays unmarked + conftest-isolated |
+| Host `.env` embed dim ≠ mock store dim | conftest forces `INDEXING_EMBEDDING_DIM=384`; vector tests pass matching `Settings` |
 
 ---
 
@@ -1096,6 +1124,8 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | Idempotency-Key on ingest | **As-built S2a** (process-local; multi-replica later) |
 | Stage catalog | **Specified** (§3.1) |
 | Per-stage test implementation | **Specified** (§4 each stage + §5–§7) |
+| Default pytest isolation | **As-built** — §7.0; conftest mock embedder dim 384; no optional markers |
+| Query/store embedding dim match | **As-built** — FR-IX-015 / FR-KG-014; OpenSpec project-setup 2.1.0 |
 | TDD process (P9) | **Specified** (§2.1 red→green→refactor; mandatory for code stages) |
 | BDD process (P10) | **Specified** (§2.2 Given/When/Then; stage PR workflow §2.3) |
 | PR description template | **Specified** (§6 — What & Why + Key Changes required; optional details) |

@@ -263,8 +263,9 @@ After convert, unstructured vs CSV preprocess separately, then **join** → embe
 - **AND** branches join before embed and write
 
 ### Requirement: CI-safe default embedder
-Default embedder MUST be CI-safe (`MockDocumentEmbedder` or equivalent). Optional `openai` mode via `INDEXING_EMBEDDER`.  
-(Trace: FR-IX-015)
+Default embedder MUST be CI-safe (`MockDocumentEmbedder` or equivalent). Optional `openai` / `sentence-transformers` modes via `INDEXING_EMBEDDER`. Default mock dimension is **`INDEXING_EMBEDDING_DIM=384`**.  
+Query-side retrieval (e.g. Stage-1 `project_vector_search`) MUST use the **same** embedder mode and embedding dimension as the documents written into the session `InMemoryDocumentStore`. A mismatch SHALL fail retrieval (Haystack embedding-size error), not silently return empty hits.  
+(Trace: FR-IX-015; knowledge-graph tools)
 
 #### Scenario: Default embedder is mock
 - **WHEN** `INDEXING_EMBEDDER` is unset or set to the default mock mode
@@ -273,6 +274,15 @@ Default embedder MUST be CI-safe (`MockDocumentEmbedder` or equivalent). Optiona
 #### Scenario: Optional openai embedder
 - **WHEN** `INDEXING_EMBEDDER` is set to `openai`
 - **THEN** the optional OpenAI document embedder mode is used
+
+#### Scenario: Query and document embedding dimensions match
+- **GIVEN** documents were embedded with mode M and dimension D at ingest
+- **WHEN** vector retrieval embeds a query for that store
+- **THEN** the query embedder uses mode M and dimension D (settings-driven for live path; tests MUST pass matching mode/dim or isolate settings)
+
+#### Scenario: Default pytest forces mock embedder settings
+- **WHEN** `uv run pytest` runs under a host env with non-default `INDEXING_EMBEDDER` or `INDEXING_EMBEDDING_DIM`
+- **THEN** `tests/conftest.py` forces `INDEXING_EMBEDDER=mock` and `INDEXING_EMBEDDING_DIM=384` for the suite
 
 ### Requirement: Successful ingest reports written chunks
 Successful ingest MUST write ≥ 1 chunk internally (zero written chunks → **400**). Public body MUST NOT require `documents_written` / `chunk_count` (lean S1a).  
@@ -671,6 +681,7 @@ Sources MUST be classified according to the following normative extension / MIME
 - CI-safe default embedder; optional modes via `INDEXING_*` settings.
 - Thin routers; pipelines and services own branching.
 - Portal project-spec submit hits **this Call 1 first**; Spring then **Call 2 recommend** (`getassetrecommendations` quote); optional **Call 3** chatbot Q&A (`project-knowledge/query`).
+- Keep query embedder mode/dim aligned with the session DocumentStore; prefer conftest isolation over host-dependent pytest.
 
 ## Safeguards (OpenSPDD)
 
@@ -693,6 +704,7 @@ Sources MUST be classified according to the following normative extension / MIME
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **0.8.1** | 2026-08-12 | FR-IX-015: query/store embedding dim must match; pytest conftest forces mock + dim 384 (host env isolation) |
 | **0.8.0** | 2026-08-12 | **S3 as-built:** FR-IX-026 optional Coordinator gate [4] + `run_indexing_from_request` behind `INDEXING_VIA_AGENT_GATE` (default off); lean body parity; SuperComponent S3.3 deferred |
 | **0.7.2** | 2026-08-12 | Call 2 recommend + Call 3 Q&A portal norms |
 | **0.7.1** | 2026-08-12 | Portal dual-hop norms/safeguards (Call 1 first; Call 2 not ingest) |

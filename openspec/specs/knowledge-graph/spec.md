@@ -253,6 +253,12 @@ Haystack retrieval / KG query pipelines SHALL be exposable as tools (name + natu
 - **AND** `project_kg_query` is backed by substring / property match over KG-1 nodes (optional 1-hop neighbors)
 - **AND** each tool has a stable name and natural-language description
 
+#### Scenario: Vector tool embedder matches session store
+- **GIVEN** the session DocumentStore was populated with embeddings of mode M and dimension D (from indexing settings at ingest)
+- **WHEN** `project_vector_search` runs
+- **THEN** the query-side text embedder uses the same M and D from settings (or an explicit test `Settings` with matching values)
+- **AND** a host/env dim mismatch MUST NOT be left untested — default pytest isolates `INDEXING_EMBEDDER=mock` and `INDEXING_EMBEDDING_DIM=384` via `tests/conftest.py`
+
 ### Requirement: Call 3 chatbot Q&A route after Call 1 session
 Live route: `POST /internal/v1/recommendations/project-knowledge/query`  
 (code: router prefix `/internal/v1/recommendations` + relative `"/project-knowledge/query"`).
@@ -298,6 +304,7 @@ The following product targets are **not** Stage-1 acceptance criteria. They rema
 - Default CI-safe modes: mock embedder, `KG_APPLY_TRANSFORMS=false`, `PROJECT_AGENT_MODE=stub`.
 - Sessions are process-local; ingest and Q&A must hit the same process unless artifact reload is used (KG-only partial resume).
 - Chatbot Q&A is **Call 3** `.../query`. Portal submit uses Call 1 then **Call 2 recommend** (quote).
+- Vector retrieval and ingest must share embedder mode/dim; pytest conftest isolates host indexing env.
 
 ## Safeguards (OpenSPDD)
 
@@ -309,6 +316,7 @@ The following product targets are **not** Stage-1 acceptance criteria. They rema
 - Do not treat Call 3 `query` or Call 2 `getassetrecommendations` as project-spec **ingest**.
 - Do not require `Idempotency-Key` on Call 2/3 (S2a applies to Call 1 only).
 - Do not return quote `items[]` on Call 3 Q&A (that is Call 2).
+- Do not hardcode a store embedding dimension that differs from the settings-backed query embedder in vector-tool tests.
 
 ---
 
@@ -316,6 +324,7 @@ The following product targets are **not** Stage-1 acceptance criteria. They rema
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **1.2.1** | 2026-08-12 | Vector tool: query/store embedding dim match; pytest conftest mock+384 isolation; no optional prereq markers for default suite |
 | **1.2.0** | 2026-08-12 | Call 3 = chatbot Q&A route; Call 2 recommend separate |
 | **1.1.0** | 2026-08-12 | Portal dual-hop (Call 2 was Q&A; superseded) |
 | **0.1.0** | 2026-08-07 | HR-76 as-built (optional KG) |

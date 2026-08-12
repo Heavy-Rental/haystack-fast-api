@@ -60,6 +60,8 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | FR-001 … FR-053 (+ NFR, demo) | Equipment recommendation parent | `specs/equipment-recommendation/spec.md` |
 | Domain invariants | Domain | `specs/domain/spec.md` |
 | Setup / layering / stack | Project setup | `specs/project-setup/spec.md` |
+| Default pytest isolation (as-built) | Project setup + indexing FR-IX-015 + KG FR-KG-014 | `specs/project-setup/spec.md` · `tests/conftest.py` forces mock embedder dim 384; vector query/store dim match |
+| FR-IX-015 embedder (query/store dim) | Indexing | `specs/indexing/spec.md` (0.8.1) |
 
 ## Standards compliance checklist
 
