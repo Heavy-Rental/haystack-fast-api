@@ -102,7 +102,7 @@ KG-2 equipment stockpile (Stage 2)
 | **6** | [`specs/indexing/spec.md`](./specs/indexing/spec.md) | Live HTTP index dual-branch; **`user_id` required** |
 | **7** | [`specs/indexing/contracts/ingest-from-project-spec.md`](./specs/indexing/contracts/ingest-from-project-spec.md) | Request/response field tables |
 | **8** | [`specs/knowledge-graph/spec.md`](./specs/knowledge-graph/spec.md) | Mandatory KG + Stage-1 multi-agent |
-| **9** | [`.env.example`](../.env.example) | `INDEXING_*`, `KG_*`, `PROJECT_AGENT_*` |
+| **9** | [`.env.example`](../.env.example) | `INDEXING_*` (incl. `INDEXING_DOCUMENT_STORE`), `KG_*`, `PROJECT_AGENT_*` |
 | **10** | [`../postman/README.md`](../postman/README.md) | Manual live HTTP |
 
 **Design / prompts:** [`specs/indexing/design.md`](./specs/indexing/design.md) · [`specs/knowledge-graph/design.md`](./specs/knowledge-graph/design.md) · [`../app/agents/prompts.py`](../app/agents/prompts.py)

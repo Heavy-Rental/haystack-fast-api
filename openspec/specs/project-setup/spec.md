@@ -96,7 +96,7 @@ No JWT/OAuth stack is required for current public health and live ingest routes 
 - **THEN** the request is accepted (public)
 
 ### Requirement: Technology stack baseline
-The normative stack SHALL include: FastAPI, Uvicorn, haystack-ai, langgraph, SQLAlchemy 2.x, psycopg, asyncpg (installed), pydantic-settings, XGBoost, joblib, scikit-learn, SHAP (+ numba/llvmlite pins for Py3.12/NumPy 2.x), NumPy, Pandas, Matplotlib, Seaborn; dev: pytest, httpx, ruff, faker.
+The normative stack SHALL include: FastAPI, Uvicorn, haystack-ai, langgraph, SQLAlchemy 2.x, psycopg, asyncpg (installed), pydantic-settings, **pgvector-haystack** (DocumentStore factory; default path is InMemory), XGBoost, joblib, scikit-learn, SHAP (+ numba/llvmlite pins for Py3.12/NumPy 2.x), NumPy, Pandas, Matplotlib, Seaborn; dev: pytest, httpx, ruff, faker.
 
 #### Scenario: Stack change requires update
 - **WHEN** a dependency or primary DB strategy changes intentionally
@@ -113,6 +113,7 @@ As-built isolation (autouse fixture):
 | `PROJECT_AGENT_MODE` | `stub` | Deterministic multi-agent synthesis |
 | `INDEXING_EMBEDDER` | `mock` | No OpenAI / sentence-transformers at test time |
 | `INDEXING_EMBEDDING_DIM` | `384` | Match mock default; avoid host dim (e.g. 768) breaking retrieval |
+| `INDEXING_DOCUMENT_STORE` | `memory` (runtime default; factory I0) | Default suite never opens Pgvector; host `pgvector` does not affect ingest until I1 |
 
 **As-built:** no `@pytest.mark.skip` / `skipif`, and no registered optional markers (`pgvector`, `neo4j`, `integration`, …) in the current suite. Planned optional integration jobs in feasibility docs remain **TARGET** until implemented.  
 (Trace: design.md Test runbook; knowledge-graph vector tool dim match)
@@ -154,3 +155,4 @@ As-built isolation (autouse fixture):
 | 2.0.1 | 2026-08-10 | Document bare `DATABASE_URL` → `postgresql+psycopg` normalization (psycopg v3) |
 | 2.0.2 | 2026-08-10 | Corrected hostname throughout: **`postgres-haystack`** (hyphen), not `postgres_haystack` (underscore) — confirmed via DNS on `HR-87-ml-2-d-production-db-wiring-for-period-utilization` (legacy `specification/SPEC-project-setup.md`, before it was stubbed to point here); `db` is ambiguous on this network and MUST NOT be used. `.env.example`/`app/config.py` `POSTGRES_HOSTNAME` default updated to match. |
 | 2.1.0 | 2026-08-12 | **Pytest isolation as-built:** conftest forces mock embedder + dim 384 (+ stub agents / temp KG dir); default suite has no optional prereq markers; vector-tool tests must match query/store embedding dim |
+| 2.2.0 | 2026-08-12 | **S5-I0:** `INDEXING_DOCUMENT_STORE` default `memory`; `pgvector-haystack` on stack for factory; default suite still no live Pgvector |

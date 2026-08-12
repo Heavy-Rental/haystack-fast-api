@@ -52,7 +52,9 @@ The industry is capital-intensive. Success depends on:
 
 **As-built public routes:** Call 1 `POST .../submitprojectspecification` (lean FR-IX-023 + S2a idempotency/correlation + optional **S3** Coordinator gate behind `INDEXING_VIA_AGENT_GATE`, default off). **Call 2 recommend:** `POST .../project-knowledge/getassetrecommendations` (quote / `items[]` via session + `RecommendationService` MVP). **Call 3 chatbot Q&A:** `POST .../project-knowledge/query` (`answer` + hits). **Portal:** React `project-spec` → Call 1 → Call 2 quote → React. Mapping: `Feasibility_Study_Spring/portal-to-haystack-mapping.md`.
 
-**Target (later):** reattach full multi-agent recommend graph (S7); equipment KG-2 + stockpile tools; Naive/hybrid RAG over manuals; async ML training. Normative detail lives in capability specs—not here.
+**As-built DocumentStore (S5-I0):** `INDEXING_DOCUMENT_STORE` + `build_document_store()` (`memory` default \| `pgvector` factory-ready). Default Call 1 ingest still uses process-local `InMemoryDocumentStore` until **I1** wires the factory into the pipeline writer and session registry (FR-IX-027).
+
+**Target (later):** I1 Pgvector pipeline cutover; reattach full multi-agent recommend graph (S7); equipment KG-2 + stockpile tools; Naive/hybrid RAG over manuals; async ML training. Normative detail lives in capability specs—not here.
 
 ---
 

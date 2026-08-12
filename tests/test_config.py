@@ -45,3 +45,9 @@ def test_database_url_override_preserves_explicit_asyncpg() -> None:
         database_url_override="postgresql+asyncpg://user:pass@other:5432/mydb",
     )
     assert settings.database_url == "postgresql+asyncpg://user:pass@other:5432/mydb"
+
+
+def test_indexing_document_store_defaults_to_memory() -> None:
+    """Phase 5 / I0: INDEXING_DOCUMENT_STORE defaults to memory (CI-safe)."""
+    settings = Settings()
+    assert settings.indexing_document_store == "memory"

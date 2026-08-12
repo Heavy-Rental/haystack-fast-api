@@ -9,7 +9,7 @@
 | **Document type** | Architecture / infrastructure feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | **2.7.5** |
+| **Version** | **2.7.6** |
 | **Application** | `haystack-fast-api` |
 | **Related specs** | `openspec/specs/project-setup/`, `indexing/`, `knowledge-graph/`, `recommendation-pipeline/`, `dynamic-pricing/`, `equipment-recommendation/` |
 | **Related studies** | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) · [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) · [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) · [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) · [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) · [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) |
@@ -25,7 +25,7 @@ This study covers **two complementary planes**:
 |-------|-------------|
 | **Fleet / data platform** | Spring **Postgres-primary** → real-time sync → **Postgres-Haystack** → **Neo4j** graph projection (KG-2) |
 | **Request / agent path** | Spring → **FastAPI** → **Multi-Agent Orchestrator** (LangGraph) → **[4] Indexing tool** → then agents invoke **in-process tools** (project store/Pgvector, Postgres-Haystack fleet SQL, Neo4j KG-2, **ML pricing**) → **synthesize recommendation** |
-| **Indexing DocumentStore cutover** | **As-built:** `InMemoryDocumentStore`. **Target:** Indexing Pipeline writes **`PgvectorDocumentStore`** on Postgres-Haystack (multi-user, multi-instance, optional TTL “temporary” project files). |
+| **Indexing DocumentStore cutover** | **As-built I0:** `INDEXING_DOCUMENT_STORE` + `build_document_store()` (`memory` default \| `pgvector` factory). Ingest still **InMemory**. **Target I1:** Indexing Pipeline writes **`PgvectorDocumentStore`** on Postgres-Haystack (multi-user, multi-instance, optional TTL “temporary” project files). |
 
 ### Verdicts
 
@@ -423,14 +423,14 @@ Without filters, tenants can see each other’s chunks — isolation is an **app
 
 | Step | Action |
 |------|--------|
-| 1 | Config: e.g. `INDEXING_DOCUMENT_STORE=memory\|pgvector` (default `memory` until ready) |
-| 2 | Factory: `build_document_store()` returns InMemory or Pgvector from settings |
-| 3 | Wire factory into `build_indexing_pipeline` / `IndexingIngestService` |
-| 4 | Session registry uses the same store instance (or reconnection for Pgvector) |
-| 5 | `project_vector_search` uses embedder + retriever against that store |
-| 6 | Tests: default memory; one integration suite against Pgvector (**TARGET** `@pytest.mark.pgvector`) |
+| 1 | Config: e.g. `INDEXING_DOCUMENT_STORE=memory\|pgvector` (default `memory` until ready) — **as-built I0** |
+| 2 | Factory: `build_document_store()` returns InMemory or Pgvector from settings — **as-built I0** |
+| 3 | Wire factory into `build_indexing_pipeline` / `IndexingIngestService` — **I1 TARGET** |
+| 4 | Session registry uses the same store instance (or reconnection for Pgvector) — **I1 TARGET** |
+| 5 | `project_vector_search` uses embedder + retriever against that store — **I1 TARGET** |
+| 6 | Tests: default memory (**as-built** `tests/test_document_store_factory.py`); one integration suite against Pgvector (**TARGET** `@pytest.mark.pgvector`) |
 | 7 | Optional dual-write period (memory + pgvector) only if debugging — usually unnecessary |
-| 8 | Production default → `pgvector`; memory for local/CI |
+| 8 | Production default → `pgvector`; memory for local/CI — **I2 TARGET** |
 
 **Embedder constraint:** `INDEXING_EMBEDDING_DIM` (and model) must match:
 
@@ -715,9 +715,9 @@ Those belong on **Track R / Track I**, which can start **without** waiting for D
 
 | Phase | Name | Outcome |
 |-------|------|---------|
-| **I0** | Store factory + flag | `INDEXING_DOCUMENT_STORE=memory\|pgvector`; tests default memory |
-| **I1** | **Indexing Pipeline writes PgvectorDocumentStore** | Branch A writer + session registry + vector tools use Pgvector; multi-user meta + optional TTL job |
-| **I2** | Production default pgvector | Memory only for CI/local; monitoring + retention SLOs |
+| **I0** | Store factory + flag | **As-built:** `INDEXING_DOCUMENT_STORE=memory\|pgvector`; `build_document_store()`; tests default memory (FR-IX-027) |
+| **I1** | **Indexing Pipeline writes PgvectorDocumentStore** | Branch A writer + session registry + vector tools use Pgvector; multi-user meta + optional TTL job (**TARGET**) |
+| **I2** | Production default pgvector | Memory only for CI/local; monitoring + retention SLOs (**TARGET**) |
 
 ### Track R — Request / agent / tools (project specification)
 
@@ -1087,6 +1087,7 @@ SOURCE_HOST: postgres-primary
 | **2.7.3** | 2026-08-11 | Call 1 FR-IX-023 **as-built** (S1a–S1e / Phase 1.7); free-text dates + needs + budget on lean body |
 | **2.7.4** | 2026-08-12 | Call numbering: Call 2 = recommend/quote; Call 3 = chatbot Q&A |
 | **2.7.5** | 2026-08-12 | §4.5 embedder: query/store dim must match; as-built pytest conftest mock dim 384; optional markers remain TARGET |
+| **2.7.6** | 2026-08-12 | **I0 as-built:** `INDEXING_DOCUMENT_STORE` + `build_document_store()`; ingest still InMemory; I1/I2 remain TARGET |
 
 ---
 
@@ -1102,8 +1103,8 @@ SOURCE_HOST: postgres-primary
 | Fleet / pricing multi-need | **Fan-out Workers per need** ([6]×N / [7]×N) |
 | C/W/D labels in logs / tool_traces? | **Yes** (`role`, `need_id`) |
 | Indexing as Haystack **SuperComponent**? | **GO** optional — wrap dual-branch pipeline; KG remains service-side ([study](./indexing-pipeline-supercomponent.md)) |
-| Indexing outputs (as-built) | **InMemory + KG-1** |
-| **Indexing DocumentStore cutover** | **Yes — I1: pipeline writes PgvectorDocumentStore** |
+| Indexing outputs (as-built) | **InMemory + KG-1** (I0 factory ready; default memory) |
+| **Indexing DocumentStore cutover** | **I0 as-built** (flag + factory); **I1 TARGET:** pipeline writes PgvectorDocumentStore |
 | Multi-user project files | **Pgvector + user_id/ingest_id filters + TTL** |
 | Durable store default | **Pgvector in Indexing Pipeline only** (InMemory for CI) |
 | Default pytest (as-built) | Unmarked suite; conftest mock embedder dim **384**; query/store dim match for vector tools |
