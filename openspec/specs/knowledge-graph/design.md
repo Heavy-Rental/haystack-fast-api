@@ -173,8 +173,21 @@ Converters (FileTypeRouter / specific converters)
 | DocumentStore | Per-ingest `InMemoryDocumentStore` in session registry |
 | KG-1 online | In-memory on session + JSON artifact from Part A |
 | Agent mode | `PROJECT_AGENT_MODE=stub` (default, CI-safe) \| `llm` |
-| HTTP | `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` after `/submitprojectspecification` |
+| HTTP Q&A (Call 3) | `POST /internal/v1/recommendations/project-knowledge/query` |
+| HTTP recommend (Call 2) | `POST .../project-knowledge/getassetrecommendations` (quote; not this capability’s Q&A) |
+| Code path Q&A | prefix `/internal/v1/recommendations` + `"/project-knowledge/query"` |
 | Scope | Project sources only — no equipment KG-2 |
+| Portal submit | Call 1 then **Call 2 recommend** → React; Call 3 optional chatbot |
+| Headers | Correlation on Call 2/3; no Idempotency-Key |
+
+### Portal dual-hop (Spring → haystack)
+
+```text
+React  POST /api/recommendations/project-spec
+  → Call 1  submitprojectspecification
+  → Call 2  getassetrecommendations  → quote (primary to React)
+  → Call 3  project-knowledge/query   → chatbot Q&A (optional)
+```
 
 ### Alignment with parent product
 
@@ -264,7 +277,7 @@ uv run pytest \
 ### Live HTTP (same process)
 
 1. `POST /internal/v1/recommendations/submitprojectspecification` → obtain `ingest_id` and `kg_*`.
-2. `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` with same `user_id` + `ingest_id`.
+2. `POST /internal/v1/recommendations/project-knowledge/query` with same `user_id` + `ingest_id` + `query`.
 
 Contract: [`contracts/project-knowledge-query.md`](./contracts/project-knowledge-query.md).  
 Postman folder **04 Stage-1 multi-agent Q&A**: [`../../../postman/README.md`](../../../postman/README.md).

@@ -1,9 +1,9 @@
-# Contract: Project Knowledge Query (Call 2)
+# Contract: Project Knowledge Query (Call 3 — chatbot Q&A)
 
 | Field | Value |
 |-------|--------|
 | **Capability** | `knowledge-graph` (Part B — Stage-1 multi-agent Q&A) |
-| **Method / path** | `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` |
+| **Method / path** | `POST /internal/v1/recommendations/project-knowledge/query` |
 | **Schemas** | `app/schemas/project_knowledge.py` |
 | **Service** | `app/services/project_knowledge_qa.py` |
 | **Prerequisite** | Successful `POST /internal/v1/recommendations/submitprojectspecification` in the **same process** (session registry is process-local) |
@@ -11,7 +11,27 @@
 | **Testing** | [`../../../../docs/testing/knowledge-graph-testing-guide.md`](../../../../docs/testing/knowledge-graph-testing-guide.md) |
 | **Standards** | OpenSpec · Spec-kit contracts · OpenSPDD agent prompts (`app/agents/prompts.py`) |
 
-**Naming note:** Path is Spring-facing (`getassetrecommendations`). As-built behaviour is **project-knowledge Q&A** (markdown `answer`), **not** Call 3 ranked assets + prices (`results_by_need`).
+**Call numbering (as-built 2026-08-12):**
+
+| Call | Path | Role |
+|------|------|------|
+| **2** | `.../project-knowledge/getassetrecommendations` | **Recommend / quote** (equipment + rates) — see recommend contract |
+| **3** | `.../project-knowledge/query` (**this file**) | **Chatbot Q&A** (markdown `answer` + hits) |
+
+**Portal submit** uses Call 1 then **Call 2 recommend** (not this Q&A route). Call 3 is for follow-up chatbot questions. Mapping: `Feasibility_Study_Spring/portal-to-haystack-mapping.md`.
+
+**Haystack code path:** `APIRouter(prefix="/internal/v1/recommendations")` + relative  
+`"/project-knowledge/query"` in `app/api/recommendations.py`.
+
+---
+
+## Request headers (S2a correlation)
+
+| Header | Required | Notes |
+|--------|----------|--------|
+| `X-Correlation-Id` | no | Logged + **echoed** by middleware; server mints UUID if omitted |
+| `traceparent` | no | Optional W3C Trace Context; logged when present |
+| `Idempotency-Key` | **n/a** | **Call 1 only** (FR-IX-024). Do not send for Call 3 |
 
 ---
 
@@ -51,7 +71,7 @@
 ### Example curl
 
 ```bash
-curl -s -X POST http://localhost:8000/internal/v1/recommendations/project-knowledge/getassetrecommendations \
+curl -s -X POST http://localhost:8000/internal/v1/recommendations/project-knowledge/query \
   -H 'Content-Type: application/json' \
   -d '{
     "user_id": "user_demo",
@@ -116,4 +136,14 @@ Error body: `{"error","message"}`.
 Ingest route: `POST /internal/v1/recommendations/submitprojectspecification` — lean Call 1 contract  
 [`ingest-from-project-spec.md`](../../indexing/contracts/ingest-from-project-spec.md).
 
-Call 3 ranked assets: **not this route** — see recommendation-pipeline / implementation-plan S7.5.
+Portal dual-hop mapping: [`../../../../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../../../../Feasibility_Study_Spring/portal-to-haystack-mapping.md).
+
+Call 2 recommend quote: **not this route** — see [`../../recommendation-pipeline/contracts/get-asset-recommendations.md`](../../recommendation-pipeline/contracts/get-asset-recommendations.md).
+
+## Document control
+
+| Version | Date | Notes |
+|---------|------|--------|
+| **2.0.0** | 2026-08-12 | Call 3 chatbot path `.../query`; Call 2 is recommend |
+| **1.1.0** | 2026-08-12 | Portal dual-hop (path was still getassetrecommendations) |
+| **1.0.0** | 2026-08-10 | Initial OpenSpec Call 2 contract (historical) |

@@ -73,7 +73,8 @@ def test_qa_route_echoes_correlation(client: TestClient) -> None:
     assert ingest.status_code == 200
     body = ingest.json()
     cid = "corr-qa-456"
-    qa = client.post(
+    # Call 2 recommend
+    rec = client.post(
         "/internal/v1/recommendations/project-knowledge/getassetrecommendations",
         json={
             "user_id": body["user_id"],
@@ -82,5 +83,17 @@ def test_qa_route_echoes_correlation(client: TestClient) -> None:
         },
         headers={"X-Correlation-Id": cid},
     )
+    assert rec.status_code == 200
+    assert rec.headers.get("X-Correlation-Id") == cid
+    # Call 3 chatbot Q&A
+    qa = client.post(
+        "/internal/v1/recommendations/project-knowledge/query",
+        json={
+            "user_id": body["user_id"],
+            "ingest_id": body["ingest_id"],
+            "query": "What equipment is needed?",
+        },
+        headers={"X-Correlation-Id": "corr-qa-call3"},
+    )
     assert qa.status_code == 200
-    assert qa.headers.get("X-Correlation-Id") == cid
+    assert qa.headers.get("X-Correlation-Id") == "corr-qa-call3"

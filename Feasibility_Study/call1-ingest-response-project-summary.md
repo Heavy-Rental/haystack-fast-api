@@ -3,13 +3,14 @@
 | Field | Value |
 |-------|--------|
 | **Document type** | API / product feasibility study |
-| **Status** | Complete (study) — lean public body + **FR-IX-023 Call 1 summary as-built** (S1a–S1e); not Call 3 recommend |
+| **Status** | Complete (study) — lean public body + **FR-IX-023 Call 1 summary as-built** (S1a–S1e); not Call 2 recommend quote |
 | **Date** | 2026-08-11 |
-| **Version** | 1.2.0 |
+| **Version** | 1.2.1 |
 | **Endpoint** | `POST /internal/v1/recommendations/submitprojectspecification` |
 | **Question** | What should Call 1 return for Spring/portal without over-exposing indexing/KG internals, while enabling Call 2? |
 | **OpenSpec** | FR-IX-023 **as-built** (S1a–S1e) · contract `openspec/specs/indexing/contracts/ingest-from-project-spec.md` · proposal `openspec/changes/2026-08-10-call1-project-spec-summary/` |
-| **Related** | Dual-plane §2.1 Call 1 · multi-agent synthesis (Call 3) · ml-pricing · C/W/D roles (Call 3 only) · [`implementation-plan.md`](./implementation-plan.md) Phase 1 |
+| **Related** | Dual-plane §2.1 Call 1 · multi-agent synthesis · ml-pricing · C/W/D · [`implementation-plan.md`](./implementation-plan.md) Phase 1 · portal [`../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../Feasibility_Study_Spring/portal-to-haystack-mapping.md) |
+| **Portal entry** | React `POST /api/recommendations/project-spec` → Call 1 then **Call 2 recommend quote** → React; Call 3 = chatbot Q&A |
 
 ---
 
@@ -21,14 +22,12 @@
 | Client-facing requirement text without technical dump? | **GO** — `user_requirement_summary` (string) from `project_text` or extracted file content |
 | Full needs + dates + budget (FR-IX-023)? | **GO (as-built)** — S1a–S1e / Phase 1.7 |
 | Expose `documents[]` / `kg_*` / counts on public body? | **No** (default) — keep internal; optional verbose later |
-| Same as Call 3 recommend (assets + rent price)? | **No** |
+| Same as Call 2 recommend (assets + rent price)? | **No** |
 | `include_pricing` as budget? | **No** (boolean only) |
 
 **Overall:** Call 1 public response is a **lean client-facing envelope** after successful index + KG (pipeline still runs fully for Call 2 session). Full structured `needs_summary[]` / dates / budget is **FR-IX-023 as-built**.
 
-**Not multi-agent recommend:** Call 1 is HTTP **ingest response** enrichment (service path, or Coordinator **[4]** gate when agent-fronted). It is **not** Coordinator synthesis **[8]**, not fleet/pricing **Workers**, and not Call 3 `results_by_need`.
-
-**Not multi-agent recommend:** Call 1 is HTTP **ingest response** enrichment (service path, or Coordinator **[4]** gate when agent-fronted). It is **not** Coordinator synthesis **[8]**, not fleet/pricing **Workers**, and not the same as Call 3 `results_by_need`.
+**Not multi-agent recommend:** Call 1 is HTTP **ingest** enrichment only. It is **not** Call 2 quote/`items[]`, not Coordinator synthesis **[8]**, not fleet/pricing **Workers**.
 
 ---
 
@@ -77,7 +76,7 @@ Required for Spring saga Call 1 → Call 2 without oversharing:
 
 | Field | Source | Notes |
 |-------|--------|-------|
-| `ingest_id` | Generated `ing_` + hex | **Only** server-generated handle Call 2 needs |
+| `ingest_id` | Generated `ing_` + hex | Handle for Call 2 recommend + Call 3 Q&A |
 | `user_id` | Request echo | Client already sent it |
 | `user_requirement_summary` | Deterministic summary of `project_text` **or** extracted file text after conversion | Not raw bytes; not LLM invent; truncate + warning if long |
 | `tentative_*` | Request dates preferred; else free-text/file extract (S1e) | Null + warning when unknown; never invent |
@@ -85,7 +84,7 @@ Required for Spring saga Call 1 → Call 2 without oversharing:
 | `expected_budget` | Currency/amount phrases only | Null + warning if uncertain; never invent |
 | `warnings` | Conversion / truncation / missing extract soft issues | Empty when none |
 
-**Internal (not on public body):** DocumentStore write, KG-1 build, session registry, chunk previews, `kg_artifact_path`, counts, `data_kind`, etc. — still **executed** so Call 2 works.
+**Internal (not on public body):** DocumentStore write, KG-1 build, session registry, chunk previews, `kg_artifact_path`, counts, `data_kind`, etc. — still **executed** so Call 2 recommend + Call 3 Q&A work.
 
 ---
 
@@ -128,7 +127,7 @@ lean response assembly          ← no documents[] / kg_* on public body
 | **2** | `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` | Q&A: needs `user_id` + `ingest_id` + `query` |
 | **3** | Future multi-agent recommend HTTP | Ranked **assets** + **predicted rent** |
 
-Skipping Call 2 after Call 1 remains valid once Call 3 is reattached.
+Portal submit uses Call 1 then Call 2 recommend; Call 3 chatbot is optional.
 
 ---
 
@@ -138,7 +137,7 @@ Skipping Call 2 after Call 1 remains valid once Call 3 is reattached.
 |------|------------|
 | Clients that parsed technical `documents[]` / `kg_*` | Lean is intentional; Spring should use lean fields only |
 | Hallucinated budget or dates | Null when uncertain; source marker; never invent |
-| Confusion with recommend | Spec safeguards FR-IX-023 / FR-I-016; path is ingest not Call 3 |
+| Confusion with recommend | Spec safeguards FR-IX-023 / FR-I-016; path is ingest not Call 2 quote |
 | Call 1 latency | Deterministic summary + extractors; stub decomposer default |
 
 ---
@@ -182,4 +181,4 @@ See [`implementation-plan.md`](./implementation-plan.md) Phase 1 (v3.4.0+).
 | Full needs + dates + budget? | **Yes (TARGET GO)** later |
 | Drop `ingest_id`? | **No** |
 | Invent budget if missing? | **No** |
-| Same as Call 3? | **No** |
+| Same as Call 2 recommend? | **No** |

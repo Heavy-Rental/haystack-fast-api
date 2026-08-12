@@ -5,10 +5,10 @@
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
 | **Date** | 2026-08-11 |
-| **Version** | 3.4.0 |
+| **Version** | 3.5.1 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.4.0** Phase 1 FR-IX-023 order: S1c needs → S1d budget → **S1e free-text dates** → 1.7 as-built mark; **3.3.1** Call 2 request contract; **3.3.0** Call 1 lean body; **3.2.x** PR template / accuracy; **3.1.0** TDD/BDD; **3.0.0** stage catalog |
+| **Revision notes** | **3.5.1** Multi-agent studies renumbered: Call 2 recommend / Call 3 Q&A (C/W/D, synthesis, dual-plane, Phase 7); **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -25,7 +25,7 @@ Related studies: [`README.md`](./README.md) · normative product behaviour: [`..
 | **Postgres–Haystack–Neo4j dual plane** | Viable dual-track; poll ETL first; Neo4j projection async | **High** for production recommend accuracy |
 | **Indexing → SuperComponent** | GO, optional packaging; no KG inside SC; packaging for **Coordinator gate [4]** | **Low** — refactor, not product path |
 | **ML pricing multi-agent** | GO in-process `predict_asset_price`; not public HTTP; **Worker [7] fan-out per need** | **Medium** — after fleet candidates exist |
-| **Multi-agent synthesis → assets + prices** | GO as tool-free **Coordinator** merge node; Stage-1 Q&A stays separate | **Medium–High** — Call 3 reattach |
+| **Multi-agent synthesis → assets + prices** | GO as tool-free **Coordinator** merge node; Stage-1 Q&A stays separate | **Medium–High** — enrich **Call 2 recommend** (C/W/D) |
 | **C/W/D role vocabulary** | GO as alias layer over Orchestrator; **§10 A–L templates** (incl. seq/par processing) | **Medium** — Phase 7 full agent contract |
 
 **Hard architectural rules (do not violate):**
@@ -55,14 +55,17 @@ Call 1: POST /internal/v1/recommendations/submitprojectspecification
   → FR-IX-023 Call 1 summary **as-built** (S1a–S1e: summary, date echo+extract, needs, budget)
 
 Call 2: POST /internal/v1/recommendations/project-knowledge/getassetrecommendations
-  → requires user_id + ingest_id from Call 1 + query
-  → LangGraph research → graph → synthesis (Q&A markdown only)
-  → tools: project_vector_search, project_kg_query
-  → path name is Spring-facing; behaviour is project-knowledge Q&A (not Call 3 assets)
+  → requires user_id + ingest_id from Call 1 (+ optional query)
+  → **RECOMMEND / quote** via SessionRecommendService → RecommendationService MVP
+  → quoteRef, items[].equipment, rates (no invent)
+  → portal dual-hop primary body for React
 
-Call 3: no public multi-agent recommend HTTP yet
-  In-process RecommendationService (FR-010 MVP: seed fleet + pricing_client → results_by_need)
-  exists for tests/service use — not the C/W/D [5–8] graph
+Call 3: POST /internal/v1/recommendations/project-knowledge/query
+  → chatbot Q&A: LangGraph research → graph → synthesis
+  → tools: project_vector_search, project_kg_query
+  → optional follow-ups after submit (not required for portal project-spec UX)
+
+Full multi-agent C/W/D recommend graph remains future enrichment behind Call 2 DTO
 
 DocumentStore: InMemory only (per-ingest session; no INDEXING_DOCUMENT_STORE factory)
 Fleet: seed in app; D1 merge-sync in devcontainer config
@@ -76,13 +79,40 @@ Error JSON: {"error","message"} handlers already as-built
 Idempotency-Key / ingest correlation headers — **as-built S2a** (process-local store + middleware)
 ```
 
-**Call 1 → Call 2 handoff (minimum):** Spring stores `user_id` + `ingest_id` from Call 1; Call 2 sends those plus `query`. See **§1.2.1** for full Call 2 request rules (including predefined prompt + summary).
+**Call 1 → Call 2 handoff (minimum):** Spring stores `user_id` + `ingest_id` from Call 1; Call 2 recommend sends those (+ optional `query`). See **§1.2.1**.
 
-### 1.2.1 Call 2 request contract — `getassetrecommendations`
+### 1.2.0 Portal project-spec submit saga (Spring + React)
+
+When the user **submits a project specification** from the React web portal, Spring runs **Call 1 then Call 2 recommend**, then returns **Call 2 quote** to the portal.
+
+```text
+React  POST /api/recommendations/project-spec
+  → Spring
+       → Call 1  POST /internal/v1/recommendations/submitprojectspecification
+       → persist user_id + ingest_id
+       → Call 2  POST /internal/v1/recommendations/project-knowledge/getassetrecommendations
+                 (user_id + ingest_id + optional query) → quote / items[]
+  → React  primary response body = Call 2 recommend quote
+  → optional Call 3 chatbot Q&A later: POST .../project-knowledge/query
+```
+
+| Rule | Detail |
+|------|--------|
+| Call 1 first | Required for index + KG + `ingest_id` |
+| Call 2 second | **Recommend / quote** (required for portal submit UX) |
+| Call 3 | **Chatbot Q&A** — optional follow-ups |
+| Idempotency | `Idempotency-Key` on Call 1 only (S2a) |
+| Call 2 fail | Do **not** re-run Call 1 (S2b saga) |
+| No invent | Call 2 items/rates from catalog + pricing only |
+
+Spring pack: [`../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../Feasibility_Study_Spring/portal-to-haystack-mapping.md).  
+Contract: [`../openspec/specs/recommendation-pipeline/contracts/get-asset-recommendations.md`](../openspec/specs/recommendation-pipeline/contracts/get-asset-recommendations.md).
+
+### 1.2.1 Call 2 request contract — `getassetrecommendations` (**recommend**)
 
 **Route:** `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations`  
-**Behaviour (as-built):** Stage-1 **project-knowledge Q&A** over the Call 1 session (DocumentStore + KG-1). Tools: `project_vector_search`, `project_kg_query`. Response focus: markdown **`answer`** (+ hits / `tool_traces`).  
-**Not Call 3:** path name is Spring-facing; this is **not** ranked fleet assets + prices (`results_by_need` — that is **S7.5** / multi-agent recommend).
+**Behaviour (as-built MVP):** Session-backed **equipment recommend / quote** via `RecommendationService` (seed fleet + pricing). Response: `quoteRef`, `items[].equipment`, rates, `estimatedTotal`, etc.  
+**Not chatbot Q&A** — that is Call 3 `.../project-knowledge/query`.
 
 #### As-built request body
 
@@ -90,9 +120,8 @@ Idempotency-Key / ingest correlation headers — **as-built S2a** (process-local
 |-------|----------|--------|
 | `user_id` | **yes** | Same as Call 1 |
 | `ingest_id` | **yes** | From Call 1 lean response — session key |
-| `query` | **yes** | Natural-language question **or** a **predefined prompt** (see below) |
-| `top_k` | no | Retrieval depth override (`1…50`) |
-| `kg_artifact_path` | no | Reload KG-1 if process-local session lost; vectors empty until re-ingest |
+| `query` | no | Optional focus / predefined prompt |
+| `top_k` | no | Cap on returned items |
 
 ```json
 {
@@ -102,61 +131,26 @@ Idempotency-Key / ingest correlation headers — **as-built S2a** (process-local
 }
 ```
 
-#### Is `query` necessary?
+#### Is `query` necessary on Call 2?
 
 | Answer | When |
 |--------|------|
-| **Yes (as-built)** | Call 2 remains free-form / task Q&A. Without `query` there is no question for research → graph → synthesis. |
-| **Optional only after redesign** | Server fills a **default template** when `query` is omitted, **or** product moves “get equipment recommendations” to **Call 3** (no free-form question). |
+| **Optional (as-built recommend)** | Call 2 recommend uses session text/needs; `query` is optional focus |
+| **Required on Call 3** | Chatbot Q&A needs a question string |
 
-#### Can the body be only `user_id` + `ingest_id` + `user_requirement_summary`?
-
-| Field set | Verdict |
-|-----------|---------|
-| `user_id` + `ingest_id` + **`query`** | **As-built correct** minimum for Q&A |
-| `user_id` + `ingest_id` + **`user_requirement_summary` only** (no `query`) | **Not** for current Q&A design — summary is not a substitute for a task/question string or for session retrieval |
-| Drop session; send **only** summary | **Avoid** — throws away indexed chunks/KG; invent risk rises |
-
-Call 1 already returns `user_requirement_summary` for portal/display. Call 2 does **not** need it as a separate request field if the session is live: tools read the upload via `ingest_id`. The summary **may** be embedded **inside** `query` (next).
-
-#### Predefined prompt + `user_requirement_summary` (**GO**)
-
-`query` **MAY** be a **fixed template** that includes Call 1’s `user_requirement_summary` (Spring composes today; FastAPI-owned default prompt is preferred later).
-
-**Allowed pattern:**
-
-```json
-{
-  "user_id": "user_demo",
-  "ingest_id": "ing_a1b2c3d4e5f6",
-  "query": "Based on the existing information uploaded earlier, this is the summary: Indoor elevated work ~8m; need scissors lift on soft clay. List equipment needs and constraints supported by the project sources only. Do not invent assets, fleet inventory, or rates."
-}
-```
-
-| Rule | Practice |
-|------|----------|
-| **Session is SoT** | Always pass `user_id` + `ingest_id` so tools hit DocumentStore + KG-1 |
-| **Summary in prompt** | Focus / instruction only — not a replacement for retrieval |
-| **No invent** | Call 2 must not invent `asset_id` or rent rates (fleet/pricing = Call 3 Workers) |
-| **Ownership** | Prefer one prompt source of truth in FastAPI (prompts module); Spring may send the same string until that lands |
-
-#### Future optional (not as-built)
-
-- Make `query` optional → server fills default template from session and/or stored/echoed summary.  
-- True “get asset recommendations” without a free-form question → **Call 3 / S7.5**, not this Q&A route.
+Call 1 `user_requirement_summary` may inform Call 2 grounding via session meta and optional Call 3 prompts.
 
 ### 1.3 Target multi-call journey
 
 ```text
-Spring saga:
-  Call 1  ingest [1–4]     → lean body: ingest_id + user_id + user_requirement_summary
-                             (+ later TARGET needs_summary / dates / budget)
-  Call 2  Q&A [5]          → project tools over session/Pgvector + KG-1
-  Call 3  recommend [5–8]  → Coordinator graph after [4] gate:
-                               Worker [5] needs
-                               → Delegator router
-                               → Worker [6]×N fleet + Worker [7]×N pricing (per need)
-                               → Coordinator synthesis [8] → results_by_need
+React portal project-spec submit:
+  POST /api/recommendations/project-spec
+    → Spring saga (as-built hops):
+         Call 1  ingest [1–4]     → lean FR-IX-023 body
+         Call 2  recommend        → getassetrecommendations quote / items[]
+                                    → primary body to React
+    → optional Call 3 chatbot Q&A → project-knowledge/query
+    → future: richer C/W/D Workers behind same Call 2 DTO
 ```
 
 ### 1.4 Where work lives
@@ -268,7 +262,7 @@ Feature: <stage or product capability>
 
 | Layer | Examples |
 |-------|----------|
-| **API / HTTP** | S1 Call 1 summary; S7.5 Call 3 |
+| **API / HTTP** | S1 Call 1 summary; S7.5 Call 2 multi-agent enrich |
 | **User-visible agent outcomes** | S7.4 empty fleet → `item: null` + warning; S7.3 gate fail → no fleet tools |
 | **Resilience** | S2 double ingest same key → one `ingest_id` |
 | **Isolation** | S5-I1 two users cannot read each other’s chunks |
@@ -358,7 +352,7 @@ Wave 1 — Data platform (config + Spring + this repo read models)
 Wave 2 — Agent / recommend
   R1 agent wraps indexing ──► R2 Q&A (mostly as-built)
   R4 tool catalog (fleet, Neo4j, pricing)
-  R5 recommend graph [5–8] + synthesis DTO  ≈ Call 3
+  R5 recommend graph [5–8] + synthesis DTO  ≈ Call 2 (HTTP recommend)
 
 Wave 3 — Production hardness
   Resilience C2 (202 jobs / SSE progress)
@@ -373,7 +367,7 @@ Wave 3 — Production hardness
 3. **D0–D1 / T0–T1** schema + near-real-time sync  
 4. **I0–I1** Pgvector cutover  
 5. **Pricing 1e/2a** + **R4 tools**  
-6. **R5 / Call 3** recommend synthesis  
+6. **R5 / Call 2** recommend synthesis (HTTP; enrich MVP)  
 7. **D3/T3 Neo4j** + Neo4j tools (can lag slightly behind SQL fleet tools)  
 8. **C2** async jobs when latency/timeouts force it  
 
@@ -400,7 +394,7 @@ Use **stage IDs** in PRs and test names. Every stage below that ships code has a
 | **S7.2** | Neo4j tools (no-op until S8) | 7 | app | S7.1 | **yes** (fake) |
 | **S7.3** | Recommend LangGraph DAG (seq/par C/W/D) | 7 | app | S7.0–S7.1 | **yes** |
 | **S7.4** | Tool-free synthesis + F-2 validation | 7 | app | S7.3 | **yes** |
-| **S7.5** | HTTP Call 3 DTO mapping | 7 | app | S7.4 | **yes** |
+| **S7.5** | HTTP Call 2 multi-agent enrich (same quote DTO) | 7 | app | S7.4 | **yes** |
 | **S7.6** | `tool_traces` / metrics (role, need_id, duration) | 7 | app | S7.3 | **yes** |
 | **S7.7** | Prompts A–L + tool DI factory | 7 | app | S7.3–7.4 | **yes** |
 | **S8** | Neo4j populate + real graph tools | 8 | config+app | seed SQL | optional |
@@ -475,7 +469,7 @@ S1e free-text date extract    (1.6)  ← **Done**
 - **FR-IX-023 is complete** after S1c + S1d + S1e (**Phase 1.7 as-built**).  
 - **S1b** stays request-echo only; **S1e** adds document/text extract when the request omits dates.
 
-**Non-goals in this phase:** ranked assets, ML rent, Call 3; public `documents[]` / `kg_*`.
+**Non-goals in this phase:** ranked assets on Call 1; public `documents[]` / `kg_*` (Call 2 recommend is separate stage).
 
 **Runtime dependency:** none beyond ingest (InMemory + KG).
 
@@ -554,7 +548,7 @@ Maps to dual-plane R1 + `indexing-pipeline-supercomponent.md`.
 | Attribute | Detail |
 |-----------|--------|
 | **Independently testable?** | **Yes — fully in default CI with InMemory** |
-| **Does not need** | Pgvector, Neo4j, fleet, Spring, pricing, Call 3 |
+| **Does not need** | Pgvector, Neo4j, fleet, Spring, pricing, Call 2 multi-agent enrich |
 | **S3 test implementation** | (1) Tool vs `IndexingIngestService` parity on fixture; (2) flag on: `START→index_tool→END` forced non-LLM gate; (3) flag off: HTTP unchanged; (4) MIME/KG hard-fail parity; (5) gate failure sets `indexing_ok=false` semantics for later S7 |
 | **S3.3 test implementation** | SC smoke `run(sources=…)`; KG still outside SC; intermediate chunk outputs available |
 | **Suggested modules** | `tests/test_indexing_tool.py`, `tests/test_indexing_supercomponent.py` |
@@ -611,7 +605,7 @@ Maps to dual-plane §4.5. **Critical for multi-replica and Call 1→2 without st
 |-----------|--------|
 | **Independently testable?** | **Yes — I0 always; I1 optional job** |
 | **S5-I0 test implementation** | (1) factory `memory` default; (2) invalid flag errors; (3) full suite green without Postgres |
-| **S5-I1 test implementation** | (1) two users isolation; (2) durable after reconnect; (3) dim mismatch fails fast; (4) TTL delete isolation; (5) Call 2 Q&A against I1 session |
+| **S5-I1 test implementation** | (1) two users isolation; (2) durable after reconnect; (3) dim mismatch fails fast; (4) TTL delete isolation; (5) Call 2 recommend + Call 3 Q&A against I1 session |
 | **Suggested modules** | `tests/test_document_store_factory.py`, `tests/test_pgvector_isolation.py` |
 | **Markers** | `@pytest.mark.pgvector` for I1 |
 | **CI job** | I0 **default**; I1 **pgvector** optional/nightly |
@@ -646,7 +640,7 @@ Maps to `ml-pricing-multi-agent.md` + `docs/dynamic-pricing-execution-plan.md`.
 
 ---
 
-### Phase 7 — Multi-agent recommend graph (R4–R5 / Call 3) — C/W/D A–L
+### Phase 7 — Multi-agent recommend graph (R4–R5 / Call 2 enrich) — C/W/D A–L
 
 Maps to dual-plane §4.1 [5]–[8], [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md), [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) §10 **A–L**.
 
@@ -663,7 +657,7 @@ Maps to dual-plane §4.1 [5]–[8], [`multi-agent-synthesis-recommend-output.md`
 | Neo4j tools (fake then real) | optional | **S7.2** / S8 |
 | LangGraph DAG seq/par | Coordinator + Delegator + Workers | **S7.3** |
 | Tool-free synthesis | Coordinator [8] | **S7.4** |
-| HTTP Call 3 | API | **S7.5** |
+| HTTP Call 2 multi-agent enrich | API | **S7.5** |
 | tool_traces metrics | G-1 | **S7.6** |
 | Prompts A–L + DI | all agents | **S7.7** |
 
@@ -738,14 +732,14 @@ Maps to dual-plane §4.1 [5]–[8], [`multi-agent-synthesis-recommend-output.md`
 
 ---
 
-#### Stage S7.5 — HTTP Call 3
+#### Stage S7.5 — HTTP Call 2 multi-agent enrich
 
 | Field | Content |
 |-------|---------|
-| **Work** | **Add** public Call 3 HTTP (none today); map C/W/D orchestrator output → existing recommend response DTO (`results_by_need`); feature flag |
+| **Work** | Enrich **Call 2** `getassetrecommendations` with full C/W/D orchestrator; map to quote DTO / `results_by_need`; feature flag for graph vs MVP |
 | **Exit criteria** | Contract tests vs OpenAPI / schema |
-| **As-built note** | `RecommendationService` is in-process FR-010 MVP (seed + pricing_client) used in tests — **not** a public multi-agent route. Flag off keeps surface as ingest + Q&A only (or documented service-only path). **Do not** overload Call 2 `getassetrecommendations` (Q&A, §1.2.1) for ranked assets — that is this stage. |
-| **Test implementation** | (1) POST recommend with fixtures → 200 shape; (2) flag off → no multi-agent Call 3 / legacy service path unchanged; (3) gate fail → 4xx/structured error; (4) multi-need body matches golden |
+| **As-built note** | Call 2 `getassetrecommendations` is **recommend quote MVP** (`SessionRecommendService` + `RecommendationService`). S7.5 enriches multi-agent graph behind the **same** Call 2 DTO. Call 3 is chatbot `.../query`. |
+| **Test implementation** | (1) POST recommend with fixtures → 200 shape; (2) flag off → MVP Call 2 path; (3) gate fail → 4xx/structured error; (4) multi-need body matches golden |
 | **Suggested modules** | `tests/test_recommend_http_call3.py` |
 | **CI job** | **default** |
 | **C/W/D** | Coordinator handoff; I session |
@@ -832,7 +826,7 @@ Can partially overlap Phase 7 (SQL fleet tools first; Neo4j tools after populate
 | **S9.4** | (1) outbox fixture events; (2) lag metrics unit | optional |
 | **S9.5** | Spike/benchmark only if pursued | not a gate |
 
-**Does not need for S9.1 gate:** Neo4j, fleet accuracy, full Call 3 accuracy.
+**Does not need for S9.1 gate:** Neo4j, fleet accuracy, full multi-agent Call 2 accuracy.
 
 ---
 
@@ -900,7 +894,7 @@ Every code-bearing PR **must** use the **PR description template** below (bare m
 | **PR-E** | S7.0 | RecommendAgentState + validation | Illegal partition writes rejected (**TDD** unit-first) |
 | **PR-F** | S7.1 | Fleet tool catalog + DI factory | Fake fleet filter/availability; allowlist (**TDD** + contract) |
 | **PR-G** | S7.3–7.4 | Recommend graph + synthesis | Order, fan-out, golden results_by_need; **BDD** no invent / empty fleet |
-| **PR-H** | S7.5–7.7 | Call 3 HTTP + traces + prompts | Contract + role traces + mode isolation; **BDD** Call 3 happy path |
+| **PR-H** | S7.5–7.7 | Call 2 multi-agent enrich + traces + prompts | Contract + role traces; **BDD** Call 2 quote happy path |
 
 ### PR description template (required bare minimum)
 
@@ -985,7 +979,7 @@ Process: **§2.1 TDD** + **§2.2 BDD** + **§2.3 stage PR workflow**. Layer tact
 | **Process** | **TDD** red→green→refactor for units/contracts; **BDD** G/W/T for API, agent outcomes, resilience |
 | **Unit** | Schema, decomposer stub, pricing clamp, state validation, synthesis merge from fixtures |
 | **Pipeline** | Indexing MIME/branch; SC smoke if added |
-| **API** | Call 1 summary; Q&A; Call 3 recommend (flagged)—prefer scenario-named tests |
+| **API** | Call 1 summary; Call 2 recommend quote; Call 3 Q&A—prefer scenario-named tests |
 | **Isolation** | Two `user_id`s on Pgvector; TTL delete |
 | **Agent** | `PROJECT_AGENT_MODE=stub`; forced [4] edge; fixture tools; no invent |
 | **Integration (optional CI)** | Testcontainers Postgres/pgvector/Neo4j; real haystack seed |
@@ -1041,10 +1035,10 @@ Process: **§2.1 TDD** + **§2.2 BDD** + **§2.3 stage PR workflow**. Layer tact
 |-----------|-----------|
 | **M1 Call 1** | Portal/Spring can show needs + dates + budget from ingest 200; `ingest_id` works for Call 2 |
 | **M2 Multi-user durable** | Two users, two replicas, Q&A hits correct chunks after restart |
-| **M3 Fleet-aware recommend** | Call 3 returns real Asset ids from mirror + non-zero clamped prices |
+| **M3 Fleet-aware recommend** | Call 2 returns real Asset ids from mirror + non-zero clamped prices |
 | **M4 Resilient saga** | Timeout + CB + idempotent ingest under failure drills |
 | **M5 Graph context** | Neo4j fleet projection refreshes without blocking recommend |
-| **M6 Multi-agent Call 3** | Fixture recommend graph green: C/W/D DAG, fan-out, golden `results_by_need`, no invent; traces with `role`/`need_id` |
+| **M6 Multi-agent Call 2** | Fixture recommend graph green on Call 2: C/W/D DAG, fan-out, golden quote/`results_by_need`, no invent; traces with `role`/`need_id` |
 
 Each milestone maps to **end-to-end product proof**; stage merge gates use the **Test implementation** packs in §3.1–§5, not full milestones.
 
@@ -1089,7 +1083,7 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | As-built ingest + Stage-1 Q&A | Live (internal paths) |
 | Error JSON `{"error","message"}` | As-built |
 | Pricing Phase 1e | Largely as-built (`pricing_repository` + wiring); 2a + agent tool remain |
-| FR-010 service recommend (seed) | In-process / tests only — not public Call 3 |
+| FR-010 service recommend (seed) | **As-built Call 2 MVP** via SessionRecommendService; full C/W/D is S7.x |
 | Full recommend multi-agent path | Not built (staged S7.0–S7.7) |
 | Pgvector / Neo4j populate | Not in app path |
 | Idempotency-Key on ingest | **As-built S2a** (process-local; multi-replica later) |

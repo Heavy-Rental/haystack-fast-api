@@ -8,7 +8,22 @@
 | **Caller** | Spring Boot only. No route below is called directly by a browser/mobile client. |
 | **Base URL (local dev)** | `http://localhost:8000` |
 | **Auth** | **None yet** (deferred project-wide). Restrict access at network/ops level until an auth SDD exists — do not treat any route below as safe to expose publicly. |
+| **Spring handoff pack (S2b / C1)** | [`Feasibility_Study_Spring/`](../../Feasibility_Study_Spring/) — wire contract uses live **`/internal/v1/recommendations/...`** paths; copy that folder into the Spring Boot repo |
+| **Portal → haystack mapping** | [`Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../../Feasibility_Study_Spring/portal-to-haystack-mapping.md) |
 | **Internal reasoning (Haystack maintainers only, not required reading for integration)** | [`openspec/specs/dynamic-pricing/`](../../openspec/specs/dynamic-pricing/), [`openspec/specs/recommendation-intake/`](../../openspec/specs/recommendation-intake/), [`openspec/project.md`](../../openspec/project.md) |
+
+> **Path note:** Live Call 1 / Call 2 routes are under **`/internal/v1/recommendations/`** (see OpenSpec + Spring pack). Sections below that still show `/api/v1/...` are historical draft text — prefer [`Feasibility_Study_Spring/wire-contract-call1-call2.md`](../../Feasibility_Study_Spring/wire-contract-call1-call2.md) for Spring integration.
+
+### Portal project-spec submit saga (normative)
+
+```text
+React  POST /api/recommendations/project-spec
+  → Spring Call 1  POST /internal/v1/recommendations/submitprojectspecification
+  → Spring Call 2  POST /internal/v1/recommendations/project-knowledge/getassetrecommendations
+  → React  primary body = Call 2 Q&A (mapped)
+```
+
+Call 1 is required first (ingest + `ingest_id`). Call 2 is the required second hop for this portal UX.
 
 ---
 

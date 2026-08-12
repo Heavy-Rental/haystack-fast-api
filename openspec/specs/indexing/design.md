@@ -63,6 +63,12 @@ Aligned with Packt Ch. 4 indexing flowchart
        │
        ▼
   enriched response (still not results_by_need)
+       │
+       │  Portal dual-hop (Spring-owned):
+       │  React POST /api/recommendations/project-spec
+       │    → Call 1 (this diagram) → persist ingest_id
+       │    → Call 2 getassetrecommendations → recommend quote (primary to React)
+       │    → optional Call 3 project-knowledge/query → chatbot Q&A
 ```
 
 **Branch detail:**

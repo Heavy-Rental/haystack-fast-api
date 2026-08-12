@@ -4,13 +4,42 @@
 |-------|--------|
 | **Capability** | [`../spec.md`](../spec.md) (indexing) |
 | **Design** | [`../design.md`](../design.md) |
-| **Status** | **as-built** lean Call 1 + **full FR-IX-023** project-spec summary (S1a–S1e) + **S2a** idempotency/correlation |
+| **Status** | **as-built** lean Call 1 + **full FR-IX-023** project-spec summary (S1a–S1e) + **S2a** idempotency/correlation + portal dual-hop note |
 | **DTO (as-built)** | `IngestFromProjectSpecResponse` (`app/schemas/indexing.py`) |
 | **Standards** | OpenSpec behaviour · Spec-kit contract tables · OpenSPDD (prompt/spec before code) |
 | **Resilience** | Stage **S2a** / track **C1** — [`Feasibility_Study/phase2-s2a-haystack-implementation-plan.md`](../../../../Feasibility_Study/phase2-s2a-haystack-implementation-plan.md) |
 
 Live HTTP owner: **indexing** (not FR-010 recommend on the public route).  
 Internal pipeline still: dual-branch index → DocumentStore write → mandatory KG-1 → project-knowledge session register (for Call 2).
+
+**Portal caller (Spring saga):** React `POST /api/recommendations/project-spec` → Spring **Call 1** hits **this** endpoint first, then Call 2 Q&A; React’s primary UX body for that portal request is Call 2 (see `Feasibility_Study_Spring/portal-to-haystack-mapping.md`). This route is **not** skipped for project-spec submit.
+
+---
+
+## Request headers (S2a as-built)
+
+| Header | Required | Notes |
+|--------|----------|--------|
+| `Idempotency-Key` | no | UUID (or opaque string) per **logical** ingest. When present, scoped with `user_id`. Successful **200** lean body is stored process-locally and **replayed** on retry (same `ingest_id`). Failed **4xx/5xx are not cached**. Missing key → always new ingest (legacy behaviour). |
+| `X-Correlation-Id` | no | End-to-end correlation. Logged on the request path; **echoed** on the response. If omitted, server mints a UUID. |
+| `traceparent` | no | Optional W3C Trace Context; logged when present (C1 logging-only). |
+
+**Idempotency rules (normative):**
+
+1. Applies to **successful ingest only** (HTTP 200 lean body).  
+2. Scope key = `user_id` + `Idempotency-Key` (same key under different users → different logical ingests).  
+3. JSON and multipart honour the same key.  
+4. Concurrent POSTs with the same scoped key use **single-flight** (wait for first producer; no double logical index).  
+5. Store is **process-local memory** (optional TTL via `IDEMPOTENCY_TTL_SECONDS`, default 24h). **Not multi-replica safe** without a later shared store.  
+6. Clients MAY retry **5xx** (and timed-out requests) with the **same** `Idempotency-Key`. Do **not** reuse a key for a different logical project-spec.
+
+### Example headers
+
+```http
+Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
+X-Correlation-Id: spring-req-abc123
+traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01
+```
 
 ---
 
@@ -172,5 +201,5 @@ Spring (or portal) stores `user_id` + `ingest_id` from this response, then calls
 
 `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations`
 
-See knowledge-graph contract [`project-knowledge-query.md`](../../knowledge-graph/contracts/project-knowledge-query.md).  
-`user_requirement_summary` is for display / optional prompt embedding; **not** required on Call 2 when the session is live.
+For React **project-spec submit**, Call 2 **recommend** (`getassetrecommendations` quote) is the required second hop; Call 2 body is primary to React. Optional Call 3 chatbot: [`project-knowledge-query.md`](../../knowledge-graph/contracts/project-knowledge-query.md). Mapping: [`portal-to-haystack-mapping.md`](../../../../Feasibility_Study_Spring/portal-to-haystack-mapping.md).  
+Recommend contract: [`get-asset-recommendations.md`](../../recommendation-pipeline/contracts/get-asset-recommendations.md).

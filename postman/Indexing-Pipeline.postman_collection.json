@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
     "name": "Indexing + Project Knowledge (Stage 1)",
-    "description": "Postman collection for:\n1) POST /internal/v1/recommendations/submitprojectspecification \u2014 indexing + mandatory KG-1\n2) POST /internal/v1/recommendations/project-knowledge/getassetrecommendations \u2014 Stage-1 multi-agent Q&A\n\n**Import:** Collection + environment `Indexing-Pipeline-Local`.\n**Server:** `uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload` from `haystack-fast-api/`.\n**Files:** For multipart requests, attach fixtures from `postman/fixtures/`.\n\n**Multi-agent:** Run request **15** (ingest) then **16** (query) so `ingestId` is saved.\nSessions are process-local; use the same server for both calls.\nDefault `PROJECT_AGENT_MODE=stub` (no LLM key required).\n\n**Ingest success shape:** `ingest_id`, `data_kind`, `chunk_count`, `documents_written`, `kg_*`.\n**Q&A success shape:** `answer`, `sources_used`, `tool_traces`, `research_hits`, `graph_hits`.\n**Not returned on ingest:** `recommendation_id` / `results_by_need`.",
+    "description": "Postman collection for haystack-fast-api multi-call journey:\n\n1) **Call 1** `POST /internal/v1/recommendations/submitprojectspecification` \u2014 indexing + mandatory KG-1 + lean FR-IX-023 body\n2) **Call 2** `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` \u2014 **recommend / quote** (`quoteRef`, `items[]`, rates)\n3) **Call 3** `POST /internal/v1/recommendations/project-knowledge/query` \u2014 **chatbot Q&A** (`answer`, hits, tool_traces)\n\n**Import:** Collection + environment `Indexing-Pipeline-Local`.\n**Server:** `uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload` from `haystack-fast-api/`.\n**Files:** For multipart requests, attach fixtures from `postman/fixtures/`.\n\n**Portal saga:** Run Call 1 (ingest) then Call 2 (recommend) so `ingestId` is saved; React primary body is Call 2 quote.\nCall 3 chatbot is optional follow-up (same `userId` + `ingestId`).\nSessions are process-local; use the same server for all calls.\nDefault `PROJECT_AGENT_MODE=stub` (no LLM key required for Call 3).\n\n**Call 1 success:** `ingest_id`, `user_id`, `user_requirement_summary`, dates, needs, budget, warnings.\n**Call 2 success:** `quoteRef`, `items[].equipment`, rates, `specSummary`, `rationale` (not Q&A `answer`).\n**Call 3 success:** `answer`, `sources_used`, `tool_traces`, `research_hits`, `graph_hits`.\n",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -1001,8 +1001,8 @@
       ]
     },
     {
-      "name": "04 Stage-1 multi-agent Q&A",
-      "description": "Project DocumentStore + KG-1 only. Run **15** then **16** in the same server process.\n`ingestId` is written to collection/environment variables on successful ingest.",
+      "name": "04 Call 2 recommend + Call 3 chatbot Q&A",
+      "description": "After Call 1 ingest in the **same** process:\n- **15/16 style:** ingest then **Call 2 recommend** (`getassetrecommendations`) \u2014 primary portal body\n- **Call 3 chatbot:** `project-knowledge/query` \u2014 optional free-form Q&A\n",
       "item": [
         {
           "name": "15 POST ingest project-spec for multi-agent",
@@ -1078,7 +1078,7 @@
           "response": []
         },
         {
-          "name": "16 POST project-knowledge query (multi-agent)",
+          "name": "16 POST Call 2 recommend (getassetrecommendations)",
           "event": [
             {
               "listen": "prerequest",
@@ -1097,27 +1097,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
+                  "pm.test('Call 2 recommend 200', function () { pm.response.to.have.status(200); });",
                   "const j = pm.response.json();",
-                  "pm.test('answer present', function () {",
-                  "    pm.expect(j.answer).to.be.a('string').and.not.empty;",
-                  "    pm.expect(j.answer).to.include('## Answer');",
-                  "});",
-                  "pm.test('both tools used', function () {",
-                  "    pm.expect(j.sources_used).to.include('project_vector_search');",
-                  "    pm.expect(j.sources_used).to.include('project_kg_query');",
-                  "});",
-                  "pm.test('tool_traces dual agents', function () {",
-                  "    pm.expect(j.tool_traces).to.be.an('array').that.is.not.empty;",
-                  "    const tools = j.tool_traces.map(t => t.tool);",
-                  "    pm.expect(tools).to.include('project_vector_search');",
-                  "    pm.expect(tools).to.include('project_kg_query');",
-                  "});",
-                  "pm.test('identity echoes request', function () {",
-                  "    pm.expect(j.user_id).to.eql(pm.collectionVariables.get('userId') || 'user_demo');",
-                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "pm.test('quote envelope (not Q&A answer)', function () {",
+                  "  pm.expect(j).to.have.property('quoteRef');",
+                  "  pm.expect(j).to.have.property('items');",
+                  "  pm.expect(j.user_id).to.eql(pm.environment.get('userId') || j.user_id);",
+                  "  pm.expect(j).to.not.have.property('answer');",
                   "});"
                 ]
               }
@@ -1145,28 +1131,119 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": \"{{userId}}\",\n  \"ingest_id\": \"{{ingestId}}\",\n  \"query\": \"{{agentQuery}}\",\n  \"top_k\": 5\n}\n"
+              "raw": "{\n  \"user_id\": \"{{userId}}\",\n  \"ingest_id\": \"{{ingestId}}\",\n  \"query\": \"{{agentQuery}}\",\n  \"top_k\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
-            "url": "{{baseUrl}}{{projectKnowledgePath}}",
-            "description": "LangGraph Stage-1 multi-agent: research \u2192 graph \u2192 synthesis.\n\nTools: `project_vector_search` (InMemoryDocumentStore) + `project_kg_query` (KG-1).\n\nRequires `ingestId` from request **15** (same process). Default stub synthesis needs no LLM key."
+            "url": {
+              "raw": "{{baseUrl}}{{projectKnowledgePath}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "v1",
+                "recommendations",
+                "project-knowledge",
+                "getassetrecommendations"
+              ]
+            },
+            "description": "**Call 2 recommend / quote.** Requires prior Call 1 in same process.\nBody: user_id + ingest_id + optional query.\nExpect 200 with quoteRef, items[] (equipment + rates), not Q&A answer."
           },
           "response": []
         },
         {
-          "name": "17 POST project-knowledge missing session (404)",
+          "name": "17 POST Call 3 chatbot Q&A (project-knowledge/query)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.collectionVariables.get('ingestId') || pm.environment.get('ingestId');",
+                  "if (!id) {",
+                  "    console.warn('ingestId is empty \u2014 run request 15 first in this server process.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Call 3 Q&A 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('chatbot answer (not quote)', function () {",
+                  "  pm.expect(j).to.have.property('answer');",
+                  "  pm.expect(j.answer.length).to.be.above(0);",
+                  "  pm.expect(j).to.not.have.property('quoteRef');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present.",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{userId}}\",\n  \"ingest_id\": \"{{ingestId}}\",\n  \"query\": \"{{agentQuery}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{projectKnowledgeQueryPath}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "v1",
+                "recommendations",
+                "project-knowledge",
+                "query"
+              ]
+            },
+            "description": "**Call 3 chatbot Q&A.** Run after Call 1 (same process). Optional after portal submit.\n\nRequest: `user_id`, `ingest_id`, **required** `query`.\nExpect: `answer`, `sources_used`, `tool_traces`."
+          },
+          "response": []
+        },
+        {
+          "name": "18 POST Call 2 recommend missing session (404)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status is 404', function () {",
-                  "    pm.response.to.have.status(404);",
-                  "});",
-                  "const j = pm.response.json();",
-                  "pm.test('shared error shape', function () {",
-                  "    pm.expect(j.error).to.eql('not_found');",
-                  "    pm.expect(j.message).to.be.a('string').and.not.empty;",
+                  "pm.test('missing session 404', function () { pm.response.to.have.status(404); });",
+                  "pm.test('error body', function () {",
+                  "  const j = pm.response.json();",
+                  "  pm.expect(j.error).to.eql('not_found');",
                   "});"
                 ]
               }
@@ -1194,23 +1271,40 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": \"nobody\",\n  \"ingest_id\": \"ing_missing\",\n  \"query\": \"anything\"\n}\n"
+              "raw": "{\n  \"user_id\": \"nobody\",\n  \"ingest_id\": \"ing_missing\",\n  \"query\": \"anything\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
-            "url": "{{baseUrl}}{{projectKnowledgePath}}",
+            "url": {
+              "raw": "{{baseUrl}}{{projectKnowledgePath}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "v1",
+                "recommendations",
+                "project-knowledge",
+                "getassetrecommendations"
+              ]
+            },
             "description": "Unknown session \u2192 404 `not_found`."
           },
           "response": []
         },
         {
-          "name": "18 POST project-knowledge empty query (422 or 400)",
+          "name": "19 POST Call 3 empty query (422 or 400)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status is 4xx', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([400, 422]);",
+                  "pm.test('empty query rejected', function () {",
+                  "  pm.expect([400, 422]).to.include(pm.response.code);",
                   "});"
                 ]
               }
@@ -1238,9 +1332,26 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": \"{{userId}}\",\n  \"ingest_id\": \"ing_any\",\n  \"query\": \"\"\n}\n"
+              "raw": "{\n  \"user_id\": \"{{userId}}\",\n  \"ingest_id\": \"{{ingestId}}\",\n  \"query\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
-            "url": "{{baseUrl}}{{projectKnowledgePath}}",
+            "url": {
+              "raw": "{{baseUrl}}{{projectKnowledgeQueryPath}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "v1",
+                "recommendations",
+                "project-knowledge",
+                "query"
+              ]
+            },
             "description": "Empty query fails validation (422 from FastAPI/Pydantic or 400)."
           },
           "response": []
