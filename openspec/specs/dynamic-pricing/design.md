@@ -131,7 +131,7 @@ predicted = model.predict(features)
 clamped = min(max(predicted, asset.minDailyRate), asset.maxDailyRate)
 ```
 
-Read per-asset at prediction time (admin-editable via asset admin-portal tag) — no separate config table or env var. `model.py`'s `predict_price(...)` takes `min_daily_rate`/`max_daily_rate` as **required** parameters — the caller (today: whoever has the asset's data; Phase 2b: `pricing_client.py`; Phase 2c: the internal quote endpoint reading a real `Asset` row) always supplies them. No fallback to a static per-category table exists anywhere in this package — that stand-in stays confined to the superseded `ml-experiments/predict_price.py` prototype.
+Read per-asset at prediction time (admin-editable via asset admin-portal tag) — no separate config table or env var. `model.py`'s `predict_price(...)` takes `min_daily_rate`/`max_daily_rate` as **required** parameters — every caller supplies them: `pricing_client.py`'s `predict_price_for_asset()` (Phase 2b, implemented 2026-08-11 — reads them off each candidate dict, sourced from `seed_fleet.py`) and the internal quote endpoint (Phase 2c, reading a real `Asset` row). No fallback to a static per-category table exists anywhere in this package — that stand-in stays confined to the superseded `ml-experiments/predict_price.py` prototype.
 
 **A related gap found and closed while removing that static table** (2026-08-11): the `ml-experiments` prototype's only protection against an unrecognized `category` was an *incidental* `KeyError` from its `pricing_tables.CATEGORY_BASE_RATE[category]` guardrail lookup — never a deliberate validation check. With that lookup gone (guardrails are now explicit parameters), nothing would have caught a bad `category` string at all: confirmed empirically that `feature_schema.encode_category()`'s `pd.Categorical(..., categories=CATEGORIES)` silently produces an all-zero one-hot row for an out-of-vocabulary value — no error, and the model would predict from that garbage row without complaint. `model.py`'s `predict_price(...)` now raises `ValueError` explicitly for any `category not in feature_schema.CATEGORIES`, with a hint pointing at `category_mapping.to_feature_name()` for the common case of passing a raw `AssetCategory.name` by mistake. `condition` is intentionally left as-is (an unrecognized value still raises pandas' `IntCastingNaNError` — unfriendly but real, matching the corrected prototype docstring from earlier the same day) — only the `category` gap was a genuine regression introduced by dropping the static table, so only it got a deliberate fix.
 
@@ -205,6 +205,14 @@ Notes:
 - No `POST /internal/v1/pricing/estimate` — browse/detail page pricing is a flat, non-ML base price on Spring Boot's side (e.g. `Asset.baseDailyRate`, no Haystack call); live ML pricing only happens at quote/checkout via this endpoint.
 - Price consistency between an earlier `recommend`-surfaced price and this endpoint's quote is intentionally **not** reconciled — `period_utilization`/`lead_time_days` are live, so drift is possible and expected; open item, not yet resolved.
 
+### Pipeline wiring (Phase 2b, implemented 2026-08-11)
+
+`app/services/pricing_client.py`'s `predict_price_for_asset()` calls `app.services.pricing.model.predict_price(...)` directly. It no longer lazily loads `ml-experiments/predict_price.py` via `sys.path` (the `_ensure_loaded()`/`_predict_fn` machinery is gone) and no longer has a static `_fallback_daily_rate()` category-table fallback — `model.py` already loads its artifacts eagerly at import time (Phase 2a) and has no "model unavailable" state to fall back from. `pricing_client.py`'s remaining job is response shaping only: `currency`, `deposit_rate`, `total_price = daily_rate × duration_days`, a human-readable `explanation`, and appending a `-degraded` suffix to `model_version`/a note to `explanation` when `PricePrediction.degraded` is set. All guardrail-clamping and live-aggregate logic stays inside `model.py` — not duplicated here, same principle as the internal quote endpoint above.
+
+Because `predict_price(...)` requires real per-asset `min_daily_rate`/`max_daily_rate` (no static fallback, per "Guardrail clamping" above), `pricing_client.predict_price_for_asset()` now requires them too. `app/pipelines/predict_price_adapter.py`'s `PredictPriceAdapter.run()` reads them straight off each candidate dict (`candidate["min_daily_rate"]`/`candidate["max_daily_rate"]`) — every `app/pipelines/seed_fleet.py` asset already carries both fields, so this needed no new data source for the pipeline's current in-memory candidate pool. A future DB-backed candidate source would need to carry the same two fields per candidate (e.g. via `get_asset_for_pricing()`, already built for the internal quote endpoint).
+
+Per the lean Phase 2b scope (2026-08-11 resequencing decision), only pipeline-integration tests were added — not a re-test of guardrail-clamping math or feature-schema transforms, already covered by Phase 2a's 24 tests. `tests/test_pricing_client_phase1e.py` now mocks `app.services.pricing.model.predict_price` (verifying the wrapper threads every argument through and shapes the response correctly) instead of the retired `_predict_fn` prototype hook. New `tests/test_pricing_phase2b_wiring.py` exercises the real loaded model end to end: `PredictPriceAdapter` produces a `prod-`-versioned, guardrail-bounded price for a seed asset, and `RecommendationService.recommend_from_project_spec()` populates `item.pricing.daily_rate` on the full recommend response. 154 total tests passing (was 149).
+
 ### Artifact contract
 
 `current.json` shape already implemented and validated in `ml-experiments/artifacts/current.json` — reuse as-is:
@@ -274,11 +282,11 @@ app/api/internal_pricing.py     # Phase 2c -- implemented 2026-08-11: POST /inte
                                  # no second prediction path)
 app/schemas/pricing.py          # Phase 2c -- request/response models for the endpoint above
 
-app/services/pricing_client.py  # as-built recommend adapter — still calls the ml-experiments
-                                 # prototype; production swap to app.services.pricing is
-                                 # Phase 2b's task (feature/ml-4-integration-tests), not yet done.
-                                 # Only its imports changed in Phase 2a (repository.py/
-                                 # read_resilience.py moved out from under app/repositories/).
+app/services/pricing_client.py  # Phase 2b -- implemented 2026-08-11: thin response-shaping
+                                 # wrapper around app.services.pricing.model.predict_price(...)
+                                 # (currency/deposit_rate/total_price/explanation). The
+                                 # ml-experiments-prototype loader and static fallback table
+                                 # are gone.
 app/models/asset_category.py, asset.py, booking.py, booking_item.py  # Phase 1e read-only models,
                                                                        # unchanged, still here
 app/repositories/                                                    # now empty (Phase 1e's two
@@ -304,9 +312,12 @@ uv run pytest tests/test_pricing_feature_schema.py tests/test_pricing_model.py \
 # manual retrain: python -c "from app.services.pricing.train import retrain; retrain()"
 #   → check artifacts/current.json's trained_at updated, model.py's _model_version changed
 
+# Phase 2b (implemented 2026-08-11):
+uv run pytest tests/test_pricing_client_phase1e.py tests/test_pricing_phase2b_wiring.py \
+  tests/test_pricing_phase1e_wiring.py -v
+
 # Still pending:
 # category metrics regression vs design reference table (not yet re-run against this package)
-# Phase 2b: pipeline integration tests once pricing_client.py is swapped
 ```
 
 ### Implementation branches
@@ -316,7 +327,7 @@ uv run pytest tests/test_pricing_feature_schema.py tests/test_pricing_model.py \
 | `HR-87-ml-2-d-production-db-wiring-for-period-utilization` | **Done (2026-08-10)** — Phase 1e: read-only models, `pricing_repository.py`, `pricing_read_resilience.py` tiered fallback; 20 new unit tests |
 | `feature/ml-3-pricing-service` | **Done (2026-08-11)** — scaffolded package, ported schema, built `model.py`/`train.py`, real per-asset guardrail clamping, relocated Phase 1e's read models/repositories in as `repository.py`/`read_resilience.py`, fixed the category-name mismatch (`category_mapping.py`); 24 new unit tests, 144 total passing, live-verified against all 27 real assets |
 | `feature/ml-6-internal-pricing-api` | **Done (2026-08-11)** — `POST /internal/v1/pricing/quote` (`app/api/internal_pricing.py`, `app/schemas/pricing.py`, `repository.py::get_asset_for_pricing()`); 5 new unit tests, 149 total passing. Resequenced ahead of `feature/ml-4-integration-tests` (lean Phase 2b) — see "Internal quote API" above |
-| `feature/ml-4-integration-tests` | **Not started** — wire pipeline (swap `pricing_client.py` to `app.services.pricing.model`), pipeline-integration tests only (guardrail/feature-schema tests already covered), manual retrain endpoint moved to demo-prep subtask |
+| `feature/ml-4-integration-tests` | **Done (2026-08-11)** — pipeline wired (`pricing_client.py` swapped to `app.services.pricing.model.predict_price(...)`, `min_daily_rate`/`max_daily_rate` threaded through `predict_price_adapter.py`); pipeline-integration tests only (guardrail/feature-schema tests already covered) — `tests/test_pricing_client_phase1e.py` rewritten, `tests/test_pricing_phase2b_wiring.py` added (2 new tests); 154 total passing. Manual retrain endpoint stays moved to demo-prep subtask |
 
 ## N — Norms
 

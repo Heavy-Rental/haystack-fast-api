@@ -39,6 +39,8 @@ def test_predict_price_adapter_threads_db_and_dates(monkeypatch) -> None:
                 "condition": "GOOD",
                 "capacity": 5000.0,
                 "platform_height": None,
+                "min_daily_rate": 250.0,
+                "max_daily_rate": 600.0,
             }
         ],
         duration_days=7.0,
@@ -52,6 +54,8 @@ def test_predict_price_adapter_threads_db_and_dates(monkeypatch) -> None:
     assert captured[0]["db"] is fake_db
     assert captured[0]["start_date"] == date(2026, 9, 1)
     assert captured[0]["end_date"] == date(2026, 9, 7)
+    assert captured[0]["min_daily_rate"] == 250.0
+    assert captured[0]["max_daily_rate"] == 600.0
 
 
 def test_predict_price_adapter_parses_string_dates(monkeypatch) -> None:
@@ -71,7 +75,14 @@ def test_predict_price_adapter_parses_string_dates(monkeypatch) -> None:
     )
 
     PredictPriceAdapter().run(
-        candidates=[{"asset_id": "A1", "category": "forklift"}],
+        candidates=[
+            {
+                "asset_id": "A1",
+                "category": "forklift",
+                "min_daily_rate": 80.0,
+                "max_daily_rate": 200.0,
+            }
+        ],
         start_date="2026-09-01",
         end_date="2026-09-07",
     )
