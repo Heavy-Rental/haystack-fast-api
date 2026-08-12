@@ -1,0 +1,37 @@
+{
+  "run": {
+    "mode": "recommend",
+    "user_id": "u-test",
+    "ingest_id": "ing-test",
+    "indexing_ok": true,
+    "start_date": "2026-09-01",
+    "end_date": "2026-09-14",
+    "include_pricing": true
+  },
+  "project": {
+    "research_notes": "",
+    "graph_notes": "",
+    "needs": [
+      {
+        "need_id": "need_access",
+        "description": "Need scissor lift for 8m access",
+        "equipment_type_hint": "scissor_lift",
+        "equipment_hints": ["scissor lift"],
+        "quantity": 1,
+        "constraints": { "platform_height_m": 8 }
+      }
+    ]
+  },
+  "work_plan": [],
+  "fleet_by_need": {},
+  "prices_by_need": {},
+  "recommendation": {
+    "results_by_need": [],
+    "warnings": []
+  },
+  "tool_traces": [],
+  "persistence": {
+    "ai_recommendation_id": null,
+    "recommendation_item_ids": []
+  }
+}

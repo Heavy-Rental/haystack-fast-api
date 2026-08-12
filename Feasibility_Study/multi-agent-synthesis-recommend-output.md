@@ -9,7 +9,7 @@
 | **Document type** | Architecture / agent orchestration feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.4.2 |
+| **Version** | 1.4.3 |
 | **Application** | `haystack-fast-api` Multi-Agent Orchestrator (LangGraph) |
 | **Question** | Can the **synthesis** step under Multi-Agent Orchestrator output **recommended assets** and **predicted rent price** grounded in the **uploaded project specification**? |
 | **As-built** | `app/agents/nodes.py` (`make_synthesis_node`), `app/agents/prompts.py`, Stage-1 Q&A only |
@@ -77,6 +77,8 @@ From `SYNTHESIS_AGENT_SYSTEM` / prompts:
 ```
 
 **Role vocabulary:** synthesis **[8]** is **Coordinator**-owned and tool-free; **[5]–[7]** are **Workers** (fleet/pricing **fan-out per need**); routing is an **explicit Delegator**; **[4]** is a **forced non-agent gate** under the Coordinator — see [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md).
+
+**Building blocks as-built (S7.0–S7.1):** `RecommendAgentState` + F-2 validation (`app/agents/recommend_state.py`); allowlisted tools `decompose_project_needs` / `retrieve_fleet_assets` / `filter_fleet_candidates` / `check_booking_availability` (+ S6 `predict_asset_price`) via `fleet_tools` + `tool_factory`. Graph + synthesis node remain **S7.3–S7.4**.
 
 **Instruction template:** Coordinator synthesis behavior is defined in C/W/D **§10.2** (**A–L**). **L-1** sequential barrier after need pipelines; **L-2** does not parallel-invent. Multi-need **parallel** fan-out is Delegator/Workers; synthesis is **sequential** merge. **J-3** ranks only priced STM candidates. Fleet via Workers on **`postgres_haystack`←`postgres-primary`** (C/W/D §10.0.5–§10.0.11).
 
@@ -198,6 +200,7 @@ Upload project-spec
 | **1.3.8** | 2026-08-11 | Coordinator **I** context management: merge multi-need task contexts |
 | **1.3.9** | 2026-08-11 | Coordinator **J** decision integration: rank only tool-backed candidates |
 | **1.4.0** | 2026-08-11 | Coordinator **K** workflow: barrier synthesis after fan-out |
+| **1.4.3** | 2026-08-12 | Note S7.0/S7.1 as-built building blocks (state + fleet tools); synthesis graph still TARGET |
 | **1.4.2** | 2026-08-12 | Align HTTP Call 2 = recommend, Call 3 = chatbot Q&A |
 | **1.4.1** | 2026-08-11 | Coordinator **L** sequential barrier vs parallel need ribs |
 

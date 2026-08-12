@@ -25,7 +25,8 @@ See [`spec.md`](./spec.md) Purpose, FRs FR-001+, NFRs, acceptance criteria, doma
 | RecommendationItem | Singular ranked choice per unit-need |
 | Pricing prediction | From `predict_price()` |
 | Knowledge graph | Ragas KG-1 (as-built after indexing) / KG-2 target |
-| Tool | Named Haystack wrapper for agent (target) |
+| Tool | Named in-process agent tool (S7.1 fleet catalog as-built; graph wire TARGET) |
+| RecommendAgentState | Phase 7 STM partitions + F-2 validation (**S7.0 as-built**) |
 
 ## A — Approach
 
@@ -180,6 +181,18 @@ Storage: in-memory during build → JSON file; no Neo4j by default.
 ### As-built recommend file map (service)
 
 See [`../recommendation-pipeline/design.md`](../recommendation-pipeline/design.md) full inventory. Key: `app/pipelines/*`, `app/services/recommendations.py`, `app/services/pricing_client.py`.
+
+### As-built multi-agent building blocks (Phase 7 S7.0–S7.1)
+
+| Module | Role |
+|--------|------|
+| `app/agents/recommend_state.py` | **S7.0** `RecommendAgentState` + F-2 `validate_state_transition` / partition writes |
+| `app/agents/fleet_tools.py` | **S7.1** `decompose_project_needs`, `retrieve_fleet_assets`, `filter_fleet_candidates`, `check_booking_availability` |
+| `app/agents/tool_factory.py` | **S7.1** DI catalog (`fake` seed default \| `sql` DTO backend); allowlist rejects unknown tools |
+| `app/agents/tools.py` | S3 `run_indexing_from_request`; S6 `predict_asset_price` |
+| Tests | `tests/test_recommend_agent_state.py`, `test_fleet_tools.py`, `test_tool_factory.py` |
+
+LangGraph recommend DAG / synthesis / HTTP enrich remain **S7.3–S7.5**.
 
 ## O — Operations
 
