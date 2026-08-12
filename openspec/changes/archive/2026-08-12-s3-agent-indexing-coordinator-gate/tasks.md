@@ -36,6 +36,32 @@
 - [x] Flag defaults false
 - [x] Full default suite regression green
 
+## How to re-run tests (instructions)
+
+Normative runbook (copy-paste commands):  
+[`openspec/specs/indexing/design.md` — How to test this capability](../../../specs/indexing/design.md#how-to-test-this-capability-runbook)
+
+Also linked from:
+
+- [`specs/indexing/spec.md`](../../../specs/indexing/spec.md#how-to-test-fr-ix-026--s3--verification-instructions)
+- [`contracts/ingest-from-project-spec.md`](../../../specs/indexing/contracts/ingest-from-project-spec.md#verification-s3--fr-ix-026)
+- Legacy pointer: [`specification/SPEC-indexing-file-type-router.md`](../../../../specification/SPEC-indexing-file-type-router.md)
+
+```bash
+cd haystack-fast-api
+uv run pytest tests/test_indexing_tool.py -q   # S3 pack
+uv run pytest tests/ -q                        # full regression
+
+# Manual gate path
+export INDEXING_VIA_AGENT_GATE=true
+export INDEXING_EMBEDDER=mock
+export PROJECT_AGENT_MODE=stub
+export KG_APPLY_TRANSFORMS=false
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+# POST /internal/v1/recommendations/submitprojectspecification
+# expect same lean FR-IX-023 body as flag-off path
+```
+
 ## Explicitly not done (follow-up)
 
 - [ ] S3.3 SuperComponent packaging

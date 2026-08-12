@@ -214,6 +214,52 @@ Error body shape (as-built): `{"error":"<code>","message":"<text>"}` (shared han
 
 ---
 
+## Verification (S3 / FR-IX-026)
+
+Full runbook: [`../design.md` — How to test this capability](../design.md#how-to-test-this-capability-runbook).  
+Requirement scenarios: [`../spec.md` FR-IX-026](../spec.md) + [How to test](../spec.md#how-to-test-fr-ix-026--s3--verification-instructions).
+
+### Automated
+
+```bash
+cd haystack-fast-api
+uv run pytest tests/test_indexing_tool.py -q
+```
+
+Flag on/off is set **inside** tests; shell env not required for pytest.
+
+### Manual Call 1 (both paths)
+
+| Step | Flag off (default) | Flag on |
+|------|--------------------|---------|
+| Env | unset / `INDEXING_VIA_AGENT_GATE=false` | `INDEXING_VIA_AGENT_GATE=true` |
+| Start | `uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload` | same |
+| Request | `POST /internal/v1/recommendations/submitprojectspecification` with `user_id` + `project_text` | same body |
+| Success | **200** lean FR-IX-023 fields | **same** lean shape |
+| Failure | unsupported file → **400** | **400** (parity) |
+
+Example success body shape (fields only; values vary):
+
+```json
+{
+  "ingest_id": "ing_…",
+  "user_id": "user_demo",
+  "user_requirement_summary": "…",
+  "tentative_start_date": null,
+  "tentative_end_date": null,
+  "needs_summary": [],
+  "expected_budget": null,
+  "warnings": []
+}
+```
+
+### Postman
+
+Import `postman/Indexing-Pipeline.postman_collection.json` + local env ([`postman/README.md`](../../../../postman/README.md)).  
+Gate path: restart the server with `INDEXING_VIA_AGENT_GATE=true`, then re-run Call 1 requests (collection is path-agnostic).
+
+---
+
 ## Call 2 handoff
 
 Spring (or portal) stores `user_id` + `ingest_id` from this response, then calls:

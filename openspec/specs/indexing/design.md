@@ -142,13 +142,13 @@ Compact response: portal may only need identity + summary; technical index/KG fi
 - `KG_*` — artifact dir, transforms flag (owned by knowledge-graph capability; required for success path)
 - `IDEMPOTENCY_TTL_SECONDS` — optional TTL for process-local successful ingest cache (default `86400`; ≤0 disables expiry)
 
-### Tests
+### Tests (module map)
 
 | Area | Modules / notes |
 |------|-----------------|
 | Component + pipeline | `tests/test_indexing_*.py` (router, converters, dual-branch, write path) |
 | HTTP ingest fields | `tests/test_recommendations_intake.py` (FR-IX-023 lean body, not recommend envelope) |
-| Agent gate (S3) | `tests/test_indexing_tool.py` (tool parity, flag on/off, MIME fail, `indexing_ok`) |
+| Agent gate (S3 / FR-IX-026) | `tests/test_indexing_tool.py` (tool parity, flag on/off, MIME fail, `indexing_ok`) |
 | Idempotency (S2a) | `tests/test_ingest_idempotency.py` (same key, missing key, multipart, failure not cached, single-flight, blank key, TTL unit) |
 | Correlation (S2a) | `tests/test_correlation_middleware.py` (echo, mint, log binds `correlation_id`, Q&A) |
 | Date extract (S1e) | `tests/test_project_spec_dates.py` + intake free-text date cases |
@@ -156,10 +156,89 @@ Compact response: portal may only need identity + summary; technical index/KG fi
 | Mandatory KG | `tests/test_knowledge_graph.py`; hard-fail and Stage-1 Q&A see knowledge-graph **Testing** |
 | Recommend unit tests | Service-level only; not bound to this HTTP route |
 
-### Manual
+### How to test this capability (runbook)
+
+Working directory: `haystack-fast-api/` (uv project root). CI-safe defaults: `INDEXING_EMBEDDER=mock`, `PROJECT_AGENT_MODE=stub`, `KG_APPLY_TRANSFORMS=false`.
+
+#### Automated (default CI)
+
+```bash
+# S3 / FR-IX-026 pack only (flag on/off driven inside tests via monkeypatch)
+uv run pytest tests/test_indexing_tool.py -q
+# or: .venv/bin/pytest tests/test_indexing_tool.py -q
+
+# Full indexing + Call 1 regression (includes S1/S2a)
+uv run pytest tests/test_indexing_tool.py tests/test_recommendations_intake.py \
+  tests/test_ingest_idempotency.py tests/test_correlation_middleware.py -q
+
+# Full suite
+uv run pytest tests/ -q
+```
+
+**S3 pack expectations** (`tests/test_indexing_tool.py`):
+
+| Case | Pass criteria |
+|------|----------------|
+| Tool parity | `run_indexing_from_request` vs service → lean fields + session registered |
+| Flag off HTTP | Default path → 200 lean FR-IX-023 body |
+| Flag on HTTP | Same lean DTO + session; no LLM agent nodes on gate graph |
+| Gate graph shape | Nodes include `index_gate`; no `research_agent` / `synthesis_agent` |
+| Traces | `role=coordinator`, `node=index_gate`, `tool=run_indexing_from_request` |
+| MIME fail | Tool/gate → `BadRequestError`; graph state `indexing_ok=false` |
+| Flag default | `indexing_via_agent_gate is False` |
+
+#### Manual HTTP — flag off (default / as-built)
+
+```bash
+# optional: leave INDEXING_VIA_AGENT_GATE unset or false
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+```bash
+curl -s -X POST "http://localhost:8000/internal/v1/recommendations/submitprojectspecification" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "user_demo",
+    "project_text": "Requires a 20-ton excavator on soft clay. Budget SGD 25000."
+  }'
+```
+
+**Expect:** HTTP **200**; body has `ingest_id` (`ing_…`), `user_id`, non-empty `user_requirement_summary`, `warnings[]`; **no** `kg_built` / `documents` on public body.
+
+#### Manual HTTP — flag on (Coordinator gate [4])
+
+```bash
+export INDEXING_VIA_AGENT_GATE=true
+export INDEXING_EMBEDDER=mock
+export PROJECT_AGENT_MODE=stub
+export KG_APPLY_TRANSFORMS=false
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Re-run the same Call 1 `curl` as above.
+
+**Expect:** Same lean DTO shape as flag-off path. Then Call 2 / Call 3 with returned `ingest_id` still work (session registered).
+
+**Negative (MIME):** multipart unsupported file still **400** on both paths (e.g. `postman/fixtures/unsupported.bin`).
+
+#### Postman
+
+1. Follow [`../../../postman/README.md`](../../../postman/README.md) — import collection + local env.
+2. **Flag off:** start API with defaults; run Call 1 happy paths.
+3. **Flag on:** restart API with `INDEXING_VIA_AGENT_GATE=true`; re-run Call 1 requests (same collection — no separate folder).
+4. Confirm Call 2 recommend / Call 3 Q&A after successful Call 1 still succeed.
+5. Negative: upload `fixtures/unsupported.bin` → **400** with/without flag.
+
+#### Health check
+
+- [http://localhost:8000/health](http://localhost:8000/health)
+- OpenAPI: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+### Manual (summary)
 
 - Postman collection, environment, fixtures: [`../../../postman/README.md`](../../../postman/README.md)
 - Live route verification sequence may include KG multi-agent (Postman 15→16) per knowledge-graph testing notes
+- **S3 gate runbook:** section **How to test this capability** above · FR-IX-026 scenarios in [`spec.md`](./spec.md)
 
 ## N — Norms
 
