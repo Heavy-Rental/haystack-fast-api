@@ -52,9 +52,9 @@ The industry is capital-intensive. Success depends on:
 
 **As-built public routes:** Call 1 `POST .../submitprojectspecification` (lean FR-IX-023 + S2a idempotency/correlation + optional **S3** Coordinator gate behind `INDEXING_VIA_AGENT_GATE`, default off). **Call 2 recommend:** `POST .../project-knowledge/getassetrecommendations` (quote / `items[]` via session + `RecommendationService` MVP). **Call 3 chatbot Q&A:** `POST .../project-knowledge/query` (`answer` + hits). **Portal:** React `project-spec` → Call 1 → Call 2 quote → React. Mapping: `Feasibility_Study_Spring/portal-to-haystack-mapping.md`.
 
-**As-built DocumentStore (S5-I0):** `INDEXING_DOCUMENT_STORE` + `build_document_store()` (`memory` default \| `pgvector` factory-ready). Default Call 1 ingest still uses process-local `InMemoryDocumentStore` until **I1** wires the factory into the pipeline writer and session registry (FR-IX-027).
+**As-built DocumentStore (S5-I0 + S5-I1):** `INDEXING_DOCUMENT_STORE` + `build_document_store()` / `create_session_document_store()` (`memory` default = fresh InMemory per ingest \| `pgvector` = shared table). Call 1 wires factory into writer + session registry. Retrieval tools filter `user_id` + `ingest_id`. Optional `INDEXING_CHUNK_TTL_SECONDS` + delete helpers. Dual-mode tests: default CI memory; optional `@pytest.mark.pgvector` (FR-IX-027/028).
 
-**Target (later):** I1 Pgvector pipeline cutover; reattach full multi-agent recommend graph (S7); equipment KG-2 + stockpile tools; Naive/hybrid RAG over manuals; async ML training. Normative detail lives in capability specs—not here.
+**Target (later):** I2 production default `pgvector`; reattach full multi-agent recommend graph (S7); equipment KG-2 + stockpile tools; Naive/hybrid RAG over manuals; async ML training. Normative detail lives in capability specs—not here.
 
 ---
 

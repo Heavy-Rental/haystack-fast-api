@@ -46,6 +46,6 @@ Multi-replica Call 1→2 and durable multi-user project chunks need a **Pgvector
 
 ## Out of scope (follow-up)
 
-- I1: wire factory into pipeline writer + session registry
-- I1: tenant isolation retrieval tests / TTL job / dual-mode CI markers
+- I1: wire factory into pipeline writer + session registry — **done** (see S5-I1 archive)
+- I1: tenant isolation retrieval tests / TTL job / dual-mode CI markers — **done** (S5-I1)
 - I2: production default `pgvector`

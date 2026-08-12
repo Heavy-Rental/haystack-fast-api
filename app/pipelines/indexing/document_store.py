@@ -3,8 +3,11 @@
 Default backend is Haystack ``InMemoryDocumentStore`` (process-local, CI-safe).
 
 Phase 5 / I0: ``build_document_store()`` selects ``memory`` or ``pgvector`` via
-``INDEXING_DOCUMENT_STORE``. The ingest pipeline still uses InMemory until I1
-wires the factory into Branch A writer + session registry.
+``INDEXING_DOCUMENT_STORE``.
+
+Phase 5 / I1: ``create_session_document_store()`` wires the factory into Call 1
+ingest + session registry. ``memory`` still allocates a **fresh** InMemory store
+per ingest; ``pgvector`` shares a table and relies on meta filters + delete/TTL.
 """
 
 from __future__ import annotations
@@ -20,6 +23,9 @@ DocumentStoreMode = Literal["memory", "pgvector"]
 
 _ALLOWED_MODES = frozenset({"memory", "pgvector"})
 
+# Stable table for project-spec chunks on Postgres-Haystack (I1).
+PGVECTOR_TABLE_NAME = "indexing_project_chunks"
+
 _document_store: InMemoryDocumentStore | None = None
 
 
@@ -27,8 +33,8 @@ def get_document_store() -> InMemoryDocumentStore:
     """Return the shared in-memory document store (lazy singleton).
 
     Always process-local InMemory — does **not** follow ``INDEXING_DOCUMENT_STORE``
-    so a host env of ``pgvector`` cannot break CI or accidental singleton use
-    before I1 pipeline wiring.
+    so a host env of ``pgvector`` cannot break ad-hoc callers that still use the
+    singleton helper.
     """
     global _document_store
     if _document_store is None:
@@ -88,6 +94,7 @@ def build_document_store(
     settings: Settings | None = None,
     embedding_dimension: int | None = None,
     connection_string: str | None = None,
+    recreate_table: bool = False,
 ) -> Any:
     """Create a DocumentStore from ``INDEXING_DOCUMENT_STORE`` (or explicit mode).
 
@@ -95,8 +102,6 @@ def build_document_store(
     * ``pgvector`` — Haystack ``PgvectorDocumentStore`` (lazy import); uses
       connection string + ``INDEXING_EMBEDDING_DIM``. May open a DB connection
       on construct — callers/tests must mock when Postgres is unavailable.
-
-    Ingest pipeline wiring of this factory is **I1** (not I0).
     """
     cfg = settings if settings is not None else get_settings()
     resolved_mode = normalize_document_store_mode(
@@ -130,5 +135,77 @@ def build_document_store(
     return PgvectorDocumentStore(
         connection_string=Secret.from_token(conn),
         embedding_dimension=dim,
-        recreate_table=False,
+        table_name=PGVECTOR_TABLE_NAME,
+        recreate_table=recreate_table,
+        create_extension=True,
     )
+
+
+def create_session_document_store(
+    *,
+    settings: Settings | None = None,
+    mode: str | None = None,
+    connection_string: str | None = None,
+    embedding_dimension: int | None = None,
+) -> Any:
+    """DocumentStore for one Call 1 ingest session (I1 wire).
+
+    * ``memory`` — always a **new** ``InMemoryDocumentStore`` (process-local
+      isolation without meta filters; matches pre-I1 per-ingest behaviour).
+    * ``pgvector`` — shared-table store from ``build_document_store``; tenants
+      isolate via ``user_id`` / ``ingest_id`` filters on retrieval and delete.
+    """
+    cfg = settings if settings is not None else get_settings()
+    resolved = normalize_document_store_mode(
+        mode if mode is not None else cfg.indexing_document_store
+    )
+    if resolved == "memory":
+        return InMemoryDocumentStore()
+    return build_document_store(
+        mode="pgvector",
+        settings=cfg,
+        connection_string=connection_string,
+        embedding_dimension=embedding_dimension,
+    )
+
+
+def tenant_meta_filters(
+    *,
+    user_id: str,
+    ingest_id: str | None = None,
+) -> dict[str, Any]:
+    """Filter dict matching ``meta.user_id`` (+ optional ``meta.ingest_id``)."""
+    uid = (user_id or "").strip()
+    conditions: list[dict[str, Any]] = [
+        {"field": "meta.user_id", "operator": "==", "value": uid}
+    ]
+    iid = (ingest_id or "").strip() if ingest_id is not None else ""
+    if iid:
+        conditions.append(
+            {"field": "meta.ingest_id", "operator": "==", "value": iid}
+        )
+    if len(conditions) == 1:
+        return conditions[0]
+    return {"operator": "AND", "conditions": conditions}
+
+
+def delete_ingest_chunks(
+    document_store: Any,
+    *,
+    user_id: str,
+    ingest_id: str,
+) -> int:
+    """Delete all documents for ``(user_id, ingest_id)``. Return deleted count."""
+    uid = (user_id or "").strip()
+    iid = (ingest_id or "").strip()
+    if not uid or not iid:
+        raise ValueError("user_id and ingest_id are required for delete_ingest_chunks")
+    if document_store is None:
+        return 0
+    filters = tenant_meta_filters(user_id=uid, ingest_id=iid)
+    docs = list(document_store.filter_documents(filters=filters) or [])
+    ids = [str(d.id) for d in docs if getattr(d, "id", None)]
+    if not ids:
+        return 0
+    document_store.delete_documents(ids)
+    return len(ids)

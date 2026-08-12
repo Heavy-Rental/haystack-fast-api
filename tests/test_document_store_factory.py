@@ -9,7 +9,9 @@ from haystack.document_stores.in_memory import InMemoryDocumentStore
 
 from app.config import Settings
 from app.pipelines.indexing.document_store import (
+    PGVECTOR_TABLE_NAME,
     build_document_store,
+    create_session_document_store,
     get_document_store,
     normalize_document_store_mode,
     reset_document_store,
@@ -96,6 +98,7 @@ def test_build_document_store_pgvector_mocked() -> None:
     kwargs = fake_cls.call_args.kwargs
     assert kwargs["embedding_dimension"] == 384
     assert kwargs["recreate_table"] is False
+    assert kwargs["table_name"] == PGVECTOR_TABLE_NAME
     # connection_string is a Haystack Secret; resolve token if available
     secret = kwargs["connection_string"]
     resolved = secret.resolve_value() if hasattr(secret, "resolve_value") else str(secret)
@@ -154,3 +157,35 @@ def test_get_document_store_stays_inmemory_singleton() -> None:
     b = get_document_store()
     assert a is b
     assert isinstance(a, InMemoryDocumentStore)
+
+
+def test_create_session_document_store_memory_is_fresh() -> None:
+    """I1 memory mode: each session store is a new InMemory instance."""
+    settings = Settings(indexing_document_store="memory")
+    a = create_session_document_store(settings=settings)
+    b = create_session_document_store(settings=settings)
+    assert isinstance(a, InMemoryDocumentStore)
+    assert isinstance(b, InMemoryDocumentStore)
+    assert a is not b
+
+
+def test_build_document_store_pgvector_uses_stable_table() -> None:
+    fake_cls = MagicMock(name="PgvectorDocumentStore")
+    fake_instance = MagicMock(name="pgvector_store")
+    fake_cls.return_value = fake_instance
+    with patch(
+        "haystack_integrations.document_stores.pgvector.PgvectorDocumentStore",
+        fake_cls,
+        create=True,
+    ):
+        build_document_store(
+            mode="pgvector",
+            settings=Settings(
+                indexing_document_store="pgvector",
+                indexing_embedding_dim=384,
+                database_url_override=(
+                    "postgresql+psycopg://user:pass@host:5432/heavy_rental"
+                ),
+            ),
+        )
+    assert fake_cls.call_args.kwargs["table_name"] == PGVECTOR_TABLE_NAME

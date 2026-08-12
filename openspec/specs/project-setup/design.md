@@ -79,7 +79,7 @@ uv run pytest
 uv run pytest tests/ -q
 ```
 
-**Default suite (as-built):** one job, no markers, no external LLM/embedder APIs, no Testcontainers. Host `.env` values for production-like embedder/LLM MUST NOT break pytest — isolation lives in `tests/conftest.py`.
+**Default suite (as-built):** one job, no live LLM/embedder APIs, no required Postgres. Host `.env` values for production-like embedder/LLM MUST NOT break pytest — isolation lives in `tests/conftest.py`. Optional `@pytest.mark.pgvector` skips unless `RUN_PGVECTOR_TESTS=1`.
 
 | Test module | Coverage |
 |-------------|----------|
@@ -101,7 +101,7 @@ Also resets process-local ingest idempotency store and project-knowledge session
 
 #### Optional / future CI (TARGET only)
 
-Feasibility docs may list `@pytest.mark.pgvector`, `@pytest.mark.neo4j`, `@pytest.mark.integration`. Those markers are **not** registered or used in the current suite. Do not document them as required prereqs for `uv run pytest` until implemented.
+`@pytest.mark.pgvector` is registered for optional live isolation tests (not required for default green). `@pytest.mark.neo4j` / `integration` remain TARGET. Do not treat live pgvector as a prereq for `uv run pytest`.
 
 ### Manual smoke
 

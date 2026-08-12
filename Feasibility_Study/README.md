@@ -17,13 +17,13 @@ These apply across studies unless a study explicitly narrows scope:
 | **Disambiguation** | Agent **Worker** ≠ ops **job worker** (202 jobs, Neo4j populate, Uvicorn). |
 | **Planes** | KG-1 (project) and KG-2 (fleet Neo4j) stay separate; Spring remains HTTP REST client. |
 | **Fleet data path** | **`postgres-primary`** (write SoT) → **`postgres_haystack_sync`** → **`postgres_haystack` / `heavy_rental`** (agent read mirror). |
-| **Default pytest** | `uv run pytest` is one unmarked suite — **no** optional prereq markers as-built. `tests/conftest.py` forces mock embedder **dim 384**, stub agents, temp KG dir so host `.env` does not break CI. Vector tools: query embedder mode/dim **must** match session store. Planned `@pytest.mark.pgvector` / `neo4j` remain **TARGET**. Details: [`implementation-plan.md`](./implementation-plan.md) §7.0 · OpenSpec project-setup. |
+| **Default pytest** | `uv run pytest` is CI-safe (memory DocumentStore). `tests/conftest.py` forces mock embedder **dim 384**, stub agents, temp KG dir so host `.env` does not break CI. Vector tools: query embedder mode/dim **must** match session store; tenant filters on `user_id`/`ingest_id`. Optional `@pytest.mark.pgvector` (S5-I1) skipped unless `RUN_PGVECTOR_TESTS=1`. `neo4j` marker remains **TARGET**. Details: [`implementation-plan.md`](./implementation-plan.md) §7.0 · OpenSpec project-setup. |
 
 **How to read:** start with dual-plane for data + request flow; C/W/D for agent roles; implementation plan for phased rollout; other studies for specialty depth (pricing, synthesis, Spring wire, Call 1, SuperComponent).
 
 | Study | Topic | Version |
 |-------|--------|---------|
-| [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane + Spring multi-call: Call 1 ingest · Call 2 recommend · Call 3 chatbot Q&A. **I0 DocumentStore factory as-built.** | **2.7.6** |
+| [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane + Spring multi-call: Call 1 ingest · Call 2 recommend · Call 3 chatbot Q&A. **I0+I1 DocumentStore cutover as-built** (factory wire, tenant filters, TTL). | **2.7.7** |
 | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) | Spring ↔ FastAPI wire; Call 1/2/3 saga; resilience C1–C3. | **1.3.2** |
 | [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) | ML pricing as **in-process** agent tool; pricing **Worker** fan-out per need; Phase 1e/2a. | **1.2.1** |
 | [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) | Synthesis **[8]** → assets + prices (**HTTP Call 2** recommend path). | **1.4.2** |
@@ -35,13 +35,15 @@ These apply across studies unless a study explicitly narrows scope:
 
 | Document | Topic | Version |
 |----------|--------|---------|
-| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. **S3 as-built**; **S5-I0 as-built** (store factory); **§7.0 default pytest isolation** (mock dim 384; no optional markers yet). | **3.5.4** |
+| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. **S3 as-built**; **S5-I0+I1 as-built** (factory + pipeline wire + isolation + TTL; optional `@pytest.mark.pgvector`); **§7.0 default pytest isolation** (mock dim 384). | **3.5.5** |
 | [`phase2-s2a-haystack-implementation-plan.md`](./phase2-s2a-haystack-implementation-plan.md) | **Phase 2 / S2a only** — haystack-fast-api: `Idempotency-Key`, correlation logging, docs. **Implemented** (FR-IX-024/025; §7 test runbook + conftest isolation). | **1.1.3** |
 | [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) | **S2b** Spring client + portal Call 1→2 recommend. Export: [`../Feasibility_Study_Spring/`](../Feasibility_Study_Spring/). | **2.0.0** |
 
 **Stage S3 (haystack, as-built):** `run_indexing_from_request` + forced `START→index_gate→END` behind `INDEXING_VIA_AGENT_GATE` (default off). OpenSpec FR-IX-026 · archive `openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/`.
 
-**Stage S5-I0 (haystack, as-built):** `INDEXING_DOCUMENT_STORE` + `build_document_store()` (`memory` default \| `pgvector` factory-ready). Ingest still InMemory until I1. OpenSpec FR-IX-027 · archive `openspec/changes/archive/2026-08-12-s5-i0-document-store-factory/`.
+**Stage S5-I0 (haystack, as-built):** `INDEXING_DOCUMENT_STORE` + `build_document_store()` (`memory` default \| `pgvector`). OpenSpec FR-IX-027 · archive `openspec/changes/archive/2026-08-12-s5-i0-document-store-factory/`.
+
+**Stage S5-I1 (haystack, as-built):** `create_session_document_store()` wired into Call 1 + session; retrieval filters `user_id`+`ingest_id`; optional TTL/delete; dual-mode tests. OpenSpec FR-IX-028 · archive `openspec/changes/archive/2026-08-12-s5-i1-document-store-pipeline-wire/`.
 
 ### Spring Boot handoff package
 

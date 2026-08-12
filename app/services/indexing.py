@@ -2,7 +2,8 @@
 
 After a successful index write + KG-1 build, registers a
 ``ProjectKnowledgeSession`` so Stage-1 multi-agent tools can address both
-the ingest-scoped ``InMemoryDocumentStore`` and the project knowledge graph.
+the session DocumentStore (InMemory or Pgvector via I1 factory) and the
+project knowledge graph.
 """
 
 from __future__ import annotations
@@ -10,16 +11,16 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import replace
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from haystack import Pipeline
 from haystack.dataclasses import ByteStream, Document
-from haystack.document_stores.in_memory import InMemoryDocumentStore
 
 from app.config import get_settings
 from app.core.exceptions import BadRequestError
+from app.pipelines.indexing.document_store import create_session_document_store
 from app.pipelines.indexing.embedder_factory import build_document_embedder
 from app.pipelines.indexing.mime_map import MIME_TEXT_PLAIN, guess_mime_from_filename
 from app.pipelines.indexing.pipeline import build_indexing_pipeline, run_indexing_pipeline
@@ -97,12 +98,21 @@ def byte_stream_from_project_text(
     return ByteStream(data=data, meta=meta, mime_type=MIME_TEXT_PLAIN)
 
 
+def _expires_at_iso(ttl_seconds: float) -> str | None:
+    """Return ISO expires_at when TTL is positive; else None."""
+    if ttl_seconds is None or float(ttl_seconds) <= 0:
+        return None
+    exp = datetime.now(timezone.utc) + timedelta(seconds=float(ttl_seconds))
+    return exp.isoformat()
+
+
 def _stamp_documents(
     documents: list[Document],
     *,
     user_id: str,
     user_name: str | None,
     ingest_id: str,
+    expires_at: str | None = None,
 ) -> list[Document]:
     stamped: list[Document] = []
     for doc in documents:
@@ -111,6 +121,8 @@ def _stamp_documents(
         meta["ingest_id"] = ingest_id
         if user_name:
             meta["user_name"] = user_name
+        if expires_at:
+            meta["expires_at"] = expires_at
         stamped.append(replace(doc, meta=meta))
     return stamped
 
@@ -169,7 +181,7 @@ def _needs_summary_from_decomposed(
     return items
 
 
-def _build_pipeline_for_store(document_store: InMemoryDocumentStore) -> Pipeline:
+def _build_pipeline_for_store(document_store: Any) -> Pipeline:
     settings = get_settings()
     mode = str(settings.indexing_embedder or "mock").strip().lower()
     if mode not in {"mock", "openai", "sentence-transformers", "st", "minilm"}:
@@ -190,14 +202,13 @@ def _build_pipeline_for_store(document_store: InMemoryDocumentStore) -> Pipeline
     )
 
 
-def _document_store_from_pipeline(pipeline: Pipeline) -> InMemoryDocumentStore | None:
+def _document_store_from_pipeline(pipeline: Pipeline) -> Any | None:
     """Best-effort extract of the writer-backed store (test pipelines)."""
     try:
         writer = pipeline.get_component("writer")
     except Exception:  # noqa: BLE001
         return None
-    store = getattr(writer, "document_store", None)
-    return store if isinstance(store, InMemoryDocumentStore) else None
+    return getattr(writer, "document_store", None)
 
 
 class IndexingIngestService:
@@ -207,10 +218,10 @@ class IndexingIngestService:
         self,
         *,
         pipeline: Pipeline | None = None,
-        document_store: InMemoryDocumentStore | None = None,
+        document_store: Any | None = None,
         need_decomposer: NeedDecomposer | None = None,
     ) -> None:
-        # Prefer an explicit pipeline (tests). Otherwise build per-ingest store.
+        # Prefer an explicit pipeline (tests). Otherwise build via I1 factory.
         self._pipeline = pipeline
         self._document_store = document_store
         self._need_decomposer = need_decomposer
@@ -230,19 +241,22 @@ class IndexingIngestService:
             raise BadRequestError("user_id is required")
         uname = user_name.strip() if isinstance(user_name, str) and user_name.strip() else None
         ingest_id = f"ing_{uuid.uuid4().hex}"
+        settings = get_settings()
+        expires_at = _expires_at_iso(float(settings.indexing_chunk_ttl_seconds or 0))
 
-        # Per-ingest DocumentStore for multi-user isolation (Stage 1 multi-agent).
-        # When tests inject a pipeline, reuse its writer store so registry matches writes.
+        # I1: factory-backed session store (memory = fresh InMemory; pgvector = shared).
+        # When tests inject a pipeline/store, reuse so registry matches writes.
         if self._document_store is not None:
             session_store = self._document_store
             pipeline = self._pipeline or _build_pipeline_for_store(session_store)
         elif self._pipeline is not None:
             pipeline = self._pipeline
             session_store = (
-                _document_store_from_pipeline(pipeline) or InMemoryDocumentStore()
+                _document_store_from_pipeline(pipeline)
+                or create_session_document_store(settings=settings)
             )
         else:
-            session_store = InMemoryDocumentStore()
+            session_store = create_session_document_store(settings=settings)
             pipeline = _build_pipeline_for_store(session_store)
 
         sources: list[ByteStream | str | Path] = []
@@ -253,18 +267,27 @@ class IndexingIngestService:
                 meta["ingest_id"] = ingest_id
                 if uname:
                     meta["user_name"] = uname
+                if expires_at:
+                    meta["expires_at"] = expires_at
                 sources.append(
                     ByteStream(data=src.data, meta=meta, mime_type=src.mime_type)
                 )
         if project_text is not None and str(project_text).strip():
-            sources.append(
-                byte_stream_from_project_text(
-                    str(project_text),
-                    user_id=uid,
-                    user_name=uname,
-                    ingest_id=ingest_id,
-                )
+            text_stream = byte_stream_from_project_text(
+                str(project_text),
+                user_id=uid,
+                user_name=uname,
+                ingest_id=ingest_id,
             )
+            if expires_at:
+                text_meta = dict(text_stream.meta or {})
+                text_meta["expires_at"] = expires_at
+                text_stream = ByteStream(
+                    data=text_stream.data,
+                    meta=text_meta,
+                    mime_type=text_stream.mime_type,
+                )
+            sources.append(text_stream)
 
         if not sources:
             raise BadRequestError(
@@ -319,12 +342,14 @@ class IndexingIngestService:
             user_id=uid,
             user_name=uname,
             ingest_id=ingest_id,
+            expires_at=expires_at,
         )
         joiner_docs = _stamp_documents(
             [d for d in joiner_raw if isinstance(d, Document)],
             user_id=uid,
             user_name=uname,
             ingest_id=ingest_id,
+            expires_at=expires_at,
         )
         chunk_count = int(out.get("chunk_count") or len(embedded_docs) or len(joiner_docs))
         documents_written = int(out.get("documents_written") or 0)
@@ -336,7 +361,6 @@ class IndexingIngestService:
 
         public_warnings = list(conversion_warnings)
 
-        settings = get_settings()
         from app.pipelines.kg.runner import run_knowledge_graph
 
         # Mandatory KG: post-final_doc_joiner chunks; full Ragas transforms only in generator.
@@ -420,6 +444,10 @@ class IndexingIngestService:
                     "data_kind": data_kind,
                     "chunk_count": chunk_count,
                     "documents_written": documents_written,
+                    "document_store_mode": str(
+                        settings.indexing_document_store or "memory"
+                    ),
+                    "expires_at": expires_at,
                     "filenames": list(out.get("filenames") or []),
                     "kg_node_count": kg_node_count,
                     "kg_relationship_count": kg_relationship_count,
