@@ -43,7 +43,12 @@ def test_vector_tool_wrapper() -> None:
     store = InMemoryDocumentStore()
     embedder = build_document_embedder(mode="mock", dimension=dim)
     docs = embedder.run(
-        documents=[Document(content="Boom lift for facade work")]
+        documents=[
+            Document(
+                content="Boom lift for facade work",
+                meta={"user_id": "u", "ingest_id": "ing"},
+            )
+        ]
     )["documents"]
     store.write_documents(docs)
     session = ProjectKnowledgeSession(
@@ -60,3 +65,5 @@ def test_vector_tool_wrapper() -> None:
     assert isinstance(hits, list)
     assert len(hits) >= 1
     assert "boom" in hits[0]["content"].lower()
+    assert hits[0]["meta"]["user_id"] == "u"
+    assert hits[0]["meta"]["ingest_id"] == "ing"

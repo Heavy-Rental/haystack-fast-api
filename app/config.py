@@ -56,11 +56,17 @@ class Settings(BaseSettings):
         default="sentence-transformers/all-MiniLM-L6-v2",
         alias="INDEXING_ST_MODEL",
     )
-    # DocumentStore backend factory (Phase 5 / I0): memory (default, CI) | pgvector
-    # Ingest pipeline still uses InMemory until I1 wires this factory through.
+    # DocumentStore backend (Phase 5 / I0 factory + I1 pipeline wire):
+    # memory (default, CI) | pgvector (shared table; tenant meta filters required)
     indexing_document_store: str = Field(
         default="memory",
         alias="INDEXING_DOCUMENT_STORE",
+    )
+    # Optional TTL for project chunks (seconds). 0 / negative = no expires_at stamp.
+    # Used with purge_expired_chunks / discard helpers (Phase 5.5).
+    indexing_chunk_ttl_seconds: float = Field(
+        default=0.0,
+        alias="INDEXING_CHUNK_TTL_SECONDS",
     )
 
     # Knowledge graph (HR-76): mandatory after final_doc_joiner; transforms on generator only

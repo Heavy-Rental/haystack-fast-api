@@ -109,8 +109,10 @@ Default embedder is CI-safe (`MockDocumentEmbedder`); optional `openai` / `sente
 | `app/services/need_decomposer.py` / LLM | **as-built S1c:** needs_summary from project text |
 | `app/services/project_spec_budget.py` | **as-built S1d:** expected_budget extract |
 | `app/services/project_spec_dates.py` | **as-built S1e:** resolve_rental_dates (request preferred) |
-| `app/config.py` | `INDEXING_*` (incl. `INDEXING_DOCUMENT_STORE`), `KG_*`, `IDEMPOTENCY_TTL_SECONDS`, `INDEXING_VIA_AGENT_GATE` |
-| `app/pipelines/indexing/document_store.py` | **as-built S5-I0:** `build_document_store()` + mode normalize (FR-IX-027); singleton still InMemory |
+| `app/config.py` | `INDEXING_*` (incl. `INDEXING_DOCUMENT_STORE`, `INDEXING_CHUNK_TTL_SECONDS`), `KG_*`, `IDEMPOTENCY_TTL_SECONDS`, `INDEXING_VIA_AGENT_GATE` |
+| `app/pipelines/indexing/document_store.py` | **as-built S5-I0/I1:** `build_document_store()` + `create_session_document_store()` + `delete_ingest_chunks` (FR-IX-027/028) |
+| `app/pipelines/indexing/retrieval.py` | **as-built S5-I1:** tenant filters + InMemory/Pgvector retriever dispatch |
+| `app/services/project_chunk_cleanup.py` | **as-built S5-I1:** TTL purge + discard session |
 | `postman/` | Live collection |
 
 ### As-built extraction notes (FR-IX-023 / Phase 1.7)
@@ -133,14 +135,16 @@ Compact response: portal may only need identity + summary; technical index/KG fi
 | `pipeline.py` | `build_indexing_pipeline`, `run_indexing_pipeline`; dual-branch + joiners |
 | converters / cleaners / splitters | Per-MIME convert; CSV vs unstructured preprocess |
 | `embedder_factory.py` | Mock default embedder; optional openai / sentence-transformers |
-| `document_store.py` | **I0:** `build_document_store(mode=memory\|pgvector)`; `get_document_store` / `reset` stay process-local InMemory |
+| `document_store.py` | **I0+I1:** `build_document_store` / `create_session_document_store` / `delete_ingest_chunks`; singleton `get_document_store` stays InMemory |
+| `retrieval.py` | **I1:** tenant filters; InMemoryEmbeddingRetriever or PgvectorEmbeddingRetriever |
 
 ## O — Operations
 
 ### Config
 
 - `INDEXING_*` — embedder mode, splitter/store-related settings (see [`.env.example`](../../../.env.example))
-- `INDEXING_DOCUMENT_STORE` — **S5-I0 / FR-IX-027:** `memory` (default, CI) \| `pgvector` (factory-ready; pipeline wire is **I1**)
+- `INDEXING_DOCUMENT_STORE` — **S5-I0/I1 / FR-IX-027–028:** `memory` (default, CI) \| `pgvector` (shared table; needs `DATABASE_URL` / `POSTGRES_*` + extension)
+- `INDEXING_CHUNK_TTL_SECONDS` — **S5-I1 / FR-IX-028:** optional `expires_at` stamp (default `0` = off)
 - `INDEXING_VIA_AGENT_GATE` — **S3 / FR-IX-026:** `false` (default) direct service; `true` forced Coordinator gate
 - `KG_*` — artifact dir, transforms flag (owned by knowledge-graph capability; required for success path)
 - `IDEMPOTENCY_TTL_SECONDS` — optional TTL for process-local successful ingest cache (default `86400`; ≤0 disables expiry)
@@ -153,6 +157,9 @@ Compact response: portal may only need identity + summary; technical index/KG fi
 | HTTP ingest fields | `tests/test_recommendations_intake.py` (FR-IX-023 lean body, not recommend envelope) |
 | Agent gate (S3 / FR-IX-026) | `tests/test_indexing_tool.py` (tool parity, flag on/off, MIME fail, `indexing_ok`) |
 | DocumentStore factory (S5-I0 / FR-IX-027) | `tests/test_document_store_factory.py` (memory default, invalid mode, mocked pgvector; no Postgres) |
+| Tenant isolation (S5-I1 / FR-IX-028) | `tests/test_tenant_vector_isolation.py` (shared InMemory; default CI) |
+| Chunk TTL/delete (S5-I1) | `tests/test_project_chunk_cleanup.py` |
+| Optional live pgvector (S5-I1 / 5.6) | `tests/test_pgvector_isolation.py` — `@pytest.mark.pgvector`; `RUN_PGVECTOR_TESTS=1` |
 | Idempotency (S2a) | `tests/test_ingest_idempotency.py` (same key, missing key, multipart, failure not cached, single-flight, blank key, TTL unit) |
 | Correlation (S2a) | `tests/test_correlation_middleware.py` (echo, mint, log binds `correlation_id`, Q&A) |
 | Date extract (S1e) | `tests/test_project_spec_dates.py` + intake free-text date cases |
@@ -166,7 +173,7 @@ Working directory: `haystack-fast-api/` (uv project root).
 
 **CI-safe defaults (runtime / manual):** `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `PROJECT_AGENT_MODE=stub`, `KG_APPLY_TRANSFORMS=false`.
 
-**Pytest isolation (as-built):** `tests/conftest.py` autouse forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `PROJECT_AGENT_MODE=stub`, and a temp `KG_ARTIFACT_DIR` so a developer’s host `.env` (e.g. dim `768` for OpenAI) does not fail the suite. There are **no** optional pytest markers or external prereqs for the default suite — `uv run pytest` is the full CI path. Vector retrieval tests must embed documents with the same mode/dim the query path uses (settings or explicit kwargs).
+**Pytest isolation (as-built):** `tests/conftest.py` autouse forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `PROJECT_AGENT_MODE=stub`, and a temp `KG_ARTIFACT_DIR` so a developer’s host `.env` (e.g. dim `768` for OpenAI) does not fail the suite. Default `uv run pytest` stays CI-safe (no Postgres). Optional marker **`@pytest.mark.pgvector`** is registered for live dual-mode tests (skipped unless `RUN_PGVECTOR_TESTS=1`). Vector retrieval tests must embed documents with the same mode/dim the query path uses (settings or explicit kwargs).
 
 #### Automated (default CI)
 
@@ -178,12 +185,18 @@ uv run pytest tests/test_indexing_tool.py -q
 # S5-I0 / FR-IX-027 DocumentStore factory (no Postgres)
 uv run pytest tests/test_document_store_factory.py -q
 
+# S5-I1 / FR-IX-028 tenant isolation + TTL (no Postgres)
+uv run pytest tests/test_tenant_vector_isolation.py tests/test_project_chunk_cleanup.py -q
+
 # Full indexing + Call 1 regression (includes S1/S2a)
 uv run pytest tests/test_indexing_tool.py tests/test_recommendations_intake.py \
   tests/test_ingest_idempotency.py tests/test_correlation_middleware.py -q
 
-# Full suite (no -m filter; no live LLM / Pgvector / Neo4j required)
+# Full suite (pgvector live tests skip; no live LLM / Neo4j required)
 uv run pytest tests/ -q
+
+# Optional live pgvector (needs Postgres + extension)
+RUN_PGVECTOR_TESTS=1 uv run pytest -m pgvector -q
 ```
 
 **S3 pack expectations** (`tests/test_indexing_tool.py`):
@@ -293,7 +306,7 @@ Re-run the same Call 1 `curl` as above.
 |----------|-----------|
 | Reroute public from-project-spec to indexing | Packt-style index before recommend reattach |
 | InMemoryDocumentStore default | CI-safe process-local; persistent later |
-| I0 factory before I1 pipeline wire | `INDEXING_DOCUMENT_STORE` + `build_document_store()` ship first; ingest stays InMemory until I1 |
+| I0 factory then I1 pipeline wire | Factory first (FR-IX-027); I1 wires `create_session_document_store` + tenant filters + TTL (FR-IX-028); I2 = production default pgvector still TARGET |
 | MockDocumentEmbedder default | CI without external embedding APIs |
 | Mandatory KG after joiner | HR-76 identity + graph; hard-fail |
 | JSON/XLSX structured data_kind + unstructured clean path | Count kind vs preprocess topology |

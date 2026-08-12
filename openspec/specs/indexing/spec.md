@@ -56,7 +56,8 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 5. `DocumentCleaner` → `DocumentSplitter` → document embedder → `DocumentWriter`.
 6. Default process-local `InMemoryDocumentStore`; CI-safe default embedder (`MockDocumentEmbedder`).
 7. Lean public response fields `ingest_id`, `user_id`, `user_requirement_summary`, `warnings` (internal store still has embeddings).
-8. **S5-I0:** `INDEXING_DOCUMENT_STORE` + `build_document_store()` factory (`memory` default \| `pgvector`); pipeline cutover remains I1.
+8. **S5-I0:** `INDEXING_DOCUMENT_STORE` + `build_document_store()` factory (`memory` default \| `pgvector`).
+9. **S5-I1:** factory wired into Call 1 ingest + session registry; retrieval filters `user_id` + `ingest_id`; optional chunk TTL/delete; dual-mode tests (`@pytest.mark.pgvector` optional).
 
 **HR-76 (shipped):** required `user_id`; **mandatory** user-scoped KG after post-join chunks ([`../knowledge-graph/spec.md`](../knowledge-graph/spec.md)).
 
@@ -70,10 +71,11 @@ Introduce a Haystack **indexing-style pipeline** that starts with **file type ro
 - Successful public responses return the **lean** ingest body; KG success is required for 200 but **`kg_*` are not exposed** on the public body (session registry holds artifact path).
 - Missing `user_id`, unclassified type, empty source, zero written chunks, or KG failure → **400**.
 - Dates accepted; unused for ranking until reattach.
+- Call 1 uses `create_session_document_store()` (`memory` = fresh InMemory per ingest; `pgvector` = shared table). Vector tools filter by session tenant.
 
 ### Out of scope (still)
 
-- Persistent multi-instance DocumentStore **pipeline cutover** (I1 TARGET — factory exists as FR-IX-027 / I0)
+- Production default `INDEXING_DOCUMENT_STORE=pgvector` (I2 TARGET)
 - Naive/hybrid RAG **query** HTTP
 - Recommend reattach on this route (T017)
 - `LinkContentFetcher` (T030)
@@ -203,7 +205,7 @@ Part 3 MAY use a process-local `InMemoryDocumentStore` by default; persistent st
 - **THEN** a process-local `InMemoryDocumentStore` is used
 
 ### Requirement: DocumentStore factory + backend flag (I0)
-The service SHALL expose `build_document_store()` and env **`INDEXING_DOCUMENT_STORE`** with values **`memory`** (default) or **`pgvector`**. Invalid values MUST raise a clear configuration error. Default CI and the as-built ingest path remain **InMemory** until I1 wires the factory into the pipeline writer and session registry.  
+The service SHALL expose `build_document_store()` and env **`INDEXING_DOCUMENT_STORE`** with values **`memory`** (default) or **`pgvector`**. Invalid values MUST raise a clear configuration error. Default CI remains **memory** (no Postgres).  
 (Trace: FR-IX-027 · Phase 5 / S5-I0 · dual-plane §4.5.4)
 
 #### Scenario: Factory defaults to memory
@@ -216,14 +218,13 @@ The service SHALL expose `build_document_store()` and env **`INDEXING_DOCUMENT_S
 - **WHEN** `INDEXING_DOCUMENT_STORE` or `build_document_store(mode=…)` uses a value other than `memory` or `pgvector`
 - **THEN** a `ValueError` (or equivalent configuration error) is raised listing allowed values
 
-#### Scenario: pgvector mode is factory-ready without default ingest cutover
+#### Scenario: pgvector mode constructs durable store
 - **WHEN** mode is `pgvector` and the `pgvector-haystack` integration is available
-- **THEN** the factory constructs a `PgvectorDocumentStore` configured with embedding dimension and connection settings
-- **AND** the default Call 1 ingest pipeline still uses process-local InMemory until I1 wiring
+- **THEN** the factory constructs a `PgvectorDocumentStore` configured with embedding dimension, connection settings, and stable table name
 
 #### Scenario: Process-local singleton stays memory
 - **WHEN** code uses `get_document_store()` / `reset_document_store()`
-- **THEN** the shared singleton remains process-local `InMemoryDocumentStore` (does not follow a host `pgvector` flag before I1)
+- **THEN** the shared singleton remains process-local `InMemoryDocumentStore` (does not follow a host `pgvector` flag)
 
 ### How to test (FR-IX-027 / S5-I0) — verification instructions
 
@@ -232,10 +233,66 @@ The service SHALL expose `build_document_store()` and env **`INDEXING_DOCUMENT_S
 | **Unit / pack** | `uv run pytest tests/test_document_store_factory.py -q` | Factory memory default; invalid mode errors; pgvector branch mocked (no Postgres) |
 | **Config default** | `uv run pytest tests/test_config.py -q -k indexing_document_store` | Default `memory` |
 | **Regression** | `uv run pytest tests/ -q` | Full suite green without Postgres |
-| **Independent Test (I0)** | Factory + config only | No pipeline wire, no live pgvector, no Neo4j |
+| **Independent Test (I0)** | Factory + config only | No live pgvector, no Neo4j |
 
 Archive checklist: [`../../changes/archive/2026-08-12-s5-i0-document-store-factory/tasks.md`](../../changes/archive/2026-08-12-s5-i0-document-store-factory/tasks.md).  
 Design notes: [`design.md`](./design.md).
+
+### Requirement: Pipeline + session DocumentStore cutover (I1)
+Call 1 ingest SHALL obtain the session writer store via `create_session_document_store()` driven by **`INDEXING_DOCUMENT_STORE`**.  
+- **`memory`**: a **new** process-local `InMemoryDocumentStore` per ingest (CI default).  
+- **`pgvector`**: shared-table `PgvectorDocumentStore` (table `indexing_project_chunks`); multi-tenant isolation is **application-enforced** via meta + filters.  
+The `ProjectKnowledgeSession` SHALL hold the same store instance used by the pipeline writer.  
+(Trace: FR-IX-028 · Phase 5 / 5.3 I1 · dual-plane §4.5.4 steps 3–5)
+
+#### Scenario: Default ingest still memory
+- **WHEN** `INDEXING_DOCUMENT_STORE` is unset or `memory`
+- **AND** Call 1 ingest runs without an injected test store
+- **THEN** the session DocumentStore is an `InMemoryDocumentStore`
+- **AND** written chunks carry `user_id` and `ingest_id` meta
+
+#### Scenario: Factory mode selects session store backend
+- **WHEN** mode is `pgvector` and Postgres+pgvector are available
+- **THEN** ingest writes through `PgvectorDocumentStore` and registers that store on the session
+
+### Requirement: Tenant filters on project vector retrieval
+Query-side project chunk retrieval (including `project_vector_search`) MUST filter by the current session **`user_id`** and **`ingest_id`**. Cross-tenant hits MUST NOT be returned. A post-filter safety net SHOULD drop any hit whose meta does not match the requested tenant.  
+(Trace: FR-IX-028 · Phase 5 / 5.4)
+
+#### Scenario: Shared store isolation
+- **GIVEN** a shared DocumentStore containing chunks for user A and user B
+- **WHEN** retrieval runs with user A's `user_id` + `ingest_id`
+- **THEN** only user A's chunks are returned
+
+#### Scenario: Tool scopes to session keys
+- **WHEN** `project_vector_search` runs for a session
+- **THEN** it always applies that session's `user_id` and `ingest_id` filters
+
+### Requirement: Optional project-chunk TTL and delete
+The service SHALL support deleting all chunks for one `(user_id, ingest_id)` without affecting other ingests. Optional env **`INDEXING_CHUNK_TTL_SECONDS`** (default `0` = off) MAY stamp `meta.expires_at` at write time; `purge_expired_chunks` SHALL remove only expired documents. `discard_project_knowledge_session` SHALL remove the registry entry and optionally delete chunks.  
+(Trace: FR-IX-028 · Phase 5 / 5.5)
+
+#### Scenario: Delete one ingest
+- **GIVEN** two ingests for the same or different users in one store
+- **WHEN** `delete_ingest_chunks` runs for ingest X
+- **THEN** only X's documents are removed
+
+#### Scenario: TTL purge
+- **GIVEN** documents with past and future `expires_at` (and some without)
+- **WHEN** `purge_expired_chunks` runs
+- **THEN** only past-`expires_at` documents are deleted
+
+### How to test (FR-IX-028 / S5-I1) — verification instructions
+
+| Layer | Command / action | Pass |
+|-------|------------------|------|
+| **Isolation (default CI)** | `uv run pytest tests/test_tenant_vector_isolation.py -q` | Shared InMemory; cross-tenant zero; stored meta present |
+| **Cleanup / TTL** | `uv run pytest tests/test_project_chunk_cleanup.py -q` | Delete one ingest; purge expired only |
+| **Factory + session** | `uv run pytest tests/test_document_store_factory.py -q` | `create_session_document_store` fresh memory; table name |
+| **Optional live pgvector** | `RUN_PGVECTOR_TESTS=1 uv run pytest -m pgvector -q` | Isolation + reconnect when Postgres available; else skip |
+| **Regression** | `uv run pytest tests/ -q` | Full unmarked suite green without Postgres |
+
+Archive checklist: [`../../changes/archive/2026-08-12-s5-i1-document-store-pipeline-wire/tasks.md`](../../changes/archive/2026-08-12-s5-i1-document-store-pipeline-wire/tasks.md).
 
 ### Requirement: Offload sync pipeline work
 Async handlers MUST offload sync pipeline work with `run_in_threadpool`.  
@@ -724,7 +781,8 @@ Sources MUST be classified according to the following normative extension / MIME
 - Do not restore `results_by_need` / FR-010 as the default **Call 1** path without an explicit reattach SDD.
 - Do not treat KG as optional on success path; missing `user_id`, zero chunks, or KG failure → 400.
 - Do not invent a second public API style for ingest; field tables live in the contract file.
-- Do not silently replace process-local `InMemoryDocumentStore` with multi-instance persistence without a dedicated change (I0 factory only; I1 wires pipeline).
+- Do not default production to `pgvector` without ops readiness (I2); default CI remains `memory`.
+- Do not retrieve project chunks without `user_id` (+ `ingest_id`) filters on shared/pgvector stores.
 - Do not invent `expected_budget` or dates when not in request/document (FR-IX-023).
 - Do not conflate **needs summary** with **fleet recommendation** or **predicted rent price** on Call 1.
 - Do not cache failed ingest responses under `Idempotency-Key` (FR-IX-024).
@@ -740,7 +798,8 @@ Sources MUST be classified according to the following normative extension / MIME
 
 | Version | Date | Notes |
 |---------|------|--------|
-| **0.9.0** | 2026-08-12 | **S5-I0 as-built:** FR-IX-027 `INDEXING_DOCUMENT_STORE` + `build_document_store()` (`memory` default \| `pgvector`); ingest still InMemory until I1 |
+| **0.10.0** | 2026-08-12 | **S5-I1 as-built:** FR-IX-028 pipeline/session factory wire; tenant filters; TTL/delete; `@pytest.mark.pgvector` optional pack |
+| **0.9.0** | 2026-08-12 | **S5-I0 as-built:** FR-IX-027 `INDEXING_DOCUMENT_STORE` + `build_document_store()` (`memory` default \| `pgvector`) |
 | **0.8.1** | 2026-08-12 | FR-IX-015: query/store embedding dim must match; pytest conftest forces mock + dim 384 (host env isolation) |
 | **0.8.0** | 2026-08-12 | **S3 as-built:** FR-IX-026 optional Coordinator gate [4] + `run_indexing_from_request` behind `INDEXING_VIA_AGENT_GATE` (default off); lean body parity; SuperComponent S3.3 deferred |
 | **0.7.2** | 2026-08-12 | Call 2 recommend + Call 3 Q&A portal norms |

@@ -25,8 +25,8 @@ TOOL_RUN_INDEXING = "run_indexing_from_request"
 
 TOOL_DESCRIPTIONS: dict[str, str] = {
     TOOL_PROJECT_VECTOR_SEARCH: (
-        "Dense vector search over the project specification "
-        "InMemoryDocumentStore chunks for the current ingest session."
+        "Dense vector search over the project specification DocumentStore "
+        "chunks for the current ingest session (filters user_id + ingest_id)."
     ),
     TOOL_PROJECT_KG_QUERY: (
         "Query the project knowledge graph (KG-1) for document nodes, "
@@ -81,6 +81,8 @@ def build_project_vector_search_tool(
             session.document_store,
             query,
             top_k=int(top_k if top_k is not None else default_top_k),
+            user_id=session.user_id,
+            ingest_id=session.ingest_id,
             **embed_kwargs,
         )
 

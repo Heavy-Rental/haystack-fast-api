@@ -168,7 +168,7 @@ Sources: multipart file uploads are packaged as Haystack `ByteStream` with `mime
 |---------|--------|
 | Chunk previews, counts, `data_kind`, mime/filenames | Indexing pipeline + session `meta` |
 | `kg_built`, node/rel counts, artifact path, transforms | KG runner + session registry |
-| Session DocumentStore + KG-1 | `ProjectKnowledgeSession` for Call 2 |
+| Session DocumentStore + KG-1 | `ProjectKnowledgeSession` for Call 2 (store from `create_session_document_store()`; memory default or pgvector flag; FR-IX-028) |
 
 ### FR-IX-023 as-built checklist (Phase 1.7)
 

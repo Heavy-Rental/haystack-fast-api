@@ -59,6 +59,9 @@ packages = ["app"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "pgvector: needs Postgres with pgvector extension (optional; skip unless RUN_PGVECTOR_TESTS=1)",
+]
 
 [tool.ruff]
 line-length = 100

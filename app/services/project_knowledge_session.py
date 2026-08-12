@@ -1,7 +1,7 @@
 """Process-local registry of project-spec knowledge sessions (Stage 1).
 
 Each successful ingest registers:
-- an ingest-scoped ``InMemoryDocumentStore`` (vector chunks)
+- an ingest-scoped DocumentStore (InMemory per ingest, or shared Pgvector)
 - an in-memory Ragas Knowledge Graph (KG-1) + optional JSON artifact path
 
 Sessions are keyed by ``(user_id, ingest_id)`` and can be discarded without
@@ -16,8 +16,6 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
-from haystack.document_stores.in_memory import InMemoryDocumentStore
-
 from app.core.exceptions import NotFoundError
 
 
@@ -31,7 +29,7 @@ class ProjectKnowledgeSession:
 
     user_id: str
     ingest_id: str
-    document_store: InMemoryDocumentStore
+    document_store: Any
     knowledge_graph: Any | None = None
     kg_artifact_path: str | None = None
     created_at: datetime = field(
@@ -116,27 +114,45 @@ def get_or_load_session(
     *,
     kg_artifact_path: str | None = None,
     registry: ProjectKnowledgeSessionRegistry | None = None,
+    document_store: Any | None = None,
 ) -> ProjectKnowledgeSession:
     """Return a live session; optionally hydrate KG from artifact on miss.
 
-    Vector store is process-local: if the session is missing and only a KG path
-    is provided, a session is created with an empty DocumentStore and loaded KG.
-    Full dual-source Q&A after process restart requires re-ingest.
+    When the process-local session is missing:
+    - If ``document_store`` is provided (e.g. reconnected Pgvector), use it.
+    - Else if only a KG path is provided, create a session with an empty
+      InMemory store and loaded KG (vector hits empty until re-ingest).
+    Full dual-source Q&A after process restart on ``memory`` mode requires
+    re-ingest; on ``pgvector`` pass a factory store so vectors survive.
     """
     reg = registry if registry is not None else get_project_knowledge_registry()
     try:
         return reg.get(user_id, ingest_id)
     except NotFoundError:
-        if not kg_artifact_path:
+        if not kg_artifact_path and document_store is None:
             raise
-        kg = load_knowledge_graph_from_artifact(kg_artifact_path)
+        kg = None
+        if kg_artifact_path:
+            kg = load_knowledge_graph_from_artifact(kg_artifact_path)
+        if document_store is None:
+            from haystack.document_stores.in_memory import InMemoryDocumentStore
+
+            store: Any = InMemoryDocumentStore()
+            meta = {"hydrated_from_artifact": True, "vector_store_empty": True}
+        else:
+            store = document_store
+            meta = {
+                "hydrated_from_artifact": bool(kg_artifact_path),
+                "vector_store_empty": False,
+                "vector_store_reconnected": True,
+            }
         session = ProjectKnowledgeSession(
             user_id=user_id,
             ingest_id=ingest_id,
-            document_store=InMemoryDocumentStore(),
+            document_store=store,
             knowledge_graph=kg,
-            kg_artifact_path=str(kg_artifact_path),
-            meta={"hydrated_from_artifact": True, "vector_store_empty": True},
+            kg_artifact_path=str(kg_artifact_path) if kg_artifact_path else None,
+            meta=meta,
         )
         reg.put(session)
         return session

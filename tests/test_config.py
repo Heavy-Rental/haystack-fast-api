@@ -48,6 +48,7 @@ def test_database_url_override_preserves_explicit_asyncpg() -> None:
 
 
 def test_indexing_document_store_defaults_to_memory() -> None:
-    """Phase 5 / I0: INDEXING_DOCUMENT_STORE defaults to memory (CI-safe)."""
+    """Phase 5 / I0–I1: INDEXING_DOCUMENT_STORE defaults to memory (CI-safe)."""
     settings = Settings()
     assert settings.indexing_document_store == "memory"
+    assert settings.indexing_chunk_ttl_seconds == 0.0

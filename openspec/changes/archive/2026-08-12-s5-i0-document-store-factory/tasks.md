@@ -50,7 +50,7 @@ Canonical: [`openspec/specs/indexing/spec.md` — How to test FR-IX-027](../../.
 
 ## Explicitly not done (follow-up I1+)
 
-- [ ] Wire factory into `build_indexing_pipeline` / `IndexingIngestService` / session registry
-- [ ] Tenant isolation retrieval tests + TTL job
-- [ ] `@pytest.mark.pgvector` dual-mode CI
+- [x] Wire factory into `IndexingIngestService` / session registry → **done in S5-I1** (archive `../2026-08-12-s5-i1-document-store-pipeline-wire/`)
+- [x] Tenant isolation retrieval tests + TTL job → **done in S5-I1**
+- [x] `@pytest.mark.pgvector` dual-mode pack → **done in S5-I1** (optional `RUN_PGVECTOR_TESTS=1`)
 - [ ] Production default `INDEXING_DOCUMENT_STORE=pgvector` (I2)
