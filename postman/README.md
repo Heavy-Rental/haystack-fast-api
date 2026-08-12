@@ -1,20 +1,23 @@
-# Postman — Indexing + Stage-1 multi-agent Q&A
+# Postman — Call 1 ingest · Call 2 recommend · Call 3 chatbot Q&A
 
 Importable Postman artifacts for:
 
 ```text
-# Ingest
-classify → convert → clean → split → embed → write → KG-1
+# Call 1 — ingest
+classify → convert → clean → split → embed → write → KG-1 → lean FR-IX-023 body
 
-# Multi-agent (same process)
-research (vector) → graph (KG-1) → synthesis
+# Call 2 — recommend / quote (same process, after Call 1)
+SessionRecommendService → seed fleet + pricing → quoteRef / items[]
+
+# Call 3 — chatbot Q&A (optional follow-up)
+research (vector) → graph (KG-1) → synthesis → answer
 ```
 
 ## Files
 
 | Path | Purpose |
 |------|---------|
-| `Indexing-Pipeline.postman_collection.json` | Collection: ingest happy-path + negatives + **Stage-1 multi-agent** |
+| `Indexing-Pipeline.postman_collection.json` | Ingest happy-path + negatives + **Call 2 recommend** + **Call 3 Q&A** |
 | `Indexing-Pipeline-Local.postman_environment.json` | Environment (`baseUrl`, paths, `userId`, `ingestId`, `agentQuery`) |
 | `fixtures/` | Sample upload files for multipart requests |
 | `README.md` | This guide |
@@ -24,11 +27,12 @@ research (vector) → graph (KG-1) → synthesis
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `baseUrl` | `http://localhost:8000` | API host |
-| `ingestPath` | `/internal/v1/recommendations/submitprojectspecification` | Index + mandatory KG |
-| `projectKnowledgePath` | `/internal/v1/recommendations/project-knowledge/getassetrecommendations` | Multi-agent Q&A |
+| `ingestPath` | `/internal/v1/recommendations/submitprojectspecification` | **Call 1** index + KG |
+| `projectKnowledgePath` | `/internal/v1/recommendations/project-knowledge/getassetrecommendations` | **Call 2 recommend / quote** |
+| `projectKnowledgeQueryPath` | `/internal/v1/recommendations/project-knowledge/query` | **Call 3 chatbot Q&A** |
 | `userId` | `user_demo` | Required identity |
-| `ingestId` | _(empty)_ | Filled by successful ingest Tests scripts |
-| `agentQuery` | excavator/soil question | Query for multi-agent request |
+| `ingestId` | _(empty)_ | Filled by successful Call 1 Tests scripts |
+| `agentQuery` | excavator/soil question | Optional Call 2 focus; required-style text for Call 3 |
 
 ### Fixtures
 
@@ -54,7 +58,7 @@ Confirm: [http://localhost:8000/health](http://localhost:8000/health) and [http:
 Defaults (CI-friendly):
 
 - `INDEXING_EMBEDDER=mock` — no embedding API key  
-- `PROJECT_AGENT_MODE=stub` — deterministic multi-agent synthesis, no LLM key  
+- `PROJECT_AGENT_MODE=stub` — deterministic Call 3 synthesis, no LLM key  
 - `KG_APPLY_TRANSFORMS=false` — document nodes only  
 
 ## Import into Postman
@@ -80,136 +84,122 @@ All multipart happy-path requests include **`user_id`** (and optional `user_name
 
 ## Run order (suggested)
 
-### Ingest (Parts 1–3 + mandatory KG)
+### Ingest (Call 1)
 
 | # | Request | Expect |
 |---|---------|--------|
 | 01 | GET Health | 200 (`ok` or `degraded`) |
-| 02 | JSON project_text | 200, `data_kind=unstructured`, `has_embedding=true`, `kg_built=true` |
+| 02 | JSON project_text | 200 lean body (`ingest_id`, summary, …) |
 | 03 | JSON no dates | 200 |
-| 04 | multipart `.txt` | 200, unstructured |
-| 05 | multipart `.md` | 200, unstructured |
-| 06 | multipart `.csv` | 200, **structured** |
-| 07 | multipart `.json` | 200, structured |
-| 08 | CSV + project_text | 200, often `mixed` |
+| 04 | multipart `.txt` | 200 |
+| 05 | multipart `.md` | 200 |
+| 06 | multipart `.csv` | 200 |
+| 07 | multipart `.json` | 200 |
+| 08 | CSV + project_text | 200 |
 | 09–14 | Negatives | **400**, `{"error":"bad_request","message":"..."}` |
 
-### Stage-1 multi-agent Q&A (project sources only)
+### Portal dual-hop + chatbot (folder 04)
 
 | # | Request | Expect |
 |---|---------|--------|
-| **15** | Ingest project-spec for multi-agent | 200; saves `ingestId` / `userId` |
-| **16** | Project-knowledge query | 200; `sources_used` includes both tools |
-| 17 | Missing session | **404** `not_found` |
-| 18 | Empty query | **422** or **400** |
+| **15** | Call 1 ingest (saves `ingestId` / `userId`) | 200 lean FR-IX-023 |
+| **16** | **Call 2 recommend** `getassetrecommendations` | 200 **quote**: `quoteRef`, `items` (no `answer`) |
+| **17** | **Call 3 chatbot Q&A** `project-knowledge/query` | 200 **`answer`**, tools (no `quoteRef`) |
+| 18 | Call 2 missing session | **404** `not_found` |
+| 19 | Call 3 empty query | **422** or **400** |
 
-**Important:** Run **15 then 16** against the **same** uvicorn process. Sessions are process-local; restarting the server clears `ingestId` sessions even if the env var is still set.
+**Important:** Run **15 → 16** (and **17** if testing chatbot) against the **same** uvicorn process. Sessions are process-local; restarting the server clears `ingestId` sessions.
 
-Use **Collection → Run collection** to execute all Tests tabs (multi-agent folder will fail **16** if run order is wrong or `ingestId` is empty — run folder 04 alone after 15, or run the full collection in order).
+Portal product path maps to **15 + 16** (Call 1 + Call 2 quote). Call 3 is optional follow-up chat.
 
 ## Required identity
 
 All ingest requests must include **`user_id`** (JSON or form-data). Optional: **`user_name`**.
 
-Knowledge graph is **mandatory** on successful ingest. Artifacts land under `artifacts/kg/{user_id}/kg_{ingest_id}.json`. Full Ragas transforms only if `KG_APPLY_TRANSFORMS=true` (runs inside `KnowledgeGraphGenerator`). KG failure fails the request.
+Knowledge graph is **mandatory** on successful ingest. Artifacts land under `artifacts/kg/{user_id}/kg_{ingest_id}.json`. Full Ragas transforms only if `KG_APPLY_TRANSFORMS=true`. KG failure fails the request.
 
 ## Resilience headers (S2a / C1)
 
-Collection variables (optional; disabled on requests by default — enable as needed):
-
-| Variable | Header | Notes |
-|----------|--------|--------|
-| `idempotencyKey` | `Idempotency-Key` | UUID per logical ingest |
-| `correlationId` | `X-Correlation-Id` | Default demo value `postman-corr-demo` |
-| `traceparent` | `traceparent` | W3C Trace Context when testing traces |
-
 | Header | Required | Purpose |
 |--------|----------|---------|
-| `Idempotency-Key` | no | Per logical ingest (UUID recommended). Same `user_id` + key → same `ingest_id` on retry (process-local store). Failed 4xx/5xx are **not** cached. Safe for Spring timeout retries. |
-| `X-Correlation-Id` | no | End-to-end log correlation; **echoed** on every response. Server mints UUID if omitted. |
+| `Idempotency-Key` | no | **Call 1 only.** Same `user_id` + key → same `ingest_id` on retry (process-local). |
+| `X-Correlation-Id` | no | All routes; **echoed**. Server mints UUID if omitted. |
 | `traceparent` | no | Optional W3C Trace Context; logged when present. |
 
 **Error shape (all routes):** `{"error":"<code>","message":"<text>"}`.
 
-**Retry:** clients MAY retry **5xx** / transport timeouts with the **same** `Idempotency-Key`. Do not reuse a key for a different logical project-spec.
+**Retry:** clients MAY retry **5xx** / transport timeouts on Call 1 with the **same** `Idempotency-Key`.
 
-**Limits:** idempotency map is **process-local** (not multi-replica). Optional TTL: `IDEMPOTENCY_TTL_SECONDS` (default 86400). Max upload size is proxy/Uvicorn deployment config (no separate app hard-cap beyond MIME validation).
+**Limits:** idempotency map is **process-local** (not multi-replica). Optional TTL: `IDEMPOTENCY_TTL_SECONDS` (default 86400).
 
-## Success body checklist — ingest (FR-IX-023 as-built S1a–S1e)
+## Success body checklists
+
+### Call 1 ingest (FR-IX-023)
 
 ```json
 {
   "ingest_id": "ing_…",
   "user_id": "user_demo",
-  "user_requirement_summary": "Indoor elevated work ~8m; need scissors lift…",
-  "tentative_start_date": "2026-09-01",
-  "tentative_end_date": "2026-09-12",
-  "needs_summary": [
-    {
-      "need_id": "need_1",
-      "description": "Indoor elevated work ~8m; need scissors lift…",
-      "equipment_hints": [],
-      "quantity": 1
-    }
-  ],
-  "expected_budget": {
-    "amount": 15000,
-    "currency": "SGD",
-    "source": "extracted"
-  },
+  "user_requirement_summary": "…",
+  "tentative_start_date": null,
+  "tentative_end_date": null,
+  "needs_summary": [],
+  "expected_budget": null,
   "warnings": []
 }
 ```
 
-(`tentative_*`: request dates preferred; else free-text extract e.g. `from 2026-09-01 to 2026-09-14`; else `null` + warning. Stub decomposer yields one need from project text. `expected_budget` is `null` + warning when no confident budget phrase is found.)
-
-**Not present on public body:** `documents[]`, `kg_*`, counts, `data_kind` (still run internally for Call 2).  
-**Not present** (old recommend API): `recommendation_id`, `results_by_need`.
-
-## Success body checklist — multi-agent Q&A
-
-`POST /internal/v1/recommendations/project-knowledge/getassetrecommendations`
+### Call 2 recommend quote
 
 ```json
 {
   "user_id": "user_demo",
   "ingest_id": "ing_…",
-  "query": "What excavator capacity and soil conditions are required?",
-  "answer": "## Answer\n…\n## Evidence\n- Vector: …\n- Graph: …\n## Gaps\n…",
-  "sources_used": ["project_vector_search", "project_kg_query"],
-  "research_hits": [{ "content": "…", "score": null, "meta": {} }],
-  "graph_hits": [{ "content": "…", "score": 1.0, "meta": {} }],
-  "tool_traces": [
-    { "agent": "research", "tool": "project_vector_search", "query": "…", "hit_count": 1 },
-    { "agent": "graph", "tool": "project_kg_query", "query": "…", "hit_count": 1 }
-  ]
+  "query": "…",
+  "quoteRef": "QUO-…",
+  "confidenceScore": 0.71,
+  "days": 12,
+  "estimatedTotal": 2220.0,
+  "specSummary": "…",
+  "rationale": "…",
+  "items": [
+    {
+      "rankOrder": 1,
+      "matchScore": 1.0,
+      "reason": "…",
+      "lineTotal": 2220.0,
+      "quantity": 1,
+      "equipment": {
+        "id": "AST-…",
+        "name": "…",
+        "category": "…",
+        "baseDailyRate": 185.0
+      }
+    }
+  ],
+  "warnings": []
 }
 ```
 
-Optional body field: `kg_artifact_path` (reload KG-1 after process restart; vector store stays empty until re-ingest).
+### Call 3 chatbot Q&A
 
-Env: `PROJECT_AGENT_MODE=stub` (default) or `llm`; `PROJECT_AGENT_TOP_K=5`.
+```json
+{
+  "user_id": "user_demo",
+  "ingest_id": "ing_…",
+  "query": "…",
+  "answer": "## Answer\n…",
+  "sources_used": ["project_vector_search", "project_kg_query"],
+  "research_hits": [],
+  "graph_hits": [],
+  "tool_traces": [],
+  "research_notes": null,
+  "graph_notes": null
+}
+```
 
-## Troubleshooting
+## Normative docs
 
-| Symptom | Fix |
-|---------|-----|
-| Connection refused | Start uvicorn on port 8000 |
-| Multipart 400 / empty file | Re-select fixture file; ensure file type is **File** not Text |
-| Multipart 400 missing `user_id` | Form-data must include `user_id` |
-| Wrong Content-Type on file upload | Remove manual `Content-Type` header |
-| Tests fail on `has_embedding` / `kg_built` | Restart uvicorn with current code (`--reload`) |
-| Multi-agent **16** → 404 | Re-run **15** on the same server; do not restart between 15 and 16 |
-| Multi-agent empty `ingestId` | Run **15** first; check Collection/Environment variables |
-| Health `degraded` | OK without Postgres for these endpoints |
-
-## Specs
-
-SDD source of truth: [`openspec/AGENTS.md`](../openspec/AGENTS.md) (OpenSpec · Spec-kit · OpenSPDD).
-
-- **Indexing (live ingest):** [`openspec/specs/indexing/spec.md`](../openspec/specs/indexing/spec.md)
-- **Knowledge graph + multi-agent:** [`openspec/specs/knowledge-graph/spec.md`](../openspec/specs/knowledge-graph/spec.md)
-- **KG testing (pytest / curl / Postman):** [`docs/testing/knowledge-graph-testing-guide.md`](../docs/testing/knowledge-graph-testing-guide.md)
-- Tasks (archived): [`openspec/changes/archive/2026-08-07-indexing-file-type-router/tasks.md`](../openspec/changes/archive/2026-08-07-indexing-file-type-router/tasks.md) · [`…/knowledge-graph-hr-76/tasks.md`](../openspec/changes/archive/2026-08-07-knowledge-graph-hr-76/tasks.md) · [`…/kg-multi-agent-stage1/tasks.md`](../openspec/changes/archive/2026-08-08-kg-multi-agent-stage1/tasks.md)
-- Broader pipeline testing guide: [`docs/testing/recommendation-pipeline-testing-guide.md`](../docs/testing/recommendation-pipeline-testing-guide.md)
-- Deferred recommend Postman (reattach only): [`docs/testing/recommendation-postman-testing-guide.md`](../docs/testing/recommendation-postman-testing-guide.md)
+- Portal mapping: `Feasibility_Study_Spring/portal-to-haystack-mapping.md`
+- OpenSpec Call 2: `openspec/specs/recommendation-pipeline/contracts/get-asset-recommendations.md`
+- OpenSpec Call 3: `openspec/specs/knowledge-graph/contracts/project-knowledge-query.md`

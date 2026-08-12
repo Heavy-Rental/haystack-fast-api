@@ -1,11 +1,15 @@
 # Feasibility Study: Multi-Agent Synthesis Output — Recommended Assets + Predicted Rent Price
 
 | Field | Value |
-|-------|--------|
+|------
+
+> **Call numbering (as-built 2026-08-12):** HTTP **Call 2** = recommend / quote (`getassetrecommendations`). HTTP **Call 3** = chatbot Q&A (`project-knowledge/query`). This study’s multi-agent **synthesis [8] → assets + prices** is the **Call 2 recommend** path (richer graph may replace MVP behind the same route). Stage-1 Q&A synthesis is **Call 3**, not Call 2.
+
+-|--------|
 | **Document type** | Architecture / agent orchestration feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.4.1 |
+| **Version** | 1.4.2 |
 | **Application** | `haystack-fast-api` Multi-Agent Orchestrator (LangGraph) |
 | **Question** | Can the **synthesis** step under Multi-Agent Orchestrator output **recommended assets** and **predicted rent price** grounded in the **uploaded project specification**? |
 | **As-built** | `app/agents/nodes.py` (`make_synthesis_node`), `app/agents/prompts.py`, Stage-1 Q&A only |
@@ -38,7 +42,7 @@ using evidence from the **uploaded project specification** plus fleet/pricing to
 | Structured output vs markdown only? | **GO** — prefer structured JSON matching recommend DTO (+ optional narrative) |
 | Prerequisites | [4] success; fleet mirror; pricing tool; recommend agent graph [5]–[7] before [8] |
 
-**Overall:** **GO for target (R5 / M6).** Synthesis **can and should** assemble **recommended assets + predicted rent prices** for the project-spec journey, but only as a **merge/rank node** over tool outputs—not by inventing stock or rates. Stage-1 synthesis remains **project Q&A** until the recommend graph is built.
+**Overall:** **GO for target (R5 / M6).** Synthesis **can and should** assemble **recommended assets + predicted rent prices** on the **HTTP Call 2 recommend** path, but only as a **merge/rank node** over tool outputs—not by inventing stock or rates. Stage-1 **chatbot Q&A** synthesis is **HTTP Call 3** (`.../query`); as-built Call 2 MVP uses `RecommendationService` until full C/W/D graph lands.
 
 ---
 
@@ -111,7 +115,7 @@ recommendation:
 final_answer: optional markdown summary for humans
 ```
 
-Map 1:1 to existing `RecommendFromProjectSpecResponse` where possible so Spring call 3 stays stable.
+Map 1:1 to existing `RecommendFromProjectSpecResponse` / Call 2 quote envelope where possible so Spring Call 2 stays stable.
 
 ### 3.2 Stub vs LLM synthesis
 
@@ -194,6 +198,7 @@ Upload project-spec
 | **1.3.8** | 2026-08-11 | Coordinator **I** context management: merge multi-need task contexts |
 | **1.3.9** | 2026-08-11 | Coordinator **J** decision integration: rank only tool-backed candidates |
 | **1.4.0** | 2026-08-11 | Coordinator **K** workflow: barrier synthesis after fan-out |
+| **1.4.2** | 2026-08-12 | Align HTTP Call 2 = recommend, Call 3 = chatbot Q&A |
 | **1.4.1** | 2026-08-11 | Coordinator **L** sequential barrier vs parallel need ribs |
 
 ---

@@ -1,4 +1,4 @@
-"""Project-spec intake + Stage-1 multi-agent project-knowledge Q&A."""
+"""Project-spec intake, Call 2 recommend, Call 3 chatbot Q&A."""
 
 from datetime import date
 from typing import Annotated
@@ -13,6 +13,10 @@ from app.schemas.project_knowledge import (
     ProjectKnowledgeQueryRequest,
     ProjectKnowledgeQueryResponse,
 )
+from app.schemas.recommend_quote import (
+    AssetRecommendRequest,
+    AssetRecommendResponse,
+)
 from app.schemas.recommendations import RecommendFromProjectSpecRequest
 from app.services.ingest_idempotency import (
     get_ingest_idempotency_store,
@@ -24,8 +28,28 @@ from app.services.indexing import (
     byte_stream_from_upload,
 )
 from app.services.project_knowledge_qa import ProjectKnowledgeQAService
+from app.services.session_recommend import SessionRecommendService
 
 router = APIRouter(prefix="/internal/v1/recommendations", tags=["recommendations"])
+
+_CORRELATION_OPENAPI = {
+    "parameters": [
+        {
+            "name": "X-Correlation-Id",
+            "in": "header",
+            "required": False,
+            "schema": {"type": "string"},
+            "description": "Optional end-to-end correlation id (logged + echoed).",
+        },
+        {
+            "name": "traceparent",
+            "in": "header",
+            "required": False,
+            "schema": {"type": "string"},
+            "description": "Optional W3C trace context (logged when present).",
+        },
+    ],
+}
 
 
 def _parse_optional_date(value: object) -> date | None:
@@ -231,26 +255,37 @@ async def recommend_from_project_spec(
 
 @router.post(
     "/project-knowledge/getassetrecommendations",
+    response_model=AssetRecommendResponse,
+    summary="Call 2: recommend / quote equipment for a Call 1 session",
+    openapi_extra=_CORRELATION_OPENAPI,
+)
+async def get_asset_recommendations(
+    body: AssetRecommendRequest,
+) -> AssetRecommendResponse:
+    """Fleet + pricing recommend for a prior ingest (portal dual-hop Call 2).
+
+    Requires successful ``/submitprojectspecification`` for the same
+    ``user_id`` + ``ingest_id``. Returns a quote envelope (``quoteRef``,
+    ``items[].equipment``, rates). Does **not** invent asset ids or rates.
+
+    Stage-1 project-knowledge **chatbot Q&A** is Call 3:
+    ``POST .../project-knowledge/query``.
+    """
+    service = SessionRecommendService()
+    return await run_in_threadpool(
+        service.recommend,
+        user_id=body.user_id,
+        ingest_id=body.ingest_id,
+        query=body.query,
+        top_k=body.top_k,
+    )
+
+
+@router.post(
+    "/project-knowledge/query",
     response_model=ProjectKnowledgeQueryResponse,
-    summary="Multi-agent Q&A over project DocumentStore + KG-1",
-    openapi_extra={
-        "parameters": [
-            {
-                "name": "X-Correlation-Id",
-                "in": "header",
-                "required": False,
-                "schema": {"type": "string"},
-                "description": "Optional end-to-end correlation id (logged + echoed).",
-            },
-            {
-                "name": "traceparent",
-                "in": "header",
-                "required": False,
-                "schema": {"type": "string"},
-                "description": "Optional W3C trace context (logged when present).",
-            },
-        ],
-    },
+    summary="Call 3: chatbot Q&A over project DocumentStore + KG-1",
+    openapi_extra=_CORRELATION_OPENAPI,
 )
 async def query_project_knowledge(
     body: ProjectKnowledgeQueryRequest,
@@ -262,8 +297,8 @@ async def query_project_knowledge(
     ``kg_artifact_path`` can reload KG-1 after restart; vector store is empty
     until re-ingest.
 
-    Path name is Spring-facing; response is project-knowledge Q&A, not Call 3
-    ranked assets.
+    Chatbot / free-form Q&A path (Call 3). Asset recommend is Call 2
+    ``getassetrecommendations``.
     """
     service = ProjectKnowledgeQAService()
     return await run_in_threadpool(

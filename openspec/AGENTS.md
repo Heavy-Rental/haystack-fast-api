@@ -15,51 +15,63 @@ This folder is the **SDD source of truth**. Standards:
 ## Runtime flow (as-built)
 
 ```text
-Portal / Spring
-  │  user_id (required) + project_text | file
-  │  optional: Idempotency-Key, X-Correlation-Id, traceparent (S2a)
-  ▼
-POST /internal/v1/recommendations/submitprojectspecification
-  │  correlation middleware → log + echo X-Correlation-Id
-  │  if Idempotency-Key: process-local store hit → same ingest_id
-  ▼
-┌─────────────────────────────────────────────────────────────┐
-│ INDEXING  (specs/indexing)                                  │
-│  FileTypeRouter → convert → dual clean/split                │
-│       text_splitter ──┐                                     │
-│       csv_splitter  ──┴→ final_doc_joiner                     │
-│                            │                                │
-│              ┌─────────────┴─────────────┐                  │
-│              ▼                           ▼                  │
-│       doc_embedder → writer      KNOWLEDGE GRAPH            │
-│       InMemoryDocumentStore      (specs/knowledge-graph)    │
-│                                  Part A: mandatory KG after │
-│                                  joiner + JSON artifact     │
-│                                  Part B: session registry   │
-│                                  for multi-agent tools      │
-└─────────────────────────────────────────────────────────────┘
+React web portal
+  POST /api/recommendations/project-spec   ← user submits project specs (Spring public API)
+       │
+       ▼
+Spring Boot (RestClient / WebClient saga)
+  │  optional: Idempotency-Key, X-Correlation-Id, traceparent (S2a) on Call 1
   │
-  ▼
-IngestFromProjectSpecResponse (lean public body — FR-IX-023 as-built S1a–S1e)
-  as-built: ingest_id, user_id, user_requirement_summary,
-            tentative_start/end_date (request preferred; else free-text extract),
-            needs_summary[], expected_budget | null, warnings[]
-  as-built S2a: Idempotency-Key replay (FR-IX-024); correlation echo (FR-IX-025)
-  Not Call 1: ranked assets / ML rent (Call 3)
-  Technical documents[] / kg_* stay internal (session meta)
+  ├─ Call 1 ──────────────────────────────────────────────────────────
+  │  POST /internal/v1/recommendations/submitprojectspecification
+  │    user_id (required) + project_text | file
+  │    correlation middleware → log + echo X-Correlation-Id
+  │    if Idempotency-Key: process-local store hit → same ingest_id
+  │
+  │  ┌─────────────────────────────────────────────────────────────┐
+  │  │ INDEXING  (specs/indexing)                                  │
+  │  │  FileTypeRouter → convert → dual clean/split                │
+  │  │       text_splitter ──┐                                     │
+  │  │       csv_splitter  ──┴→ final_doc_joiner                   │
+  │  │                            │                                │
+  │  │              ┌─────────────┴─────────────┐                  │
+  │  │              ▼                           ▼                  │
+  │  │       doc_embedder → writer      KNOWLEDGE GRAPH            │
+  │  │       InMemoryDocumentStore      (specs/knowledge-graph)    │
+  │  │                                  Part A: mandatory KG after │
+  │  │                                  joiner + JSON artifact     │
+  │  │                                  Part B: session registry   │
+  │  │                                  for multi-agent tools      │
+  │  └─────────────────────────────────────────────────────────────┘
+  │  ▼
+  │  IngestFromProjectSpecResponse (lean public body — FR-IX-023 as-built S1a–S1e)
+  │    ingest_id, user_id, user_requirement_summary,
+  │    tentative_start/end_date, needs_summary[], expected_budget | null, warnings[]
+  │    S2a: Idempotency-Key replay (FR-IX-024); correlation echo (FR-IX-025)
+  │    Spring persists user_id + ingest_id
+  │
+  └─ Call 2 RECOMMEND (portal project-spec submit second hop) ───────
+     POST /internal/v1/recommendations/project-knowledge/getassetrecommendations
+       body: user_id + ingest_id + optional query
+       SessionRecommendService → RecommendationService (seed fleet + pricing)
+       → quote envelope: quoteRef, items[].equipment, rates, estimatedTotal
+       → Spring maps Call 2 body back to React as primary response
+       → MUST NOT invent asset_id or rates
 
-  │  optional Stage-1 Q&A (Call 2)
-  ▼
-POST /internal/v1/recommendations/project-knowledge/getassetrecommendations
-  LangGraph: research → graph → synthesis
-  tools: project_vector_search + project_kg_query
-  prompts: app/agents/prompts.py (OpenSPDD)
-  query required (free-form or predefined prompt + summary)
+  └─ Call 3 CHATBOT Q&A (optional follow-ups) ───────────────────────
+     POST /internal/v1/recommendations/project-knowledge/query
+       body: user_id + ingest_id + query (required)
+       LangGraph: research → graph → synthesis
+       tools: project_vector_search + project_kg_query
+       prompts: app/agents/prompts.py (OpenSPDD)
 
-        ─ ─ ─ ─ deferred (not default HTTP) ─ ─ ─ ─
-Call 3 Recommend FR-010 (service) → fleet + pricing → results_by_need
+        ─ ─ ─ ─ deferred richer multi-agent recommend ─ ─ ─ ─
+C/W/D full graph S7.x can replace MVP RecommendationService behind same Call 2 DTO
 KG-2 equipment stockpile (Stage 2)
 ```
+
+**Portal mapping (Spring handoff):** `Feasibility_Study_Spring/portal-to-haystack-mapping.md`  
+**Call 2 = recommend** (quote/items). **Call 3 = chatbot Q&A**. Technical `documents[]` / `kg_*` stay internal.
 
 ---
 

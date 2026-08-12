@@ -460,7 +460,7 @@ When no confident dates exist, fields MUST be null (warning MAY state dates not 
 #### Scenario: Not recommend envelope
 - **WHEN** FR-IX-023 summary fields are returned
 - **THEN** body MUST NOT require ranked `item` / `pricing.daily_rate` from fleet+ML path
-- **AND** Call 3 remains the path for recommended assets + predicted rent price
+- **AND** Call 2 (`getassetrecommendations`) remains the path for recommended assets + predicted rent (not Call 1)
 
 ### Requirement: Idempotent ingest via Idempotency-Key (as-built S2a)
 `POST /internal/v1/recommendations/submitprojectspecification` MUST accept optional header **`Idempotency-Key`**.
@@ -555,17 +555,19 @@ Sources MUST be classified according to the following normative extension / MIME
 - Packt Ch. 4 dual-branch pattern is normative for the graph shape (FileTypeRouter → dual preprocess → joiner → embed → write).
 - CI-safe default embedder; optional modes via `INDEXING_*` settings.
 - Thin routers; pipelines and services own branching.
+- Portal project-spec submit hits **this Call 1 first**; Spring then **Call 2 recommend** (`getassetrecommendations` quote); optional **Call 3** chatbot Q&A (`project-knowledge/query`).
 
 ## Safeguards (OpenSPDD)
 
-- Do not restore `results_by_need` / FR-010 as the default HTTP path without an explicit reattach SDD (T017).
+- Do not restore `results_by_need` / FR-010 as the default **Call 1** path without an explicit reattach SDD.
 - Do not treat KG as optional on success path; missing `user_id`, zero chunks, or KG failure → 400.
 - Do not invent a second public API style for ingest; field tables live in the contract file.
 - Do not silently replace process-local `InMemoryDocumentStore` with multi-instance persistence without a dedicated change.
 - Do not invent `expected_budget` or dates when not in request/document (FR-IX-023).
-- Do not conflate **needs summary** with **fleet recommendation** or **predicted rent price**.
+- Do not conflate **needs summary** with **fleet recommendation** or **predicted rent price** on Call 1.
 - Do not cache failed ingest responses under `Idempotency-Key` (FR-IX-024).
 - Do not claim multi-replica idempotency while the store is process-local memory only.
+- Do not treat Call 2 or Call 3 as substitutes for Call 1 ingest.
 
 ---
 
@@ -573,6 +575,8 @@ Sources MUST be classified according to the following normative extension / MIME
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **0.7.2** | 2026-08-12 | Call 2 recommend + Call 3 Q&A portal norms |
+| **0.7.1** | 2026-08-12 | Portal dual-hop norms/safeguards (Call 1 first; Call 2 not ingest) |
 | **0.7.0** | 2026-08-12 | **S2a as-built:** FR-IX-024 `Idempotency-Key` (process-local store); FR-IX-025 correlation headers; contract + design + tests |
 | **0.5.0** | 2026-08-11 | **S1a lean as-built:** public body `ingest_id` + `user_id` + `user_requirement_summary` + `warnings`; internal paths `/internal/v1/recommendations/...`; full FR-IX-023 still TARGET |
 | **0.5.1** | 2026-08-11 | **S1b as-built:** echo request dates as `tentative_start_date` / `tentative_end_date` (JSON + multipart); free-text date extract still TARGET |

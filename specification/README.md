@@ -10,6 +10,10 @@
 
 **Start here:** [`../openspec/AGENTS.md`](../openspec/AGENTS.md)
 
+**Portal dual-hop (React → Spring → haystack):**  
+React `POST /api/recommendations/project-spec` → Call 1 ingest → **Call 2 recommend** (`getassetrecommendations` quote) → React. **Call 3** chatbot: `project-knowledge/query`.  
+SoT: [`../openspec/AGENTS.md`](../openspec/AGENTS.md) · [`../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../Feasibility_Study_Spring/portal-to-haystack-mapping.md).
+
 ## Old → new map
 
 | Legacy file | New location |

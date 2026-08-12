@@ -22,20 +22,27 @@ These apply across studies unless a study explicitly narrows scope:
 
 | Study | Topic | Version |
 |-------|--------|---------|
-| [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane: fleet sync primary→Haystack PG→Neo4j; post-[4] recommend via **in-process tools**; C/W/D-aligned graph; Pgvector; Call 1 lean + FR-IX-023 **as-built**. Hosts **`postgres_haystack`** + sync **`postgres_haystack_sync`**. | **2.7.3** |
-| [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) | Spring ↔ FastAPI wire; multi-call saga; internal `/internal/v1/recommendations` routes; C/W/D internal to FastAPI. | **1.3.1** |
-| [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) | ML pricing as **in-process** agent tool; pricing **Worker** fan-out per need; Phase 1e/2a. | **1.2.0** |
-| [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) | Synthesis **[8]** (Coordinator) → recommended assets + predicted rent prices. | **1.4.1** |
-| [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) | C/W/D role vocabulary; **[4]** forced non-agent gate; explicit Delegator router; fan-out Workers per need; **§10 A–L templates** (seq/par + workflow; haystack←primary). | **2.1.0** |
+| [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane + Spring multi-call: Call 1 ingest · Call 2 recommend · Call 3 chatbot Q&A. | **2.7.4** |
+| [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) | Spring ↔ FastAPI wire; Call 1/2/3 saga; resilience C1–C3. | **1.3.2** |
+| [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) | ML pricing as **in-process** agent tool; pricing **Worker** fan-out per need; Phase 1e/2a. | **1.2.1** |
+| [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) | Synthesis **[8]** → assets + prices (**HTTP Call 2** recommend path). | **1.4.2** |
+| [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) | C/W/D roles; Call 2 recommend / Call 3 Q&A numbering aligned. | **2.1.1** |
 | [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) | Indexing Pipeline → Haystack SuperComponent (optional packaging for Coordinator gate **[4]**). | **1.2.1** |
-| [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) | Call 1 lean body; FR-IX-023 **as-built** S1a–S1e (needs, budget, free-text dates); not Call 3. | **1.2.0** |
+| [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) | Call 1 lean body; FR-IX-023 **as-built** S1a–S1e; not Call 2 recommend quote. | **1.2.1** |
 
 ### Implementation plan
 
 | Document | Topic | Version |
 |----------|--------|---------|
-| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog S0–S9 / S7.0–S7.7; Call 1 S1a–S1e (FR-IX-023 after S1d = free-text dates); Call 2 contract; TDD/BDD; PR template. | **3.4.0** |
+| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. | **3.5.0** |
 | [`phase2-s2a-haystack-implementation-plan.md`](./phase2-s2a-haystack-implementation-plan.md) | **Phase 2 / S2a only** — haystack-fast-api: `Idempotency-Key`, correlation logging, docs. **Implemented** (FR-IX-024/025; §7 test runbook). | **1.1.2** |
-| [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) | **Phase 2 / S2b only** — Spring Boot: timeouts, Resilience4j, saga, runbook. | **1.0.0** |
+| [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) | **S2b** Spring client + portal Call 1→2 recommend. Export: [`../Feasibility_Study_Spring/`](../Feasibility_Study_Spring/). | **2.0.0** |
+
+### Spring Boot handoff package
+
+| Package | Topic | Version |
+|---------|--------|---------|
+| [`../Feasibility_Study_Spring/`](../Feasibility_Study_Spring/) | **Copy into Spring Boot project** — portal mapping (React project-spec → Call 1 then Call 2) + S2b plan + wire + HANDOFF | **2.0.0** |
+| [`../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../Feasibility_Study_Spring/portal-to-haystack-mapping.md) | Portal → Call 1/2 recommend/3 Q&A | **2.0.0** |
 
 Normative product behaviour remains under [`../openspec/`](../openspec/). Pricing decision log: [`../docs/dynamic-pricing-masterplan.md`](../docs/dynamic-pricing-masterplan.md).

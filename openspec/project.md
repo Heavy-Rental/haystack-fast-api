@@ -50,7 +50,7 @@ The industry is capital-intensive. Success depends on:
 
 **MVP shape (product target):** free-text and/or project file (+ optional rental window) → LLM need decompose → quantity expansion to unit-needs → `Asset` SQL candidates → `Booking` / `BookingItem` availability → `predict_price()` → Haystack rank & rationale → **exactly one** `RecommendationItem` **per unit-need** (singular `item`).
 
-**As-built public routes (S1a + S2a):** `POST /internal/v1/recommendations/submitprojectspecification` requires **`user_id`**, runs **Packt dual-branch indexing** through `final_doc_joiner` → embed → **`InMemoryDocumentStore`**, then **always** builds a **user-scoped knowledge graph** (hard-fail on failure; see [`specs/knowledge-graph/`](./specs/knowledge-graph/)), registers a project knowledge session, and returns **lean** `IngestFromProjectSpecResponse` with **FR-IX-023 as-built** fields (`ingest_id`, `user_id`, `user_requirement_summary`, `tentative_*` request-or-extract, `needs_summary[]`, `expected_budget` | null, `warnings[]`). **S2a (as-built):** optional **`Idempotency-Key`** (process-local store → same `ingest_id` on retry; FR-IX-024) and **`X-Correlation-Id` / `traceparent`** (log + echo; FR-IX-025). Stage-1 multi-agent Q&A: `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` over project store + KG-1 (`query` required). Normative live ingest: [`specs/indexing/`](./specs/indexing/). FR-010 recommend remains **service-level** for tests and reattach.
+**As-built public routes:** Call 1 `POST .../submitprojectspecification` (lean FR-IX-023 + S2a idempotency/correlation). **Call 2 recommend:** `POST .../project-knowledge/getassetrecommendations` (quote / `items[]` via session + `RecommendationService` MVP). **Call 3 chatbot Q&A:** `POST .../project-knowledge/query` (`answer` + hits). **Portal:** React `project-spec` → Call 1 → Call 2 quote → React. Mapping: `Feasibility_Study_Spring/portal-to-haystack-mapping.md`.
 
 **Target (later):** reattach recommend HTTP; equipment KG-2 + stockpile tools; Naive/hybrid RAG over manuals; async ML training. Normative detail lives in capability specs—not here.
 
@@ -62,7 +62,7 @@ The industry is capital-intensive. Success depends on:
 |--------|--------|
 | Packaging | **uv** project (`pyproject.toml` + `uv.lock`), Python **≥ 3.12** |
 | Runtime entry | `app.main:app` (Uvicorn), port **8000** |
-| Public API (baseline) | `GET /health`; `POST /internal/v1/recommendations/submitprojectspecification` (lean body); `POST .../project-knowledge/getassetrecommendations` |
+| Public API (baseline) | `GET /health`; Call 1 ingest; Call 2 `.../getassetrecommendations` (recommend); Call 3 `.../project-knowledge/query` (Q&A) |
 | Persistence (runtime) | PostgreSQL on host **`db`**; SQLAlchemy **sync** + **psycopg** |
 | Auth | None (deferred) |
 | Pipelines | Haystack under `app/pipelines/` (indexing, kg, recommend components) |
@@ -76,11 +76,11 @@ Environment, packaging, database host defaults, layering rules, and runbooks: [`
 
 | Role | Interest in this product |
 |------|---------------------------|
-| **Customer / portal / intake UI** | Submit needs (+ optional dates/spec) → ranked available equipment with prices and rationales; today also project-spec ingest + Q&A |
+| **Customer / portal / intake UI** | Submit project-spec via React → Spring; today: ingest + Q&A saga; later ranked equipment + prices |
 | **Recommendation pipeline / implementers** | Orchestrate filter → availability → price → rank under Haystack 2.0 contracts |
 | **Pricing team** | Own `predict_price()` and model training; recommendation **calls** pricing |
 | **Ops / data scientist** (target) | Trigger or schedule ML training; poll job status |
-| **Spring REST API / portal** (adjacent) | May call this service or share DB read models; booking **write** path is not owned here |
+| **Spring REST API / portal** (adjacent) | Owns `POST /api/recommendations/project-spec`; calls haystack Call 1 then Call 2; booking **write** path is not owned here |
 | **Rental operators** | Domain beneficiaries of better match, utilization, and pricing discipline |
 
 ---

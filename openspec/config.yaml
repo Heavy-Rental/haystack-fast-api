@@ -18,13 +18,21 @@ context: |
     - Spec-kit: .specify/memory/constitution.md; user stories; contracts; tasks
     - OpenSPDD: design.md as REASONS Canvas; structured prompts first-class;
       when behaviour wrong → fix prompt/spec first, then code
-  Live HTTP path: POST /internal/v1/recommendations/submitprojectspecification (user_id required)
-    → dual-branch index → DocumentStore + mandatory KG
-    → lean FR-IX-023 as-built response: ingest_id, user_id, user_requirement_summary,
-      tentative_start/end_date (request preferred; else free-text extract),
-      needs_summary[], expected_budget | null, warnings[]
-    → optional Call 2 POST .../project-knowledge/getassetrecommendations multi-agent Q&A
-  Deferred: FR-010 recommend HTTP results_by_need (service-level only today)
+  Portal project-spec submit (React → Spring → haystack dual-hop):
+    React POST /api/recommendations/project-spec
+    → Call 1 POST /internal/v1/recommendations/submitprojectspecification (user_id required)
+      dual-branch index → DocumentStore + mandatory KG
+      lean FR-IX-023 as-built: ingest_id, user_id, user_requirement_summary,
+      tentative_start/end_date, needs_summary[], expected_budget | null, warnings[]
+      S2a: Idempotency-Key (Call 1 only); X-Correlation-Id on all routes
+    → Call 2 RECOMMEND POST .../project-knowledge/getassetrecommendations
+      (user_id + ingest_id + optional query)
+      quote envelope: quoteRef, items[].equipment, rates → primary body to React
+      MVP: RecommendationService seed fleet + pricing (no invent)
+    → Call 3 CHATBOT Q&A POST .../project-knowledge/query (optional follow-ups)
+      (user_id + ingest_id + query required; answer + hits)
+  Code: APIRouter prefix /internal/v1/recommendations
+  Mapping: Feasibility_Study_Spring/portal-to-haystack-mapping.md
 
 rules:
   specs: |

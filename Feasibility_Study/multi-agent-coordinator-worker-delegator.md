@@ -1,11 +1,16 @@
 # Feasibility Study: Multi-Agent Coordinator / Worker / Delegator Vocabulary
 
 | Field | Value |
-|-------|--------|
+|------
+
+> **Call numbering (as-built 2026-08-12):** HTTP **Call 1** = ingest · HTTP **Call 2** = **recommend / quote** (`getassetrecommendations`) · HTTP **Call 3** = **chatbot Q&A** (`project-knowledge/query`).  
+> In this C/W/D study, multi-agent **recommend synthesis [5–8]** is the **HTTP Call 2** product path (richer graph behind the same route). Chatbot/project-only Q&A is **HTTP Call 3**.
+
+-|--------|
 | **Document type** | Architecture vocabulary / agent role mapping (study only) |
 | **Status** | Complete (docs only — no runtime rename required) |
 | **Date** | 2026-08-11 |
-| **Version** | 2.1.0 |
+| **Version** | 2.1.1 |
 | **Application** | `haystack-fast-api` Multi-Agent Orchestrator (LangGraph) |
 | **Question** | How do **Coordinator**, **Worker**, and **Delegator** map onto the existing Orchestrator + domain agents + in-process tools design? |
 | **Authority** | **Authoritative for role vocabulary.** Dual-plane study remains authoritative for data planes, tool catalog, and sync. Implementation plan Phase 7 is authoritative for rollout steps. |
@@ -263,7 +268,7 @@ All agents reference these layers by id. Agents **consume** only the layers they
 | **L1** | Platform / environment | `mode` (`qa`\|`recommend`), feature flags, tool allowlists, `neo4j_available`, model deploy / stub vs live, CI |
 | **L2** | Tenant / user | `user_id`, auth boundary, multi-tenant filters (`user_id` / `ingest_id` on project chunks) |
 | **L3** | Project-spec session | `ingest_id`, `indexing_ok` **[4]**, DocumentStore + **KG-1** session; project facts **only via project tools** (never raw file bytes in LLM) |
-| **L4** | Request / commercial situation | Query or Call 3 options; rental `start_date` / `end_date`; budget **if present**; `include_pricing`; correlation / idempotency on the wire |
+| **L4** | Request / commercial situation | Query or Call 2 recommend options; rental `start_date` / `end_date`; budget **if present**; `include_pricing`; correlation / idempotency on the wire |
 | **L5** | Cross-agent graph state | `needs[]`, `work_plan[]`, `candidates_by_need`, `prices_by_need`, `research_notes` / `graph_notes`, `tool_traces`, `warnings` |
 | **L6** | Fleet / market (Postgres-Haystack `heavy_rental`) | Read-only mirror tables (below) + optional Neo4j KG-2 projection freshness |
 | **L7** | Pricing situation | `model_version`, clamp bounds (`minDailyRate`/`maxDailyRate` from **assets**), fallback category table, `period_utilization` / `lead_time_days` from **bookings** |
@@ -551,7 +556,7 @@ Robust state (**D**), environment (**E**), and integration (**F**) require conti
 
 | Class | Examples (this product) |
 |-------|-------------------------|
-| **Latency** | Node duration; tool latency; Call 2/3 p95; time from gate success to synthesis |
+| **Latency** | Node duration; tool latency; Call 2/3 p95 (recommend / Q&A); time from gate success to synthesis |
 | **Quality / accuracy** | Empty-fleet rate; pricing clamp rate; fallback rate; schema validation fails; stub vs live mode mix |
 | **Resource utilization** | Fan-out width (`needs_count`); DB pool; threadpool; LLM tokens/cost |
 | **Errors / recovery** | Tool error rate; gate fail rate; F-2 reject rate; time-to-fallback after model miss |
@@ -579,13 +584,13 @@ Memory keeps interactions coherent. Three kinds (travel Working / Customer+KB / 
 |------|---------|------------------------|
 | **H-1 Short-term (working memory)** | Immediate workspace for **this graph run** | LangGraph state: as-built `ProjectKnowledgeAgentState`; target `RecommendAgentState` (`run`, `project`, `work_plan`, `fleet_by_need`, `prices_by_need`, `recommendation`, `tool_traces`) |
 | **H-2 Long-term (knowledge base)** | Persistent knowledge across runs | **Project:** session registry + InMemory store (as-built) / **Pgvector** (I1) + **KG-1**. **Fleet:** Postgres-Haystack DB **`heavy_rental`** on host **`postgres_haystack`**, **synced from `postgres-primary`** via `postgres_haystack_sync` (eventual consistency / lag). Tables: **`assets`**, **`bookings`**, **`payments`**, **`rental_plan`**, etc. **Pricing:** model artifacts + clamp policy. |
-| **H-3 Episodic (interaction history)** | Discrete past outcomes | Current-run `tool_traces` / `warnings`; after Call 3 persist: **`ai_recommendations`**, **`recommendation_items`**; logs/metrics retention. Full multi-turn chat history **not** required for Phase 7 unless product adds a chat store. |
+| **H-3 Episodic (interaction history)** | Discrete past outcomes | Current-run `tool_traces` / `warnings`; after Call 2 recommend persist: **`ai_recommendations`**, **`recommendation_items`**; logs/metrics retention. Full multi-turn chat history **not** required for Phase 7 unless product adds a chat store. |
 
 #### Lifetimes and clear rules
 
 | Store | Lifetime | Clear / update |
 |-------|----------|----------------|
-| Working memory | Single LangGraph run (Call 2 or 3) | Discarded at run end |
+| Working memory | Single LangGraph run (Call 2 recommend or Call 3 Q&A) | Discarded at run end |
 | Project session LTM | Until discard/TTL; key `(user_id, ingest_id)` | Explicit discard; **does not** delete fleet mirror |
 | Fleet LTM (`postgres_haystack`) | Durable **mirror** of primary | Updated by **`postgres_haystack_sync`** from **`postgres-primary`**; agents **read-only** via tools |
 | Primary OLTP (`postgres-primary`) | Durable SoT for fleet/bookings writes | Spring / domain services only — **not** agent write path |
@@ -631,7 +636,7 @@ Effective context management keeps multi-step project-spec → recommend journey
 | Level | Travel example | Heavy-rental content |
 |-------|----------------|----------------------|
 | **Global context** | System settings, travel alerts | Mode (`qa`\|`recommend`), feature flags, tool allowlists, `neo4j_available`, model deploy/stub, gate policy, multi-tenant rules, **mirror lag** awareness |
-| **Session context** | Active customer interaction, searches | `user_id`, `ingest_id`, project session (DocumentStore + KG-1), Call 2 query thread, rental window / budget **if present**, correlation ids |
+| **Session context** | Active customer interaction, searches | `user_id`, `ingest_id`, project session (DocumentStore + KG-1), Call 3 query thread, rental window / budget **if present**, correlation ids |
 | **Task context** | Current booking step, related bookings | Current graph node; `need_id` under fan-out; step in [4]→[5]→Delegator→[6]→[7]→[8]; dependencies (fleet before price within need); active tool allowlist for this Worker |
 
 Maps onto L1–L7 (§10.0): global ≈ L1; session ≈ L2–L4 + project LTM; task ≈ L5 slices + current Worker kind.
@@ -646,7 +651,7 @@ Maps onto L1–L7 (§10.0): global ≈ L1; session ≈ L2–L4 + project LTM; ta
 | **Restore** | Next node reads shared state (not re-upload of project file); fan-out Worker restores only its `need_id` slice + shared `run`/`project.needs` |
 | **Merge** | Coordinator [8] merges per-need fleet/price contexts into `results_by_need`; resolve conflicts by **tool precedence** (fleet/price tools win over LLM narrative); state Vector vs Graph conflicts explicitly in Q&A |
 
-**Switch points:** [4]→[5]; [5]→Delegator; Delegator→[6]×N / [7]×N; Worker→Worker within need; all→Coordinator; Call 1 session later used by Call 2/3 (restore project session by `ingest_id`).
+**Switch points:** [4]→[5]; [5]→Delegator; Delegator→[6]×N / [7]×N; Worker→Worker within need; all→Coordinator; Call 1 session later used by Call 2 recommend / Call 3 Q&A (restore project session by `ingest_id`).
 
 **Hard rules for context management:**
 
@@ -1109,7 +1114,7 @@ Forbidden parallel shortcuts:
 - Hold shared state (`tool_traces`, needs, candidates, prices, warnings)  
 - **Tool-free synthesis [8]:** merge Worker/tool outputs into Q&A markdown or `results_by_need` / recommend DTO  
 - Surface gaps and warnings transparently (empty fleet, pricing fallback, missing project facts)  
-- Align final HTTP/DTO shape for Spring (Call 2 / Call 3); persistence into **`ai_recommendations` / `recommendation_items`** is service-layer after merge  
+- Align final HTTP/DTO shape for Spring (Call 2 recommend quote / Call 3 Q&A); persistence into **`ai_recommendations` / `recommendation_items`** is service-layer after merge  
 
 **Constraints:**
 
@@ -1705,7 +1710,7 @@ Plan:
 - Query KG-1 via `project_kg_query`  
 - Decompose unit needs via `decompose_project_needs` when in recommend mode  
 - Produce structured needs + research/graph notes for Delegator and synthesis  
-- Support Call 2 Q&A prep with the same tools (without fleet)
+- Support Call 3 Q&A prep with the same tools (without fleet)
 
 **Constraints:**
 
@@ -1907,7 +1912,7 @@ Outputs:
 | | |
 |--|--|
 | **Preserve** | Research notes before KG; both before decompose |
-| **Restore** | Session store by `ingest_id` (Call 2 after Call 1) |
+| **Restore** | Session store by `ingest_id` (Call 2/3 after Call 1) |
 | **Merge** | Vector + KG notes into needs (evidence-first); conflicts stated |
 | **Must not** | Lose session keys; invent budget; pull fleet into project context |
 
@@ -2872,7 +2877,7 @@ Indexing gate checklist: validate `user_id` + sources + MIME → run index servi
 ## 14. Open questions (remaining)
 
 1. Max parallel fan-out width (cap concurrent need Workers)?  
-2. Should Call 2 Q&A adopt an explicit Delegator, or keep fixed edges forever?  
+2. Should Call 3 Q&A adopt an explicit Delegator, or keep fixed edges forever?  
 3. Exact metric names / log schema ownership (app vs platform)?  
 4. Delegator: pure code router vs short LLM policy prompt on top of allowlists?  
 
@@ -2896,6 +2901,7 @@ Indexing gate checklist: validate `user_id` + sources + MIME → run index servi
 | **1.8.0** | 2026-08-11 | **§10 I Context management** (hierarchy global/session/task + switching preserve/restore/merge); §10.0.8 |
 | **1.9.0** | 2026-08-11 | **§10 J Decision integration** (retrieval + patterns + optimization); §10.0.9; role decision authority |
 | **2.0.0** | 2026-08-11 | **§10 K Workflow optimization** (DAG, fan-out caps, resources, dynamic adjustment); §10.0.10 |
+| **2.1.1** | 2026-08-12 | HTTP Call 2 = recommend, Call 3 = chatbot Q&A (align portal) |
 | **2.1.0** | 2026-08-11 | **§10 L Sequential and parallel processing** (must-seq vs may-par); §10.0.11 |
 
 ---

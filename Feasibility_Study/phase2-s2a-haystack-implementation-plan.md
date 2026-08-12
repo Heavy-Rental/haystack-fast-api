@@ -23,8 +23,11 @@ Make Call 1 **safe to retry** and **traceable** on the FastAPI side so Spring ca
 **Primary endpoint:**  
 `POST /internal/v1/recommendations/submitprojectspecification`
 
+**Portal context:** React `POST /api/recommendations/project-spec` triggers Spring to call **this Call 1 first**, then Call 2; idempotency applies to Call 1 only. See [`../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../Feasibility_Study_Spring/portal-to-haystack-mapping.md).
+
 Also touch logging for:  
-`POST /internal/v1/recommendations/project-knowledge/getassetrecommendations`  
+`POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` (Call 2 recommend)
+`POST /internal/v1/recommendations/project-knowledge/query` (Call 3 Q&A)
 `GET /health` (correlation optional)
 
 ---
@@ -34,7 +37,8 @@ Also touch logging for:
 | Item | Convention |
 |------|------------|
 | Ingest | `POST /internal/v1/recommendations/submitprojectspecification` |
-| Q&A | `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` |
+| Call 2 recommend | `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` |
+| Call 3 chatbot Q&A | `POST /internal/v1/recommendations/project-knowledge/query` |
 | Health | `GET /health` |
 | Idempotency header | `Idempotency-Key` (UUID per logical ingest) |
 | Correlation | `X-Correlation-Id` and/or W3C `traceparent` |
@@ -70,7 +74,7 @@ Also touch logging for:
 - 202 Accepted + job store / SSE → Phase 9 / C2
 - Redis/Postgres idempotency for multi-replica (memory OK for single-node; **document limit**)
 - Changing public FR-IX-023 response shape
-- Call 3 recommend reattach
+- Call 3 is chatbot Q&A (recommend is Call 2 as-built MVP)
 
 ---
 

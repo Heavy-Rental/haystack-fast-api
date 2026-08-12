@@ -62,8 +62,9 @@ def test_ingest_then_project_knowledge_query(api_client: TestClient) -> None:
     assert "kg_built" not in body
     ingest_id = body["ingest_id"]
 
+    # Call 3 chatbot Q&A (moved from getassetrecommendations)
     qa = api_client.post(
-        "/internal/v1/recommendations/project-knowledge/getassetrecommendations",
+        "/internal/v1/recommendations/project-knowledge/query",
         json={
             "user_id": "api_user",
             "ingest_id": ingest_id,
@@ -81,14 +82,47 @@ def test_ingest_then_project_knowledge_query(api_client: TestClient) -> None:
     assert "project_vector_search" in tools
     assert "project_kg_query" in tools
 
+    # Call 2 recommend / quote
+    rec = api_client.post(
+        "/internal/v1/recommendations/project-knowledge/getassetrecommendations",
+        json={
+            "user_id": "api_user",
+            "ingest_id": ingest_id,
+            "query": "Need excavator for soft clay",
+        },
+    )
+    assert rec.status_code == 200, rec.text
+    quote = rec.json()
+    assert quote["user_id"] == "api_user"
+    assert quote["ingest_id"] == ingest_id
+    assert quote["quoteRef"].startswith("QUO-")
+    assert "items" in quote
+    assert "answer" not in quote
+    # When seed fleet matches excavator, expect at least one item with asset id
+    if quote["items"]:
+        assert quote["items"][0]["equipment"]["id"]
+        assert quote["items"][0]["rankOrder"] >= 1
+
 
 def test_query_missing_session_404(api_client: TestClient) -> None:
+    resp = api_client.post(
+        "/internal/v1/recommendations/project-knowledge/query",
+        json={
+            "user_id": "nobody",
+            "ingest_id": "ing_missing",
+            "query": "anything",
+        },
+    )
+    assert resp.status_code == 404
+    assert resp.json()["error"] == "not_found"
+
+
+def test_recommend_missing_session_404(api_client: TestClient) -> None:
     resp = api_client.post(
         "/internal/v1/recommendations/project-knowledge/getassetrecommendations",
         json={
             "user_id": "nobody",
             "ingest_id": "ing_missing",
-            "query": "anything",
         },
     )
     assert resp.status_code == 404

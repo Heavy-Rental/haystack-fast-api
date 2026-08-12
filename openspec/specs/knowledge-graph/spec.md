@@ -97,7 +97,7 @@ An engineer or portal uploads a project specification (`user_id` + text/file). A
 
 After a successful ingest, a client asks a natural-language question with the same `user_id` and `ingest_id`. A fixed sequential LangGraph (`research_agent` → `graph_agent` → `synthesis_agent`) queries the project DocumentStore and KG-1 and returns a grounded answer with tool traces.
 
-**Independent Test:** Same-process ingest then `POST .../project-knowledge/getassetrecommendations`; assert both tools in `sources_used` / `tool_traces` and dual-source synthesis. See testing guide and contract.
+**Independent Test:** Same-process ingest then `POST .../project-knowledge/query` (Call 3); assert both tools in `sources_used` / `tool_traces`. Recommend: `POST .../getassetrecommendations` (Call 2) returns quote `items`.
 
 **Acceptance Scenarios:**
 
@@ -253,6 +253,26 @@ Haystack retrieval / KG query pipelines SHALL be exposable as tools (name + natu
 - **AND** `project_kg_query` is backed by substring / property match over KG-1 nodes (optional 1-hop neighbors)
 - **AND** each tool has a stable name and natural-language description
 
+### Requirement: Call 3 chatbot Q&A route after Call 1 session
+Live route: `POST /internal/v1/recommendations/project-knowledge/query`  
+(code: router prefix `/internal/v1/recommendations` + relative `"/project-knowledge/query"`).
+
+Stage-1 multi-agent **chatbot Q&A** **SHALL** be available on this Call **3** path with `user_id` + `ingest_id` + required `query`, after successful Call 1. Response **SHALL** be project-knowledge Q&A (`answer` + evidence). This route **SHALL NOT** perform ingest and **SHALL NOT** return commercial quote `items[]` / invent fleet rates.  
+**Call 2** recommend is a separate path: `.../project-knowledge/getassetrecommendations` (quote envelope).  
+Portal submit primary body is **Call 2 recommend**, not Call 3.  
+(Trace: Feasibility_Study §1.2.0 · portal-to-haystack-mapping v2)  
+**Status:** **as-built**.
+
+#### Scenario: Chatbot Q&A after ingest
+- **GIVEN** a successful Call 1 for `user_id` U yielding `ingest_id` I
+- **WHEN** client POSTs Call 3 with U, I, and non-empty `query`
+- **THEN** response is **200** with `answer` when tools can ground
+- **AND** body MUST NOT require quote `items[]` / `quoteRef`
+
+#### Scenario: Call 3 is not ingest
+- **WHEN** Call 3 is invoked without a session for `(user_id, ingest_id)`
+- **THEN** server returns **404** and MUST NOT create a new index/KG
+
 ---
 
 ### Stage 2 deferred requirements (backlog labels)
@@ -277,6 +297,7 @@ The following product targets are **not** Stage-1 acceptance criteria. They rema
 - Structured agent prompts live in `app/agents/prompts.py`; fix prompts/spec before code when behaviour is wrong.
 - Default CI-safe modes: mock embedder, `KG_APPLY_TRANSFORMS=false`, `PROJECT_AGENT_MODE=stub`.
 - Sessions are process-local; ingest and Q&A must hit the same process unless artifact reload is used (KG-only partial resume).
+- Chatbot Q&A is **Call 3** `.../query`. Portal submit uses Call 1 then **Call 2 recommend** (quote).
 
 ## Safeguards (OpenSPDD)
 
@@ -285,6 +306,9 @@ The following product targets are **not** Stage-1 acceptance criteria. They rema
 - Do not add file-type-specific KG generator variants.
 - Do not claim dual-source resume after process restart without DocumentStore snapshot (Stage 2).
 - Do not replace Asset SQL, Booking availability, or `predict_price()` with KG on the recommend path unless a later SDD promotes those tools.
+- Do not treat Call 3 `query` or Call 2 `getassetrecommendations` as project-spec **ingest**.
+- Do not require `Idempotency-Key` on Call 2/3 (S2a applies to Call 1 only).
+- Do not return quote `items[]` on Call 3 Q&A (that is Call 2).
 
 ---
 
@@ -292,6 +316,8 @@ The following product targets are **not** Stage-1 acceptance criteria. They rema
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **1.2.0** | 2026-08-12 | Call 3 = chatbot Q&A route; Call 2 recommend separate |
+| **1.1.0** | 2026-08-12 | Portal dual-hop (Call 2 was Q&A; superseded) |
 | **0.1.0** | 2026-08-07 | HR-76 as-built (optional KG) |
 | **0.1.1** | 2026-08-07 | Sequential map; expanded AC/modules |
 | **0.2.0** | 2026-08-07 | Mandatory KG + hard-fail; remove `KG_ENABLED` / `KG_STRICT` |

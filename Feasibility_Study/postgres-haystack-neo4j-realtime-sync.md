@@ -1,11 +1,15 @@
 # Feasibility Study: Postgres–Haystack Sync, Neo4j, Multi-Agent Request Workflow
 
 | Field | Value |
-|-------|--------|
+|------
+
+> **Call numbering (as-built 2026-08-12):** **Call 1** ingest · **Call 2** recommend/quote (`getassetrecommendations`) · **Call 3** chatbot Q&A (`project-knowledge/query`). Older text that said “call 3 = recommend” is **renumbered** to Call 2; Q&A is Call 3.
+
+-|--------|
 | **Document type** | Architecture / infrastructure feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 2.7.3 |
+| **Version** | **2.7.4** |
 | **Application** | `haystack-fast-api` |
 | **Related specs** | `openspec/specs/project-setup/`, `indexing/`, `knowledge-graph/`, `recommendation-pipeline/`, `dynamic-pricing/`, `equipment-recommendation/` |
 | **Related studies** | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) · [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) · [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) · [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) · [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) · [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) |
@@ -102,17 +106,17 @@ Portal / user
     ▼
 Spring Boot REST API          (auth, booking SoT, multi-call orchestration)
     │  call 1: ingest project file
-    │  call 2: project-knowledge Q&A (0..N)
-    │  call 3: recommend / rank+price (later reattach)
+    │  call 2: recommend / rank+price (getassetrecommendations quote)
+    │  call 3: chatbot Q&A (project-knowledge/query) 0..N optional
     ▼
 haystack-fast-api             (Haystack pipelines, agents, DocumentStore, KG)
 ```
 
 | Call | Typical route / payload | Latency profile (today / target) | Uses which plane? |
 |------|---------------------------|----------------------------------|-------------------|
-| **1. Ingest** | `POST /internal/v1/recommendations/submitprojectspecification` — multipart file or JSON text + `user_id` | Seconds–tens of seconds (index + KG + optional agent orchestration) | **Plane B** (§4): indexing → DocumentStore + KG-1; **lean public body** + FR-IX-023 **as-built** (`ingest_id`, `user_id`, `user_requirement_summary`, `tentative_*`, `needs_summary[]`, `expected_budget`) — see [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) |
-| **2. Q&A** | `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` — `user_id`, `ingest_id`, `query` | Seconds if LLM; fast if stub | **Plane B** session tools over store + KG-1 from call 1 (path is Spring-facing; behaviour is Q&A markdown, not Call 3 assets) |
-| **3. Recommend** | Future HTTP — needs, dates, options (or continue after ingest) | Seconds–tens; multi unit-need loop | **Plane B orchestrator after [4]** + **in-process tools** → Plane A fleet/Neo4j + **ML pricing** + project context |
+| **1. Ingest** | `POST /internal/v1/recommendations/submitprojectspecification` — multipart/JSON + `user_id` | Seconds–tens of seconds (index + KG) | **Plane B** (§4): DocumentStore + KG-1; lean FR-IX-023 body — see [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) |
+| **2. Recommend** | `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` — `user_id`, `ingest_id`, optional `query` → quote/`items[]` | Seconds–tens; multi unit-need | **Plane B after [4]** + fleet SQL/Neo4j tools + **ML pricing** + project session (MVP: seed fleet + pricing_client) |
+| **3. Chatbot Q&A** | `POST /internal/v1/recommendations/project-knowledge/query` — `user_id`, `ingest_id`, `query` | Seconds if LLM; fast if stub | **Plane B** session tools over store + KG-1 from call 1 |
 | **Health** | `GET /health` | Milliseconds | Ops / resilience probes |
 
 **How this fits the dual-plane architecture**
@@ -120,22 +124,22 @@ haystack-fast-api             (Haystack pipelines, agents, DocumentStore, KG)
 ```text
          Spring multi-call journey (§2.1)
     ┌──────────────────────────────────────────┐
-    │ 1 ingest → 2 Q&A → 3 recommend           │
+    │ 1 ingest → 2 recommend → 3 chatbot Q&A   │
     └─────┬──────────┬─────────────┬───────────┘
           │          │             │
           ▼          ▼             ▼
-     Plane B [1–4]  Plane B [5]   Plane B [8] recommend
-     index+KG-1     project Q&A   Multi-Agent → in-process tools:
-     + Pgvector I1  (optional)    fleet SQL + Neo4j + pricing
-                                  + project context  (§4.1)
+     Plane B [1–4]  Plane B [5–8]  Plane B [5] Q&A
+     index+KG-1     recommend      project tools only
+     + Pgvector I1  Multi-Agent /  (Call 3 chatbot)
+                    MVP fleet+price
 ```
 
 | Implication | Guidance |
 |-------------|----------|
 | One HTTP protocol for all four calls? | **No** — design **per interaction type** (see resilience study: REST for upload; SSE/poll for long ingest progress) |
 | Call 2 without call 1 | **Invalid** — needs `ingest_id` / session from successful ingest |
-| Call 3 without Track D mirror | Falls back to **seed fleet** today; production recommend needs **Plane A** Asset/Booking data |
-| Sticky sessions | Required for process-local InMemory across call 1→2 **or** use **Pgvector I1** + shared session semantics |
+| Call 2 without Track D mirror | Falls back to **seed fleet** today; production recommend needs **Plane A** Asset/Booking data |
+| Sticky sessions | Required for process-local InMemory across call 1→2 (recommend) and call 1→3 (Q&A) **or** use **Pgvector I1** + shared session |
 
 **Wire robustness** (timeouts, idempotency, circuit breaker, 202 jobs, SSE progress):  
 [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) — Track C1–C3. Do **not** use SSE as the project-file **upload** channel.
@@ -261,14 +265,14 @@ Target model: **Workers** **only invoke allowlisted in-process tools** (shared t
 
 [9] HTTP response to Spring
       • Ingest-only path: return after [4] (ingest_id, kg_*, documents_written)
-      • Recommend path (same request or Spring call 3): return after [8]
+      • Recommend path (same request or Spring call 2): return after [8]
       • Neo4j full rebuild: prefer async job ids; do not block recommend on full rebuild
       • Long runs: 202 + job status / SSE progress (resilience study)
 
 Spring multi-call alignment (§2.1):
   • call 1 ≈ [1]–[4] ingest
-  • call 2 ≈ [5] Q&A tools
-  • call 3 ≈ [5]–[8] recommend (or combined graph after [4] when product allows)
+  • call 2 ≈ [5]–[8] recommend (or MVP RecommendationService)
+  • call 3 ≈ [5] Q&A tools only (chatbot)
   • Production accuracy needs Track D fleet mirror + T3 Neo4j + pricing model deploy
 ```
 
@@ -571,7 +575,7 @@ Neo4j available to multi-agent fleet tools
 | DocumentStore | InMemory session | **Pgvector** (I1) on Postgres-Haystack |
 | Fleet / Neo4j / price | Seed fleet; service pricing path | In-process tools: SQL + Neo4j + **`predict_asset_price`** |
 | Observability | Basic tool_traces | tool_traces + **`role`** + **`need_id`** on fan-out |
-| Spring caller | HTTP multi-call | Same REST; call 3 = recommend graph |
+| Spring caller | HTTP multi-call | Same REST; call 2 = recommend graph; call 3 = chatbot Q&A |
 
 ---
 
@@ -1094,7 +1098,7 @@ SOURCE_HOST: postgres-primary
 | Multi-user project files | **Pgvector + user_id/ingest_id filters + TTL** |
 | Durable store default | **Pgvector in Indexing Pipeline only** (InMemory for CI) |
 | **Call 1 lean public body?** | **GO (shipping)** — FR-IX-023 as-built lean envelope; no technical dump |
-| **Call 1 full needs/dates/budget?** | **GO (as-built)** — FR-IX-023 S1a–S1e; not Call 3 recommend |
+| **Call 1 full needs/dates/budget?** | **GO (as-built)** — FR-IX-023 S1a–S1e; not Call 2 recommend quote |
 | **Multi-Agent after [4]** | **GO** — Coordinator + Delegator + Workers run **in-process tools**; Coordinator synthesizes |
 | **Synthesis outputs assets + rent price?** | **GO (target)** — merge only; see [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) |
 | Recommend data sources via tools | **Postgres-Haystack** + **Neo4j KG-2** + **ML pricing** + project Pgvector/KG-1 |

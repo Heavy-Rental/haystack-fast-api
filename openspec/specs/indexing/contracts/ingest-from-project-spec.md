@@ -4,13 +4,15 @@
 |-------|--------|
 | **Capability** | [`../spec.md`](../spec.md) (indexing) |
 | **Design** | [`../design.md`](../design.md) |
-| **Status** | **as-built** lean Call 1 + **full FR-IX-023** project-spec summary (S1a–S1e) + **S2a** idempotency/correlation |
+| **Status** | **as-built** lean Call 1 + **full FR-IX-023** project-spec summary (S1a–S1e) + **S2a** idempotency/correlation + portal dual-hop note |
 | **DTO (as-built)** | `IngestFromProjectSpecResponse` (`app/schemas/indexing.py`) |
 | **Standards** | OpenSpec behaviour · Spec-kit contract tables · OpenSPDD (prompt/spec before code) |
 | **Resilience** | Stage **S2a** / track **C1** — [`Feasibility_Study/phase2-s2a-haystack-implementation-plan.md`](../../../../Feasibility_Study/phase2-s2a-haystack-implementation-plan.md) |
 
 Live HTTP owner: **indexing** (not FR-010 recommend on the public route).  
 Internal pipeline still: dual-branch index → DocumentStore write → mandatory KG-1 → project-knowledge session register (for Call 2).
+
+**Portal caller (Spring saga):** React `POST /api/recommendations/project-spec` → Spring **Call 1** hits **this** endpoint first, then Call 2 Q&A; React’s primary UX body for that portal request is Call 2 (see `Feasibility_Study_Spring/portal-to-haystack-mapping.md`). This route is **not** skipped for project-spec submit.
 
 ---
 
@@ -172,5 +174,5 @@ Spring (or portal) stores `user_id` + `ingest_id` from this response, then calls
 
 `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations`
 
-See knowledge-graph contract [`project-knowledge-query.md`](../../knowledge-graph/contracts/project-knowledge-query.md).  
-`user_requirement_summary` is for display / optional prompt embedding; **not** required on Call 2 when the session is live.
+For React **project-spec submit**, Call 2 **recommend** (`getassetrecommendations` quote) is the required second hop; Call 2 body is primary to React. Optional Call 3 chatbot: [`project-knowledge-query.md`](../../knowledge-graph/contracts/project-knowledge-query.md). Mapping: [`portal-to-haystack-mapping.md`](../../../../Feasibility_Study_Spring/portal-to-haystack-mapping.md).  
+Recommend contract: [`get-asset-recommendations.md`](../../recommendation-pipeline/contracts/get-asset-recommendations.md).

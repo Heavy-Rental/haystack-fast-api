@@ -15,4 +15,7 @@ See also: [specification/README.md](./README.md) · [openspec/AGENTS.md](../open
 | Feasibility | [call1-ingest-response-project-summary.md](../Feasibility_Study/call1-ingest-response-project-summary.md) |
 | Change proposal | [openspec/changes/2026-08-10-call1-project-spec-summary/](../openspec/changes/2026-08-10-call1-project-spec-summary/) |
 
-**Not** ranked `results_by_need` / ML rent on Call 1 — that remains Call 3 / recommend reattach.
+**Not** ranked assets on Call 1 — that is **Call 2** `getassetrecommendations` (recommend quote).
+
+**Portal:** React `project-spec` → **Call 1 first** (this capability), then Call 2 recommend; Call 3 chatbot optional.  
+See [openspec/AGENTS.md](../openspec/AGENTS.md) · [portal-to-haystack-mapping.md](../Feasibility_Study_Spring/portal-to-haystack-mapping.md).

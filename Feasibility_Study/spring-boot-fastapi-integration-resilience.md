@@ -6,11 +6,12 @@
 | **Document type** | Architecture / integration feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.3.1 |
+| **Version** | 1.3.2 |
 | **Application** | `haystack-fast-api` (equipment recommendation / project-spec AI feature) |
 | **Caller** | Spring Boot REST API (portal / domain system of record) |
 | **Related** | [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) (data planes, agent→indexing, Pgvector) · [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) (FastAPI multi-agent roles) |
-| **As-built routes** | `POST /internal/v1/recommendations/submitprojectspecification`, `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations`, `GET /health` |
+| **As-built routes** | Call 1 submitprojectspecification; Call 2 getassetrecommendations (**recommend**); Call 3 project-knowledge/query (**Q&A**); GET /health |
+| **Spring export** | [`../Feasibility_Study_Spring/`](../Feasibility_Study_Spring/) — Spring-primary adaptation + S2b plan for handoff to the Spring Boot repo |
 
 ---
 
@@ -50,21 +51,25 @@ Use **REST multipart/JSON for uploads and most recommender RPCs**; use **SSE or 
 haystack-fast-api is the **recommender / project-knowledge feature** next to Spring’s domain API.
 
 ```text
-Portal / user
+React web portal
+  POST /api/recommendations/project-spec   ← user submits project specs
     │
     ▼
 Spring Boot REST API          (auth, booking SoT, orchestration)
-    │  call 1: ingest project file
-    │  call 2: project-knowledge Q&A (0..N)
-    │  call 3: recommend / rank+price (later reattach)
+    │  call 1: POST /internal/v1/recommendations/submitprojectspecification
+    │  call 2: POST .../project-knowledge/getassetrecommendations  (RECOMMEND quote → React)
+    │  call 3: POST .../project-knowledge/query  (CHATBOT Q&A optional)
     ▼
 haystack-fast-api             (Haystack pipelines, agents, stores)
 ```
 
+Portal dual-hop mapping: [`../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../Feasibility_Study_Spring/portal-to-haystack-mapping.md).
+
 | Call | Typical payload | Latency profile (today / target) |
 |------|-----------------|----------------------------------|
 | **Ingest** `POST /internal/v1/recommendations/submitprojectspecification` | Multipart file or JSON text + `user_id` → lean **200**: `ingest_id`, `user_id`, `user_requirement_summary`, `warnings` | Seconds–tens of seconds (index + KG; technical detail not on public body) |
-| **Q&A** `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` | JSON `user_id`, `ingest_id` (from Call 1), `query` | Seconds if LLM; fast if stub |
+| **2 Recommend** `POST .../getassetrecommendations` | user_id, ingest_id, optional query → quote/items | Seconds |
+| **3 Chatbot Q&A** `POST .../project-knowledge/query` | user_id, ingest_id, query → answer | Seconds if LLM; fast if stub |
 | **Recommend** (service / future HTTP) | Needs / dates / options | Seconds–tens; multi unit-need **fan-out Workers** via **Multi-Agent Orchestrator** after ingest **[4]** (may warrant C2 jobs) |
 | **Health** `GET /health` | — | Milliseconds |
 
@@ -159,7 +164,8 @@ Same idea as SSE without `EventSource` framing: `application/x-ndjson` lines.
 [1] Spring POST /ingest          → 202 { job_id }
 [2] Spring GET  /jobs/{job_id}   → 200 { status: running|succeeded|failed, ingest_id?, error? }
     or SSE /jobs/{job_id}/events → progress stream
-[3] Spring POST /project-knowledge/getassetrecommendations  with ingest_id
+[2] Spring POST /project-knowledge/getassetrecommendations (recommend)
+[3] Spring POST /project-knowledge/query (chatbot) optional
 [4] Spring POST /recommend (later)
 ```
 
@@ -326,7 +332,8 @@ Without idempotency, **retry after timeout** may **double-index** the same proje
 | As-built | Integration note |
 |----------|------------------|
 | `POST /submitprojectspecification` | Unary REST ingest — **keep** as file/JSON entry; optionally add 202 mode later |
-| `POST /project-knowledge/getassetrecommendations` | Unary REST — second Spring call after ingest |
+| `POST /project-knowledge/getassetrecommendations` | Call 2 **recommend** quote after ingest |
+| `POST /project-knowledge/query` | Call 3 **chatbot Q&A** |
 | `GET /health` | Resilience probe |
 | `run_in_threadpool` | Correct for sync pipelines under async FastAPI |
 | No job API / no SSE today | Gap for long-running robustness — Phase C2 |
@@ -449,10 +456,11 @@ Optional: large files via **Spaces** + URL.
 | Version | Date | Notes |
 |---------|------|--------|
 | **1.0.0** | 2026-08-10 | Initial study: Spring↔FastAPI resilience; SSE vs upload; multi-call recommender; C1–C3 |
-| **1.1.0** | 2026-08-10 | Call 3 recommend maps to Multi-Agent after [4] + tools (pricing, Neo4j, Postgres-Haystack) |
+| **1.1.0** | 2026-08-10 | Recommend maps to Multi-Agent after [4] + tools (then called “Call 3”; now **Call 2**) |
 | **1.2.0** | 2026-08-10 | Remove FastMCP; in-process tools only |
-| **1.3.0** | 2026-08-11 | Call 3 internal flow: C/W/D roles; fan-out Workers; Spring stays REST saga |
+| **1.3.0** | 2026-08-11 | Recommend internal flow: C/W/D roles; fan-out Workers; Spring stays REST saga |
 | **1.3.1** | 2026-08-11 | Full internal paths; Call 1 lean response fields for Spring handoff |
+| **1.3.2** | 2026-08-12 | Call numbering: Call 2 = recommend quote; Call 3 = chatbot Q&A |
 
 ---
 

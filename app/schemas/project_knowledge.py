@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class ProjectKnowledgeQueryRequest(BaseModel):
-    """POST /internal/v1/recommendations/project-knowledge/getassetrecommendations body."""
+    """POST /internal/v1/recommendations/project-knowledge/query (Call 3 chatbot Q&A)."""
 
     user_id: str = Field(..., min_length=1, description="Same user_id used at ingest")
     ingest_id: str = Field(
