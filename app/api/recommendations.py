@@ -18,6 +18,8 @@ from app.schemas.recommend_quote import (
     AssetRecommendResponse,
 )
 from app.schemas.recommendations import RecommendFromProjectSpecRequest
+from app.agents.indexing_gate import run_indexing_gate
+from app.config import get_settings
 from app.services.ingest_idempotency import (
     get_ingest_idempotency_store,
     normalize_idempotency_key,
@@ -167,6 +169,7 @@ async def recommend_from_project_spec(
     """
     content_type = request.headers.get("content-type", "")
     service = IndexingIngestService()
+    via_gate = bool(get_settings().indexing_via_agent_gate)
 
     if "application/json" in content_type:
         payload = await request.json()
@@ -180,6 +183,19 @@ async def recommend_from_project_spec(
             raise BadRequestError(messages or "Validation failed") from exc
 
         def _produce_json() -> IngestFromProjectSpecResponse:
+            if via_gate:
+                # Coordinator gate [4]: forced non-LLM START→index_gate→END
+                gate = run_indexing_gate(
+                    user_id=body.user_id,
+                    user_name=body.user_name,
+                    project_text=body.project_text,
+                    file_sources=None,
+                    start_date=body.start_date,
+                    end_date=body.end_date,
+                    service=service,
+                )
+                assert gate.response is not None
+                return gate.response
             return service.ingest_from_project_spec(
                 user_id=body.user_id,
                 user_name=body.user_name,
@@ -233,6 +249,18 @@ async def recommend_from_project_spec(
                 )
 
         def _produce_multipart() -> IngestFromProjectSpecResponse:
+            if via_gate:
+                gate = run_indexing_gate(
+                    user_id=user_id,
+                    user_name=user_name,
+                    project_text=project_text_str,
+                    file_sources=file_sources or None,
+                    start_date=start_date,
+                    end_date=end_date,
+                    service=service,
+                )
+                assert gate.response is not None
+                return gate.response
             return service.ingest_from_project_spec(
                 user_id=user_id,
                 user_name=user_name,

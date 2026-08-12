@@ -151,6 +151,7 @@ Compact response: portal may only need identity + summary; technical index/KG fi
 - Packt Ch. 4 dual-branch flowchart is the design reference for graph topology.
 - MIME map and FR-IX requirements in [`spec.md`](./spec.md) are normative; design must not invent alternate classification.
 - Thin routers; orchestration in `IndexingIngestService`; Haystack graph under `app/pipelines/indexing/`.
+- **S3 Coordinator gate [4] (optional):** when `INDEXING_VIA_AGENT_GATE=true`, Call 1 runs forced non-LLM LangGraph `START → index_gate → END` via in-process tool `run_indexing_from_request` (`app/agents/indexing_gate.py` / `app/agents/tools.py`). Default **false** keeps direct service path. Gate does **not** use LLM tool-calling; files never enter LLM context as raw bytes. Lean public body unchanged.
 - Spec process: OpenSpec capability; Spec-kit tasks archive; OpenSPDD REASONS here; fix prompt/spec first.
 - Cross-capability: after joiner, KG is mandatory (HR-76)—do not document it as future-only.
 

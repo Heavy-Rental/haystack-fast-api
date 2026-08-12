@@ -1,20 +1,27 @@
-"""Haystack-backed tools for Stage-1 project knowledge agents.
+"""Haystack-backed tools for Stage-1 project knowledge agents + S3 index gate.
 
 Tool names are stable contracts for LangGraph nodes and traces.
+Indexing tool [4] is in-process only (no MCP); forced non-LLM Coordinator gate.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Callable
+
+from haystack.dataclasses import ByteStream
 
 from app.config import Settings, get_settings
 from app.pipelines.indexing.retrieval import run_vector_search
 from app.pipelines.kg.query import query_knowledge_graph
+from app.schemas.indexing import IngestFromProjectSpecResponse
+from app.services.indexing import IndexingIngestService
 from app.services.project_knowledge_session import ProjectKnowledgeSession
 
 TOOL_PROJECT_VECTOR_SEARCH = "project_vector_search"
 TOOL_PROJECT_KG_QUERY = "project_kg_query"
+TOOL_RUN_INDEXING = "run_indexing_from_request"
 
 TOOL_DESCRIPTIONS: dict[str, str] = {
     TOOL_PROJECT_VECTOR_SEARCH: (
@@ -25,6 +32,11 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "Query the project knowledge graph (KG-1) for document nodes, "
         "entities, and optional 1-hop relationships extracted from the "
         "uploaded project specification."
+    ),
+    TOOL_RUN_INDEXING: (
+        "Coordinator gate [4]: index project-spec sources via "
+        "IndexingIngestService (meta stamp, mandatory KG-1 hard-fail, "
+        "session registry). Forced non-LLM tool — not a Worker agent."
     ),
 }
 
@@ -114,3 +126,30 @@ def build_session_tools(
             session, default_limit=max(top_k, 10)
         ),
     }
+
+
+def run_indexing_from_request(
+    *,
+    user_id: str,
+    user_name: str | None = None,
+    project_text: str | None = None,
+    file_sources: list[ByteStream] | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    service: IndexingIngestService | None = None,
+) -> IngestFromProjectSpecResponse:
+    """In-process indexing tool for Coordinator gate [4].
+
+    Wraps ``IndexingIngestService.ingest_from_project_spec`` so HTTP, agent
+    gate, and tests share the same meta stamp / KG hard-fail / session path.
+    Does not put raw file bytes into any LLM context.
+    """
+    svc = service if service is not None else IndexingIngestService()
+    return svc.ingest_from_project_spec(
+        user_id=user_id,
+        user_name=user_name,
+        project_text=project_text,
+        file_sources=file_sources,
+        start_date=start_date,
+        end_date=end_date,
+    )

@@ -73,6 +73,14 @@ class Settings(BaseSettings):
         alias="IDEMPOTENCY_TTL_SECONDS",
     )
 
+    # Phase 3 / S3: route Call 1 ingest through Coordinator gate [4]
+    # (forced non-LLM LangGraph edge → run_indexing_from_request tool).
+    # Default false keeps as-built direct IndexingIngestService path.
+    indexing_via_agent_gate: bool = Field(
+        default=False,
+        alias="INDEXING_VIA_AGENT_GATE",
+    )
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:

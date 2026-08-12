@@ -41,6 +41,7 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | FR-IX-023 Call 1 summary (as-built) | Full lean summary S1a–S1e | `specs/indexing/spec.md` + contract; impl-plan **1.7** |
 | FR-IX-024 (as-built S2a) | Indexing — `Idempotency-Key` process-local store; same key → same `ingest_id` | `specs/indexing/spec.md` + contract; impl-plan **2.3** / S2a |
 | FR-IX-025 (as-built S2a) | Indexing — `X-Correlation-Id` / `traceparent` log + echo (all routes incl. Call 2) | `specs/indexing/spec.md` + contract; impl-plan **2.4** / S2a |
+| S3 agent gate (as-built) | Indexing — `run_indexing_from_request` + Coordinator gate **[4]** behind `INDEXING_VIA_AGENT_GATE` (default off) | `app/agents/indexing_gate.py` · `app/agents/tools.py` · impl-plan **Phase 3 / S3**; lean body unchanged |
 | Portal dual-hop (docs) | React project-spec → Call 1 → **Call 2 recommend quote** → React; Call 3 = chatbot Q&A | `AGENTS.md` · recommend + KG contracts · `portal-to-haystack-mapping.md` v2 · impl-plan §1.2.0 |
 | S2a change archive | Idempotency + correlation tasks | `changes/archive/2026-08-12-s2a-ingest-idempotency-correlation/` |
 | Portal dual-hop (superseded) | Earlier Call 2 = Q&A wording | `changes/2026-08-12-portal-dual-hop-docs/` (**superseded**) |

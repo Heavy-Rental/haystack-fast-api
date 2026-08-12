@@ -534,12 +534,14 @@ Maps to `spring-boot-fastapi-integration-resilience.md` Phase C1.
 
 Maps to dual-plane R1 + `indexing-pipeline-supercomponent.md`.
 
-| Step | Work | Exit criteria |
-|------|------|---------------|
-| **3.1** | In-process tool `run_indexing_from_request` wrapping `IndexingIngestService` (meta stamp, KG hard-fail, session registry) | Tool parity with direct HTTP ingest tests |
-| **3.2** | LangGraph path: `START → index_tool → …` behind feature flag; **index_tool = Coordinator gate** (non-LLM forced edge, not a Worker agent); keep direct service path default | Flag off = as-built; flag on = same DTO |
-| **3.3** | (Optional) `IndexingPipelineSuperComponent` around `build_indexing_pipeline` only; **no KG inside**; explicit I/O maps for chunks + `documents_written` | Service can call SC; unit smoke test |
-| **3.4** | Failure parity: unsupported MIME / KG hard-fail still 4xx | Regression tests green |
+| Step | Work | Exit criteria | Status |
+|------|------|---------------|--------|
+| **3.1** | In-process tool `run_indexing_from_request` wrapping `IndexingIngestService` (meta stamp, KG hard-fail, session registry) | Tool parity with direct HTTP ingest tests | **Done** |
+| **3.2** | LangGraph path: `START → index_tool → …` behind feature flag; **index_tool = Coordinator gate** (non-LLM forced edge, not a Worker agent); keep direct service path default | Flag off = as-built; flag on = same DTO | **Done** (`INDEXING_VIA_AGENT_GATE`, default false) |
+| **3.3** | (Optional) `IndexingPipelineSuperComponent` around `build_indexing_pipeline` only; **no KG inside**; explicit I/O maps for chunks + `documents_written` | Service can call SC; unit smoke test | **Deferred** |
+| **3.4** | Failure parity: unsupported MIME / KG hard-fail still 4xx | Regression tests green | **Done** |
+
+**As-built (app / S3):** `app/agents/tools.py` (`run_indexing_from_request`); `app/agents/indexing_gate.py` (`START→index_gate→END`); API wire in `app/api/recommendations.py`; tests `tests/test_indexing_tool.py`.
 
 **Runtime dependency:** Phase 1 optional (tool can return technical body only). No Pgvector/Neo4j.
 
