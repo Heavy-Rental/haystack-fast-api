@@ -33,7 +33,9 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | — (S7.1 new) | `openspec/changes/archive/2026-08-12-s7-1-fleet-tool-catalog/` | Phase 7 fleet/needs in-process tool catalog + DI factory |
 | — (S7.3 + S7.4 new) | `openspec/changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/` | Phase 7 recommend LangGraph DAG + tool-free stub synthesis |
 | — (S7.5 + S7.6 new) | `openspec/changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/` | Phase 7 Call 2 graph enrich + tool_traces duration |
-| `app/agents/prompts.py` | `openspec/spdd/prompts/project-knowledge-agents.md` (index) | OpenSPDD first-class prompts |
+| — (S7.7 new) | `openspec/changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/` | Phase 7 recommend prompts A–L + tool DI / Delegator allowlist |
+| `app/agents/prompts.py` | `openspec/spdd/prompts/project-knowledge-agents.md` (index) | OpenSPDD first-class Stage-1 Q&A prompts |
+| `app/agents/recommend_prompts.py` | `openspec/spdd/prompts/recommend-agents.md` (index) | OpenSPDD first-class recommend A–L prompts (S7.7) |
 
 ## FR / requirement ID map
 
@@ -79,6 +81,8 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | S7.5 (as-built) | Equipment recommendation — Call 2 multi-agent enrich behind `RECOMMEND_VIA_AGENT_GRAPH` (same quote DTO) | `specs/equipment-recommendation/spec.md` + recommendation-pipeline contract; `app/services/session_recommend.py`; `tests/test_recommend_http_call2.py`; impl-plan **Phase 7 / S7.5** · archive `changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/` |
 | S7.6 (as-built) | Equipment recommendation — G-1 `tool_traces` (`role`, `need_id`, `duration_ms`) | `specs/equipment-recommendation/spec.md`; `app/agents/recommend_traces.py`; `tests/test_tool_traces.py`; impl-plan **Phase 7 / S7.6** · same archive |
 | S7.5/S7.6 change archive | Call 2 enrich + traces tasks | `changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/` |
+| S7.7 (as-built) | Equipment recommendation — A–L prompt contracts + tool DI + Delegator `worker_kind` allowlist | `specs/equipment-recommendation/spec.md` + design; `app/agents/recommend_prompts.py` · `tool_factory.py`; `tests/test_recommend_prompts.py` · `test_agent_tool_di.py`; impl-plan **Phase 7 / S7.7** · archive `changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/` |
+| S7.7 change archive | Prompts A–L + tool DI tasks | `changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/` |
 | FR-001 … FR-053 (+ NFR, demo) | Equipment recommendation parent | `specs/equipment-recommendation/spec.md` |
 | Domain invariants | Domain | `specs/domain/spec.md` |
 | Setup / layering / stack | Project setup | `specs/project-setup/spec.md` |

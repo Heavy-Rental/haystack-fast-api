@@ -24,7 +24,12 @@ from app.agents.recommend_nodes import (
     route_after_gate,
 )
 from app.agents.recommend_state import RecommendAgentState, empty_recommend_state
-from app.agents.tool_factory import RecommendToolCatalog, build_recommend_tool_catalog
+from app.agents.tool_factory import (
+    RecommendRuntime,
+    RecommendToolCatalog,
+    build_recommend_runtime,
+    build_recommend_tool_catalog,
+)
 from app.config import Settings, get_settings
 from app.services.need_decomposer import NeedDecomposer
 
@@ -37,11 +42,19 @@ def build_recommend_graph(
     fanout_cap: int = 4,
     price_fn: Callable[..., dict[str, Any]] | None = None,
     include_pricing: bool = True,
+    runtime: RecommendRuntime | None = None,
+    agent_mode: str | None = None,
+    rationale_fn: Callable[..., Any] | None = None,
 ):
-    """Compile the recommend C/W/D graph (stub synthesis, injected tools)."""
-    tools = catalog if catalog is not None else build_recommend_tool_catalog(
-        backend="fake", decomposer=decomposer
-    )
+    """Compile the recommend C/W/D graph (injected tools + prompt-backed stub)."""
+    if runtime is not None:
+        tools = runtime.catalog
+        mode = agent_mode if agent_mode is not None else runtime.agent_mode
+    else:
+        tools = catalog if catalog is not None else build_recommend_tool_catalog(
+            backend="fake", decomposer=decomposer
+        )
+        mode = agent_mode if agent_mode is not None else "stub"
     cap = max(1, int(fanout_cap))
 
     builder = StateGraph(RecommendAgentState)
@@ -62,7 +75,10 @@ def build_recommend_graph(
             include_pricing=include_pricing,
         ),
     )
-    builder.add_node("synthesis", make_synthesis_node())
+    builder.add_node(
+        "synthesis",
+        make_synthesis_node(agent_mode=str(mode), rationale_fn=rationale_fn),
+    )
     builder.add_edge(START, "check_gate")
     builder.add_conditional_edges(
         "check_gate",
@@ -90,15 +106,25 @@ def run_recommend_graph(
     fanout_cap: int | None = None,
     price_fn: Callable[..., dict[str, Any]] | None = None,
     settings: Settings | None = None,
+    runtime: RecommendRuntime | None = None,
+    agent_mode: str | None = None,
+    rationale_fn: Callable[..., Any] | None = None,
 ) -> RecommendAgentState:
     """Invoke one recommend-mode graph run (Call 2 uses this when flagged)."""
     cfg = settings or get_settings()
     cap = int(fanout_cap) if fanout_cap is not None else int(cfg.recommend_fanout_cap)
     cap = max(1, cap)
 
-    tools = catalog if catalog is not None else build_recommend_tool_catalog(
-        backend="fake", decomposer=decomposer
-    )
+    injected = runtime
+    if injected is None:
+        injected = build_recommend_runtime(
+            catalog=catalog,
+            decomposer=decomposer,
+            agent_mode=agent_mode
+            if agent_mode is not None
+            else (cfg.project_agent_mode or "stub"),
+        )
+    tools = injected.catalog
 
     graph = build_recommend_graph(
         source_text=source_text,
@@ -107,6 +133,9 @@ def run_recommend_graph(
         fanout_cap=cap,
         price_fn=price_fn,
         include_pricing=include_pricing,
+        runtime=injected,
+        agent_mode=agent_mode,
+        rationale_fn=rationale_fn,
     )
     initial = empty_recommend_state(
         user_id=user_id,

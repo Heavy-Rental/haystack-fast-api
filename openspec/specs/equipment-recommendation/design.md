@@ -27,6 +27,7 @@ See [`spec.md`](./spec.md) Purpose, FRs FR-001+, NFRs, acceptance criteria, doma
 | Knowledge graph | Ragas KG-1 (as-built after indexing) / KG-2 target |
 | Tool | Named in-process agent tool (S7.1 fleet catalog as-built; S7.3 graph invokes them) |
 | RecommendAgentState | Phase 7 STM partitions + F-2 validation (**S7.0 as-built**) |
+| Recommend A–L prompts | Isolated Coordinator / Delegator / Worker contracts (**S7.7 as-built**) |
 
 ## A — Approach
 
@@ -182,22 +183,23 @@ Storage: in-memory during build → JSON file; no Neo4j by default.
 
 See [`../recommendation-pipeline/design.md`](../recommendation-pipeline/design.md) full inventory. Key: `app/pipelines/*`, `app/services/recommendations.py`, `app/services/pricing_client.py`.
 
-### As-built multi-agent building blocks (Phase 7 S7.0–S7.6)
+### As-built multi-agent building blocks (Phase 7 S7.0–S7.7)
 
 | Module | Role |
 |--------|------|
 | `app/agents/recommend_state.py` | **S7.0** `RecommendAgentState` + F-2 `validate_state_transition` / partition writes |
 | `app/agents/fleet_tools.py` | **S7.1** `decompose_project_needs`, `retrieve_fleet_assets`, `filter_fleet_candidates`, `check_booking_availability` |
-| `app/agents/tool_factory.py` | **S7.1** DI catalog (`fake` seed default \| `sql` DTO backend); allowlist rejects unknown tools |
+| `app/agents/tool_factory.py` | **S7.1** DI catalog (`fake` seed default \| `sql` DTO backend); **S7.7** `ALLOWED_WORKER_KINDS` + `build_recommend_runtime` |
 | `app/agents/tools.py` | S3 `run_indexing_from_request`; S6 `predict_asset_price` |
 | `app/agents/recommend_graph.py` | **S7.3** `build_recommend_graph` / `run_recommend_graph` (isolated from Q&A) |
-| `app/agents/recommend_nodes.py` | **S7.3** gate, project worker, delegator, fleet/price workers, `execute_needs` |
-| `app/agents/recommend_synthesis.py` | **S7.4** tool-free stub Coordinator [8] |
+| `app/agents/recommend_nodes.py` | **S7.3** gate, project worker, delegator, fleet/price workers, `execute_needs`; **S7.7** `validate_work_plan` |
+| `app/agents/recommend_synthesis.py` | **S7.4** tool-free stub Coordinator [8]; **S7.7** prompt-backed rationale |
+| `app/agents/recommend_prompts.py` | **S7.7** A–L contracts (Coordinator / Delegator / Workers [5][6][7]) |
 | `app/services/session_recommend.py` | **S7.5** Call 2 flag `RECOMMEND_VIA_AGENT_GRAPH` → graph → same quote DTO |
 | `app/agents/recommend_traces.py` | **S7.6** G-1 `append_tool_trace` / `duration_ms` |
-| Tests | `tests/test_recommend_agent_state.py`, `test_fleet_tools.py`, `test_tool_factory.py`, `test_recommend_graph_order.py`, `test_recommend_fanout.py`, `test_recommend_synthesis.py`, `test_recommend_http_call2.py`, `test_tool_traces.py` |
+| Tests | `tests/test_recommend_agent_state.py`, `test_fleet_tools.py`, `test_tool_factory.py`, `test_recommend_graph_order.py`, `test_recommend_fanout.py`, `test_recommend_synthesis.py`, `test_recommend_http_call2.py`, `test_tool_traces.py`, `test_recommend_prompts.py`, `test_agent_tool_di.py` |
 
-Prompts A–L remain **S7.7**. Neo4j tools remain **S7.2**.
+Neo4j tools remain **S7.2**.
 
 ## O — Operations
 

@@ -11,8 +11,12 @@ implementation-plan Stage S7.4.
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from typing import Any, Callable
 
+from app.agents.recommend_prompts import (
+    apply_rationale_only,
+    stub_recommend_rationale,
+)
 from app.agents.recommend_state import (
     ROLE_COORDINATOR,
     RecommendAgentState,
@@ -103,7 +107,9 @@ def _pick_item(
         if price is None:
             continue
         description = str(need.get("description") or "").strip()
-        rationale = f"Stub merge: {description} → {asset_id}."
+        rationale = stub_recommend_rationale(
+            description=description, asset_id=str(asset_id)
+        )
         item = {
             "equipment_type": cand.get("equipment_type"),
             "asset_id": str(asset_id),
@@ -128,8 +134,15 @@ def _pick_item(
 
 def synthesize_recommendation(
     state: RecommendAgentState | dict[str, Any],
+    *,
+    agent_mode: str = "stub",
+    rationale_fn: Callable[..., Any] | None = None,
 ) -> RecommendAgentState:
-    """Coordinator [8]: stub-merge fleet + prices into ``results_by_need``."""
+    """Coordinator [8]: merge fleet + prices into ``results_by_need``.
+
+    ``asset_id`` / rates stay code-first (tool-backed). Optional ``rationale_fn``
+    (llm mode) may rewrite rationale text only via ``apply_rationale_only``.
+    """
     started = now()
     current = deepcopy(dict(state))
     results: list[dict[str, Any]] = []
@@ -152,6 +165,20 @@ def synthesize_recommendation(
                 slice_=slice_,
                 price_rows=prices.get(need_id),
             )
+            if (
+                item is not None
+                and str(agent_mode or "stub").strip().lower() == "llm"
+                and rationale_fn is not None
+            ):
+                try:
+                    payload = rationale_fn(
+                        description=str(need.get("description") or ""),
+                        asset_id=item.get("asset_id"),
+                        item=item,
+                    )
+                    item = apply_rationale_only(item, payload)
+                except Exception:
+                    pass
             results.append(
                 {"need_id": need_id, "item": item, "warnings": warnings}
             )

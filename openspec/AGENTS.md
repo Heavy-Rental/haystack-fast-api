@@ -80,7 +80,8 @@ S7.3 as-built: recommend LangGraph DAG (gate → [5] → Delegator → ([6]→[7
 S7.4 as-built: tool-free stub Coordinator synthesis [8]
 S7.5 as-built: Call 2 HTTP enrich behind RECOMMEND_VIA_AGENT_GRAPH (default off)
 S7.6 as-built: tool_traces role / need_id / duration_ms (not on quote DTO)
-S7.2 / S7.7 TARGET: Neo4j tools, prompts A–L
+S7.7 as-built: A–L recommend prompts (`app/agents/recommend_prompts.py`) + tool DI / Delegator allowlist
+S7.2 TARGET: Neo4j tools
 KG-2 equipment stockpile (Stage 2)
 ```
 

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added (S7.7 / Phase 7 — 2026-08-13)
+
+- Isolated recommend A–L prompt contracts in `app/agents/recommend_prompts.py` (Coordinator [8], Delegator, Workers [5][6][7]). Stage-1 Q&A `app/agents/prompts.py` unchanged.
+- Tool DI runtime: `build_recommend_runtime`, `ALLOWED_WORKER_KINDS`, `validate_work_plan` (`UnknownWorkerKindError`). Delegator + `execute_needs` fail closed on unknown `worker_kind`.
+- Stub rationale helper keeps golden merge text; LLM payloads can rewrite rationale only (`apply_rationale_only`).
+- Tests: `tests/test_recommend_prompts.py`, `tests/test_agent_tool_di.py`.
+- OpenSpec archive: `openspec/changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/`.
+
 ### Changed (specification/ removal — 2026-08-13)
 
 - Relocated the only unique spec, Spring JPA catalog, to `openspec/specs/spring-entity-repository/spec.md`.

@@ -4,11 +4,11 @@
 |-------|--------|
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
-| **Date** | 2026-08-12 |
-| **Version** | 3.8.0 |
+| **Date** | 2026-08-13 |
+| **Version** | 3.9.0 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.8.0** Phase 7 / **S7.5 + S7.6 as-built** (Call 2 graph enrich behind flag + `tool_traces` duration contract); **3.7.0** S7.3 + S7.4 as-built; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
+| **Revision notes** | **3.9.0** Phase 7 / **S7.7 as-built** (A–L recommend prompts + tool DI + Delegator `worker_kind` allowlist); **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -89,7 +89,8 @@ Pricing: pricing_client → app.services.pricing.model.predict_price (production
   Phase 7 graph + stub synthesis (S7.3–S7.4) — **as-built**
   HTTP Call 2 multi-agent enrich (S7.5) — **as-built** (`RECOMMEND_VIA_AGENT_GRAPH`, default off)
   tool_traces duration contract (S7.6) — **as-built**
-  Neo4j tools / prompts A–L (S7.2, S7.7) — **not wired**
+  Prompts A–L + tool DI (S7.7) — **as-built** (`recommend_prompts.py`; Delegator allowlist)
+  Neo4j tools (S7.2) — **not wired**
 Error JSON: {"error","message"} handlers already as-built
 Idempotency-Key / ingest correlation headers — **as-built S2a** (process-local store + middleware)
 Agent indexing tool + Coordinator gate [4] — **as-built S3** (flag default off)
@@ -423,7 +424,7 @@ Use **stage IDs** in PRs and test names. Every stage below that ships code has a
 | **S7.4** | Tool-free synthesis + F-2 validation | 7 | app | S7.3 | **yes** (**as-built**) |
 | **S7.5** | HTTP Call 2 multi-agent enrich (same quote DTO) | 7 | app | S7.4 | **yes** (**as-built**) |
 | **S7.6** | `tool_traces` / metrics (role, need_id, duration) | 7 | app | S7.3 | **yes** (**as-built**) |
-| **S7.7** | Prompts A–L + tool DI factory | 7 | app | S7.3–7.4 | **yes** |
+| **S7.7** | Prompts A–L + tool DI factory | 7 | app | S7.3–7.4 | **yes** (**as-built**) |
 | **S8** | Neo4j populate + real graph tools | 8 | config+app | seed SQL | optional |
 | **S9.1** | C2 202 jobs / SSE | 9 | app (+ Spring) | HTTP surface | **yes** (fake worker) |
 | **S9.2–S9.5** | Object storage / I2 default / D2 / C3 | 9 | split | metrics-driven | per sub-item |
@@ -691,7 +692,7 @@ Maps to dual-plane §4.1 [5]–[8], [`multi-agent-synthesis-recommend-output.md`
 | Tool-free synthesis | Coordinator [8] | **S7.4** | **As-built** |
 | HTTP Call 2 multi-agent enrich | API | **S7.5** | **As-built** |
 | tool_traces metrics | G-1 | **S7.6** | **As-built** |
-| Prompts A–L + DI | all agents | **S7.7** | Todo |
+| Prompts A–L + DI | all agents | **S7.7** | **As-built** |
 
 ---
 
@@ -807,16 +808,19 @@ Maps to dual-plane §4.1 [5]–[8], [`multi-agent-synthesis-recommend-output.md`
 
 ---
 
-#### Stage S7.7 — Prompts A–L + tool DI
+#### Stage S7.7 — Prompts A–L + tool DI — **as-built**
 
 | Field | Content |
 |-------|---------|
+| **Status** | **As-built (2026-08-13)** |
 | **Work** | Separate `RECOMMEND_*` prompts from Stage-1; factory injects tools; Delegator allowlist only; stub LLM |
-| **Exit criteria** | No prompt contamination; DI swaps fakes in tests |
+| **Exit criteria** | No prompt contamination; DI swaps fakes in tests — **met** |
 | **Test implementation** | (1) Q&A prompts still forbid invent fleet; (2) recommend synthesis prompt has no tools; (3) DI injects fake fleet; (4) Delegator rejects unknown worker_kind; (5) `PROJECT_AGENT_MODE=stub` path deterministic |
-| **Suggested modules** | `tests/test_recommend_prompts.py`, `tests/test_agent_tool_di.py` |
+| **Modules** | `app/agents/recommend_prompts.py`; `app/agents/tool_factory.py` (`ALLOWED_WORKER_KINDS`, `build_recommend_runtime`); `tests/test_recommend_prompts.py`, `tests/test_agent_tool_di.py` |
 | **CI job** | **default** |
 | **C/W/D** | A–L full contracts |
+| **OpenSpec** | archive `openspec/changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/` |
+| **Not in S7.7** | Neo4j tools (S7.2); production default flip; Worker [5] live vector/KG |
 
 ---
 
@@ -943,7 +947,7 @@ Every code-bearing PR **must** use the **PR description template** below (bare m
 | **PR-F** | S7.1 | Fleet tool catalog + DI factory | **Shipped** — fake fleet filter/availability; allowlist (**TDD** + contract) |
 | **PR-G** | S7.3–7.4 | Recommend graph + synthesis | **Shipped** — order, fan-out, golden results_by_need; **BDD** no invent / empty fleet |
 | **PR-H** | S7.5–7.6 | Call 2 multi-agent enrich + traces | **Shipped** — same quote DTO behind flag; role/`need_id`/`duration_ms` traces; **BDD** Call 2 quote happy path |
-| **PR-I** | S7.7 | Prompts A–L + tool DI | Recommend prompts isolated from Stage-1; Delegator allowlist; **TDD** stub LLM |
+| **PR-I** | S7.7 | Prompts A–L + tool DI | **Shipped** — recommend prompts isolated from Stage-1; Delegator allowlist; **TDD** stub LLM |
 
 ### PR description template (required bare minimum)
 
@@ -1154,7 +1158,8 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | Phase 7 / S7.3 recommend LangGraph DAG | **As-built** — gate → [5] → Delegator → ([6]→[7])×N; `RECOMMEND_FANOUT_CAP` |
 | Phase 7 / S7.4 tool-free synthesis | **As-built** — stub Coordinator [8]; empty fleet → `item: null`; no invent |
 | FR-010 service recommend (seed) | **As-built Call 2 MVP** via SessionRecommendService; S7.5 wires graph behind same DTO (`RECOMMEND_VIA_AGENT_GRAPH`) |
-| Full recommend multi-agent path | S7.0–S7.1 + S7.3–S7.6 **as-built**; S7.2 / S7.7 remain (Neo4j, prompts A–L) |
+| Phase 7 / S7.7 prompts A–L + tool DI | **As-built** — isolated recommend prompts; Delegator `worker_kind` allowlist; fake catalog inject |
+| Full recommend multi-agent path | S7.0–S7.1 + S7.3–S7.7 **as-built**; S7.2 remains (Neo4j tools) |
 | Pgvector / Neo4j populate | Not in app path |
 | Idempotency-Key on ingest | **As-built S2a** (process-local; multi-replica later) |
 | Stage catalog | **Specified** (§3.1) |

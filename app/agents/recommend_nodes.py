@@ -20,6 +20,13 @@ from app.agents.fleet_tools import (
     TOOL_RETRIEVE_FLEET_ASSETS,
     decompose_project_needs,
 )
+from app.agents.tool_factory import (
+    RecommendToolCatalog,
+    WORKER_KIND_FLEET,
+    WORKER_KIND_PRICING,
+    tools_for_worker,
+    validate_work_plan,
+)
 from app.agents.recommend_state import (
     ROLE_DELEGATOR,
     ROLE_FLEET_WORKER,
@@ -33,7 +40,6 @@ from app.agents.recommend_state import (
 )
 from app.agents.recommend_synthesis import synthesize_recommendation
 from app.agents.recommend_traces import append_tool_trace, elapsed_ms, now
-from app.agents.tool_factory import RecommendToolCatalog
 from app.agents.tools import TOOL_PREDICT_ASSET_PRICE
 from app.pipelines.expand_quantity import expand_needs_to_unit_dicts
 from app.services.need_decomposer import NeedDecomposer
@@ -158,23 +164,22 @@ def make_delegator() -> Callable[[RecommendAgentState], dict[str, Any]]:
                     continue
                 plan.append(
                     {
-                        "worker_kind": "fleet_worker",
+                        "worker_kind": WORKER_KIND_FLEET,
                         "need_id": need_id,
-                        "tool_allowlist": [
-                            TOOL_RETRIEVE_FLEET_ASSETS,
-                            TOOL_FILTER_FLEET_CANDIDATES,
-                            TOOL_CHECK_BOOKING_AVAILABILITY,
-                        ],
+                        "tool_allowlist": list(tools_for_worker(WORKER_KIND_FLEET)),
                     }
                 )
                 if include_pricing:
                     plan.append(
                         {
-                            "worker_kind": "pricing_worker",
+                            "worker_kind": WORKER_KIND_PRICING,
                             "need_id": need_id,
-                            "tool_allowlist": [TOOL_PREDICT_ASSET_PRICE],
+                            "tool_allowlist": list(
+                                tools_for_worker(WORKER_KIND_PRICING)
+                            ),
                         }
                     )
+        validate_work_plan(plan)
         started = now()
         proposed = deepcopy(_as_dict(state))
         proposed["work_plan"] = plan
@@ -197,7 +202,7 @@ def _need_ids_from_plan(state: RecommendAgentState | dict[str, Any]) -> list[str
     for item in plan:
         if not isinstance(item, dict):
             continue
-        if item.get("worker_kind") != "fleet_worker":
+        if item.get("worker_kind") != WORKER_KIND_FLEET:
             continue
         need_id = str(item.get("need_id") or "").strip()
         if need_id and need_id not in ids:
@@ -431,6 +436,7 @@ def make_execute_needs(
 ) -> Callable[[RecommendAgentState], dict[str, Any]]:
     def execute_needs(state: RecommendAgentState) -> dict[str, Any]:
         current: RecommendAgentState | dict[str, Any] = deepcopy(_as_dict(state))
+        validate_work_plan(current.get("work_plan") or [])
         need_ids = _need_ids_from_plan(current)
         cap = max(1, int(fanout_cap))
         run_include = bool(
@@ -457,9 +463,15 @@ def make_execute_needs(
     return execute_needs
 
 
-def make_synthesis_node() -> Callable[[RecommendAgentState], dict[str, Any]]:
+def make_synthesis_node(
+    *,
+    agent_mode: str = "stub",
+    rationale_fn: Callable[..., str] | None = None,
+) -> Callable[[RecommendAgentState], dict[str, Any]]:
     def synthesis(state: RecommendAgentState) -> dict[str, Any]:
-        result = synthesize_recommendation(state)
+        result = synthesize_recommendation(
+            state, agent_mode=agent_mode, rationale_fn=rationale_fn
+        )
         return {
             "recommendation": result["recommendation"],
             "tool_traces": result["tool_traces"],
