@@ -5,10 +5,10 @@
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
 | **Date** | 2026-08-13 |
-| **Version** | 3.12.0 |
+| **Version** | 3.13.0 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.12.0** Phase 4 / **S4 T0–T2 as-built (config repo)**; **3.11.0** S4 app live SQL; **3.10.0** S7.2; **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
+| **Revision notes** | **3.13.0** Phase 8 / **S8.1 T3 as-built (config pack)** `neo4j-populate` SQL→Cypher MERGE; **3.12.0** S4 T0–T2 config; **3.11.0** S4 app live SQL; **3.10.0** S7.2; **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -78,7 +78,7 @@ DocumentStore: InMemory per-ingest session (default)
     (memory default | pgvector flag; I2 production default TARGET)
 Fleet: seed in app (default); **S4 app as-built:** `FLEET_BACKEND=sql` → LiveSqlFleetBackend
   D1 merge-sync in devcontainer config (postgres_haystack_sync, ~60s poll on develop)
-Neo4j: compose service may exist; no populate-from-db job (S8); agent Neo4j tools **as-built S7.2** (fake / no-op)
+Neo4j: compose + **S8.1 T3** `neo4j-populate` (config pack as-built); agent Neo4j tools **as-built S7.2** (fake / no-op); live client **S8.3**
 Pricing: pricing_client → app.services.pricing.model.predict_price (production)
   Phase 1e (repository util/lead-time + adapter wiring) — **as-built**
   Phase 2a (app/services/pricing/ + per-asset clamp) — **as-built**
@@ -426,7 +426,7 @@ Use **stage IDs** in PRs and test names. Every stage below that ships code has a
 | **S7.5** | HTTP Call 2 multi-agent enrich (same quote DTO) | 7 | app | S7.4 | **yes** (**as-built**) |
 | **S7.6** | `tool_traces` / metrics (role, need_id, duration) | 7 | app | S7.3 | **yes** (**as-built**) |
 | **S7.7** | Prompts A–L + tool DI factory | 7 | app | S7.3–7.4 | **yes** (**as-built**) |
-| **S8** | Neo4j populate + real graph tools | 8 | config+app | seed SQL | optional |
+| **S8** | Neo4j populate + real graph tools | 8 | config+app | seed SQL | optional (**8.1 T3 as-built** config; 8.2–8.3 remain) |
 | **S9.1** | C2 202 jobs / SSE | 9 | app (+ Spring) | HTTP surface | **yes** (fake worker) |
 | **S9.2–S9.5** | Object storage / I2 default / D2 / C3 | 9 | split | metrics-driven | per sub-item |
 
@@ -848,9 +848,9 @@ Can partially overlap Phase 7 (SQL fleet tools first; Neo4j tools after populate
 
 | Step | Work | Where | Exit criteria |
 |------|------|-------|---------------|
-| **8.1 T3** | Job/script `populate-neo4j-from-haystack` — SQL → Cypher MERGE; label namespace vs DocumentStore | Config (+ optional app client) | Browser / query shows fleet after load |
-| **8.2 T4** | Trigger on successful merge or admin HTTP; never drop DocumentStore labels | Config | Incremental or scoped delete |
-| **8.3** | Wire real `neo4j_cypher_read` + populate trigger into tool module | App | Agents get graph context when available |
+| **8.1 T3** | Job/script `populate-neo4j-from-haystack` — SQL → Cypher MERGE; label namespace vs DocumentStore | Config | **As-built** on pack `develop`: Compose `neo4j-populate` + `populate_neo4j.py`; MERGE by `id`; `:Asset`/`:Booking`/`:Category` isolated from `:Document` |
+| **8.2 T4** | Trigger on successful merge or admin HTTP; never drop DocumentStore labels | Config | Incremental or scoped delete — **remaining** (pack polls every 60s; not hook-on-sync) |
+| **8.3** | Wire real `neo4j_cypher_read` + populate trigger into tool module | App | Agents get graph context when available — **remaining** (S7.2 fake/no-op) |
 
 #### Test implementation — Stage S8
 
@@ -858,11 +858,12 @@ Can partially overlap Phase 7 (SQL fleet tools first; Neo4j tools after populate
 |-----------|--------|
 | **Independently testable?** | **Yes — Neo4j harness; not full recommend E2E** |
 | **Does not need** | Spring saga, C2, production Pgvector |
-| **Test implementation (job)** | (1) Seed SQL → populate → Cypher count; (2) second run MERGE idempotent; (3) DocumentStore labels survive; (4) scoped delete fleet labels only |
-| **Test implementation (app tool)** | (1) Template query returns neighbors; (2) empty DB → []; (3) free-form Cypher rejected; (4) populate returns `job_id` non-blocking |
-| **Suggested modules** | config job tests; `tests/test_neo4j_tools_integration.py` |
+| **Test implementation (job, as-built in pack)** | Pack `specs/005-haystack-neo4j-populate/verification.md`: seed SQL → MERGE; second cycle idempotent; `:Document` survives rebuild |
+| **Test implementation (app tool)** | Still S7.2 fake: (1) template neighbors; (2) empty → []; (3) free-form Cypher rejected; (4) populate `job_id` non-blocking. Live client = **8.3** |
+| **Suggested modules** | config job: pack scripts; app: `tests/test_neo4j_tools.py` (fake); `tests/test_neo4j_tools_integration.py` (8.3) |
 | **CI job** | **neo4j** optional/nightly; default keeps S7.2 fake |
 | **Stubs** | Seed `postgres_haystack` directly; fixture Cypher |
+| **Config pack** | [Haystack-Fast-API `develop`](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API) · spec `005-haystack-neo4j-populate` |
 
 ---
 
@@ -959,6 +960,7 @@ Every code-bearing PR **must** use the **PR description template** below (bare m
 | **PR-J** | S7.2 | Neo4j tools (fake / no-op) | **Shipped** — templates only; free-form Cypher reject; populate non-blocking; K-3 skip; **BDD** recommend not blocked |
 | **PR-K** | S4 | Live SQL fleet backend (app) | **Shipped** — D0 map; `FLEET_BACKEND=sql`; `asset_id`=`assets.name`; fake default; **BDD** empty / live-hold |
 | **PR-K2** | S4 | Config T0–T2 as-built stamp | **Docs** — pack already ships 60s sync + allowlist + METRICS; alignment note on table names |
+| **PR-L** | S8.1 T3 | Config `neo4j-populate` | **As-built (config pack)** — SQL→Cypher MERGE; fleet labels isolated; this repo docs stamp only |
 
 ### PR description template (required bare minimum)
 
@@ -1173,7 +1175,8 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | Phase 7 / S7.4 tool-free synthesis | **As-built** — stub Coordinator [8]; empty fleet → `item: null`; no invent |
 | FR-010 service recommend (seed) | **As-built Call 2 MVP** via SessionRecommendService; S7.5 wires graph behind same DTO (`RECOMMEND_VIA_AGENT_GRAPH`) |
 | Phase 7 / S7.7 prompts A–L + tool DI | **As-built** — isolated recommend prompts; Delegator `worker_kind` allowlist; fake catalog inject |
-| Full recommend multi-agent path | S7.0–S7.7 **as-built** (S7.2 fake Neo4j tools); S8 live populate remains |
+| Full recommend multi-agent path | S7.0–S7.7 **as-built** (S7.2 fake Neo4j tools); S8.1 T3 populate **as-built (config)**; 8.2–8.3 remain |
+| Phase 8 / S8.1 T3 Neo4j populate | **As-built (config pack)** — `neo4j-populate` SQL→Cypher MERGE; fleet labels isolated |
 | Pgvector / Neo4j populate | Not in app path |
 | Idempotency-Key on ingest | **As-built S2a** (process-local; multi-replica later) |
 | Stage catalog | **Specified** (§3.1) |

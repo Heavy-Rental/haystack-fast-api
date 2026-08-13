@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed (S8.1 / T3 config — 2026-08-13)
+
+- Stamped Phase 8 **8.1 T3** as-built from the [Haystack-Fast-API pack](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API): Compose `neo4j-populate`, SQL → Cypher MERGE, fleet labels isolated from DocumentStore.
+- **S8.2 T4** (trigger-on-sync) and **S8.3** (app live Neo4j tools) remain.
+- Feasibility_Study implementation-plan **3.13.0**; dual-plane **2.8.1**. Archive `openspec/changes/archive/2026-08-13-s8-1-t3-neo4j-populate/`.
+
 ### Changed (S4 / Phase 4 config T0–T2 — 2026-08-13)
 
 - Documented config-repo T0–T2 as **as-built** on [Haystack-Fast-API pack `develop`](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API): 60s `postgres-haystack-sync`, `SYNC_TABLE_ALLOWLIST`, per-cycle METRICS.

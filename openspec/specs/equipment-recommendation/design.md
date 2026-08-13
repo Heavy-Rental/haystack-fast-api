@@ -201,7 +201,7 @@ See [`../recommendation-pipeline/design.md`](../recommendation-pipeline/design.m
 | `app/agents/recommend_traces.py` | **S7.6** G-1 `append_tool_trace` / `duration_ms` |
 | Tests | `tests/test_recommend_agent_state.py`, `test_fleet_tools.py`, `test_tool_factory.py`, `test_neo4j_tools.py`, `test_recommend_graph_order.py`, `test_recommend_fanout.py`, `test_recommend_synthesis.py`, `test_recommend_http_call2.py`, `test_tool_traces.py`, `test_recommend_prompts.py`, `test_agent_tool_di.py` |
 
-Live Neo4j populate remains **S8**.
+Live Neo4j **job** is **S8.1 T3 as-built** in the config pack (`neo4j-populate`). App `neo4j_cypher_read` / populate trigger remain fake until **S8.3**.
 
 ## O — Operations
 

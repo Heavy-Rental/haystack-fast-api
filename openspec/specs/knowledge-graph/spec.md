@@ -216,7 +216,7 @@ Project-spec indexing + KG assembly SHALL follow Part A. The project knowledge s
 ### Requirement: FR-KG-011 Equipment stockpile knowledge KG-2 (Stage 2 — deferred)
 Equipment stockpile knowledge (**KG-2**) SHALL be derived from Postgres (or an approved source) and persisted independently of user sessions.  
 (Trace: source FR-KG-011; was FR-KG-02)  
-**Status:** **Stage 2 — deferred.** Not as-built. **S7.2 as-built** ships fake in-process tools `neo4j_cypher_read` (templates) and `trigger_neo4j_populate` (non-blocking no-op) so recommend can skip an empty graph (K-3). Persist / live populate remains **S8**. See [`../equipment-recommendation/spec.md`](../equipment-recommendation/spec.md).
+**Status:** **Stage 2 — deferred** for in-app persist/load tools. **S8.1 T3 as-built (config pack):** `neo4j-populate` MERGEs fleet labels (`:Asset` / `:Booking` / `:Category`) from `postgres-haystack`; DocumentStore `:Document` isolated. **S7.2 as-built** still ships fake `neo4j_cypher_read` / `trigger_neo4j_populate` (K-3 skip). App live tools remain **S8.3**. See [`../equipment-recommendation/spec.md`](../equipment-recommendation/spec.md).
 
 #### Scenario: Deferred — persistent load without per-request Postgres (Stage 2)
 - **WHEN** Stage 2 is implemented and KG-2 is required online
@@ -324,6 +324,7 @@ The following product targets are **not** Stage-1 acceptance criteria. They rema
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **1.3.1** | 2026-08-13 | FR-KG-011: config **S8.1 T3** `neo4j-populate` as-built; in-app persist/tools still Stage 2 / S8.3 |
 | **1.3.0** | 2026-08-13 | FR-KG-011 still Stage 2; pointer that S7.2 ships fake `neo4j_cypher_read` / populate no-op (live persist = S8) |
 | **1.2.1** | 2026-08-12 | Vector tool: query/store embedding dim match; pytest conftest mock+384 isolation; no optional prereq markers for default suite |
 | **1.2.0** | 2026-08-12 | Call 3 = chatbot Q&A route; Call 2 recommend separate |
