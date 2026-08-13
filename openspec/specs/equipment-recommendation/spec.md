@@ -263,7 +263,7 @@ Routers MUST stay thin; pipeline construction and SQL live in services/pipelines
 - **FR-018b**: Empty candidate/document lists → predictable empty outputs, no unhandled exceptions.
 - **FR-019**: Ranking generation MUST use Haystack LLM generation + `PromptBuilder` (or equivalent).
 - **FR-019a**: (Target) SuperComponents for recurring subgraphs.
-- **FR-019b**: (Target) Tools with short unique name + NL description. **As-built (S7.1):** allowlisted in-process tools `decompose_project_needs`, `retrieve_fleet_assets`, `filter_fleet_candidates`, `check_booking_availability` (+ S6 `predict_asset_price`) via `app/agents/fleet_tools.py` + `tool_factory.py`. Free-form SQL/Cypher rejected. **As-built (S7.3):** tools are invoked from the recommend LangGraph DAG. **As-built (S7.5):** Call 2 HTTP may run that DAG behind `RECOMMEND_VIA_AGENT_GRAPH`.
+- **FR-019b**: (Target) Tools with short unique name + NL description. **As-built (S7.1):** allowlisted in-process tools `decompose_project_needs`, `retrieve_fleet_assets`, `filter_fleet_candidates`, `check_booking_availability` (+ S6 `predict_asset_price`) via `app/agents/fleet_tools.py` + `tool_factory.py`. Free-form SQL/Cypher rejected. **As-built (S7.2):** `neo4j_cypher_read` (templates only) + `trigger_neo4j_populate` (non-blocking no-op) via `app/agents/neo4j_tools.py`; empty graph → `[]`; recommend not blocked (K-3 skip). **As-built (S7.3):** tools are invoked from the recommend LangGraph DAG. **As-built (S7.5):** Call 2 HTTP may run that DAG behind `RECOMMEND_VIA_AGENT_GRAPH`.
 - **FR-019c**: Pipelines assembled with explicit `.add_component` / `.connect` / `.run`.
 - **FR-019d**: (Target) File ingest branch by media type.
 - **FR-019e**: (Target) Hybrid retrieval when catalog knowledge exists.
@@ -394,6 +394,33 @@ Recommend-mode agents SHALL use isolated A–L prompt contracts in `app/agents/r
 - **GIVEN** a work_plan item with `worker_kind="invent_stock"`
 - **WHEN** `validate_work_plan` or `execute_needs` runs
 - **THEN** `UnknownWorkerKindError` is raised and the item is not scheduled
+
+### Requirement: Neo4j KG-2 tools (S7.2 as-built)
+
+Recommend-mode SHALL expose allowlisted in-process KG-2 tools `neo4j_cypher_read` and `trigger_neo4j_populate` via `app/agents/neo4j_tools.py` + `tool_factory.py`. `neo4j_cypher_read` MUST accept only named templates (`asset_neighbors`, `assets_by_category`, `compatible_attachments`) and MUST reject free-form `cypher` / `query` / `raw_cypher` / `sql`. An empty backend MUST return `[]`. `trigger_neo4j_populate` MUST return a `job_id` immediately with `blocking=false` and MUST NOT run on the recommend hot path. Delegator K-3: when the Neo4j backend is empty/unavailable, fleet `tool_allowlist` MUST omit `neo4j_cypher_read` and record `skip_tools`; required SQL fleet tools MUST still run. Recommend MUST NOT invent `asset_id` from graph neighbors. Live Neo4j populate remains **S8**. Default CI uses `FakeNeo4jBackend` (no `neo4j` package).
+
+**Status:** **as-built (S7.2)**. Runtime: `neo4j_tools.py`. Tests: `tests/test_neo4j_tools.py`.
+
+#### Scenario: Empty graph returns empty list
+- **GIVEN** a `FakeNeo4jBackend` with no nodes
+- **WHEN** `neo4j_cypher_read` runs `asset_neighbors`
+- **THEN** the result is `[]`
+
+#### Scenario: Free-form Cypher is rejected
+- **WHEN** `neo4j_cypher_read` is called with `cypher` / `query` / `raw_cypher`
+- **THEN** `FreeFormCypherRejected` is raised
+
+#### Scenario: Populate trigger is non-blocking
+- **WHEN** `trigger_neo4j_populate` runs
+- **THEN** a `job_id` is returned immediately
+- **AND** `blocking` is false
+
+#### Scenario: Recommend is not blocked when Neo4j is empty
+- **GIVEN** the default fake catalog (empty graph)
+- **WHEN** `run_recommend_graph` runs with `indexing_ok` true
+- **THEN** fleet SQL tools still run
+- **AND** `neo4j_cypher_read` is skipped
+- **AND** `results_by_need` is still produced
 
 ### Requirement: Pricing integration (FR-020–FR-024)
 
@@ -678,6 +705,7 @@ Architecture, Ragas pattern, deps, and offline pipeline sketch: [`design.md`](./
 | 0.9.2 | 2026-08-07 | KG as-built pointer; sequential map |
 | 1.0.0 | 2026-08-10 | Migrated to OpenSpec under `openspec/specs/equipment-recommendation/`; architecture/day plan/deployment → design.md |
 | 1.1.0 | 2026-08-12 | **S7.0 + S7.1 as-built:** `RecommendAgentState` + F-2 partition validation; allowlisted fleet/needs tools + DI factory (FR-019b note). Graph (S7.3+) still TARGET. Archives `changes/archive/2026-08-12-s7-0-recommend-agent-state/`, `.../s7-1-fleet-tool-catalog/`. |
+| 1.5.0 | 2026-08-13 | **S7.2 as-built:** `neo4j_cypher_read` (templates only) + `trigger_neo4j_populate` (non-blocking no-op); K-3 skip when graph empty. Live populate remains S8. Archive `changes/archive/2026-08-13-s7-2-neo4j-tools/`. |
 | 1.4.0 | 2026-08-13 | **S7.7 as-built:** isolated A–L recommend prompts + tool DI runtime + Delegator `worker_kind` allowlist. Archive `changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/`. |
 | 1.3.0 | 2026-08-12 | **S7.5 + S7.6 as-built:** Call 2 graph enrich behind `RECOMMEND_VIA_AGENT_GRAPH` (same quote DTO; gate 400); G-1 `tool_traces` duration contract. Archive `changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/`. |
 | 1.2.0 | 2026-08-12 | **S7.3 + S7.4 as-built:** recommend LangGraph DAG (gate → [5] → Delegator → ([6]→[7])×N) + tool-free stub synthesis [8]. HTTP Call 2 still service MVP (S7.5). Archive `changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/`. |

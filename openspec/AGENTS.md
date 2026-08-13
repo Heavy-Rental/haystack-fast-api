@@ -76,13 +76,14 @@ Spring Boot (RestClient / WebClient saga)
         ─ ─ ─ ─ multi-agent recommend building blocks ─ ─ ─ ─
 S7.0 as-built: RecommendAgentState + F-2 partition validation
 S7.1 as-built: fleet/needs allowlisted tools + DI factory (fake/SQL)
+S7.2 as-built: neo4j_cypher_read (templates) + trigger_neo4j_populate (fake / no-op); K-3 skip
 S7.3 as-built: recommend LangGraph DAG (gate → [5] → Delegator → ([6]→[7])×N)
 S7.4 as-built: tool-free stub Coordinator synthesis [8]
 S7.5 as-built: Call 2 HTTP enrich behind RECOMMEND_VIA_AGENT_GRAPH (default off)
 S7.6 as-built: tool_traces role / need_id / duration_ms (not on quote DTO)
 S7.7 as-built: A–L recommend prompts (`app/agents/recommend_prompts.py`) + tool DI / Delegator allowlist
-S7.2 TARGET: Neo4j tools
-KG-2 equipment stockpile (Stage 2)
+S8 TARGET: live Neo4j populate + real KG-2 client
+KG-2 equipment stockpile persist (Stage 2 / S8)
 ```
 
 **Portal mapping (Spring handoff):** `Feasibility_Study_Spring/portal-to-haystack-mapping.md`  

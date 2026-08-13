@@ -34,6 +34,10 @@ from app.agents.fleet_tools import (
     TOOL_RETRIEVE_FLEET_ASSETS,
     UnknownToolError,
 )
+from app.agents.neo4j_tools import (
+    TOOL_NEO4J_CYPHER_READ,
+    TOOL_TRIGGER_NEO4J_POPULATE,
+)
 from app.agents.tool_factory import (
     RECOMMEND_TOOL_ALLOWLIST,
     build_recommend_tool_catalog,
@@ -74,6 +78,8 @@ def test_fake_catalog_exposes_fleet_tools() -> None:
         TOOL_FILTER_FLEET_CANDIDATES,
         TOOL_CHECK_BOOKING_AVAILABILITY,
         TOOL_PREDICT_ASSET_PRICE,
+        TOOL_NEO4J_CYPHER_READ,
+        TOOL_TRIGGER_NEO4J_POPULATE,
     ):
         assert name in catalog
         tool = catalog.get(name)
@@ -122,3 +128,22 @@ def test_catalog_without_pricing_tool() -> None:
     # Still allowlisted globally, but not registered → specific error
     with pytest.raises(UnknownToolError, match="not registered"):
         catalog.get(TOOL_PREDICT_ASSET_PRICE)
+
+
+def test_catalog_exposes_neo4j_tools() -> None:
+    catalog = build_recommend_tool_catalog(backend="fake")
+    assert TOOL_NEO4J_CYPHER_READ in RECOMMEND_TOOL_ALLOWLIST
+    assert TOOL_TRIGGER_NEO4J_POPULATE in RECOMMEND_TOOL_ALLOWLIST
+    assert catalog.get(TOOL_NEO4J_CYPHER_READ)(template="asset_neighbors") == []
+    job = catalog.get(TOOL_TRIGGER_NEO4J_POPULATE)()
+    assert job["blocking"] is False
+    assert str(job["job_id"]).startswith("neo4j_pop_")
+
+
+def test_catalog_without_neo4j_tools() -> None:
+    catalog = build_recommend_tool_catalog(
+        backend="fake", include_neo4j_tools=False
+    )
+    assert TOOL_NEO4J_CYPHER_READ not in catalog
+    with pytest.raises(UnknownToolError, match="not registered"):
+        catalog.get(TOOL_NEO4J_CYPHER_READ)

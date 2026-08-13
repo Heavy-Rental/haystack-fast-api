@@ -20,10 +20,15 @@ from app.agents.fleet_tools import (
     TOOL_RETRIEVE_FLEET_ASSETS,
     decompose_project_needs,
 )
+from app.agents.neo4j_tools import (
+    TEMPLATE_ASSET_NEIGHBORS,
+    TOOL_NEO4J_CYPHER_READ,
+)
 from app.agents.tool_factory import (
     RecommendToolCatalog,
     WORKER_KIND_FLEET,
     WORKER_KIND_PRICING,
+    neo4j_available,
     tools_for_worker,
     validate_work_plan,
 )
@@ -150,10 +155,13 @@ def make_project_worker(
     return project_worker
 
 
-def make_delegator() -> Callable[[RecommendAgentState], dict[str, Any]]:
+def make_delegator(
+    catalog: RecommendToolCatalog | None = None,
+) -> Callable[[RecommendAgentState], dict[str, Any]]:
     def delegator(state: RecommendAgentState) -> dict[str, Any]:
         include_pricing = bool((_as_dict(state).get("run") or {}).get("include_pricing", True))
         needs = (_as_dict(state).get("project") or {}).get("needs") or []
+        graph_ok = neo4j_available(catalog)
         plan: list[dict[str, Any]] = []
         if indexing_ok(state):
             for need in needs:
@@ -162,13 +170,21 @@ def make_delegator() -> Callable[[RecommendAgentState], dict[str, Any]]:
                 need_id = str(need.get("need_id") or "").strip()
                 if not need_id:
                     continue
-                plan.append(
-                    {
-                        "worker_kind": WORKER_KIND_FLEET,
-                        "need_id": need_id,
-                        "tool_allowlist": list(tools_for_worker(WORKER_KIND_FLEET)),
-                    }
-                )
+                fleet_tools = list(tools_for_worker(WORKER_KIND_FLEET))
+                fleet_item: dict[str, Any] = {
+                    "worker_kind": WORKER_KIND_FLEET,
+                    "need_id": need_id,
+                    "tool_allowlist": fleet_tools,
+                }
+                if graph_ok:
+                    if TOOL_NEO4J_CYPHER_READ not in fleet_item["tool_allowlist"]:
+                        fleet_item["tool_allowlist"] = [
+                            *fleet_tools,
+                            TOOL_NEO4J_CYPHER_READ,
+                        ]
+                else:
+                    fleet_item["skip_tools"] = [TOOL_NEO4J_CYPHER_READ]
+                plan.append(fleet_item)
                 if include_pricing:
                     plan.append(
                         {
@@ -222,6 +238,36 @@ def _find_need(
         if isinstance(need, dict) and str(need.get("need_id")) == need_id:
             return need
     return {"need_id": need_id}
+
+
+def _fleet_plan_item(
+    state: RecommendAgentState | dict[str, Any], need_id: str
+) -> dict[str, Any]:
+    for item in _as_dict(state).get("work_plan") or []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("worker_kind") != WORKER_KIND_FLEET:
+            continue
+        if str(item.get("need_id") or "") == need_id:
+            return item
+    return {}
+
+
+def _should_run_neo4j(
+    state: RecommendAgentState | dict[str, Any],
+    need_id: str,
+    catalog: RecommendToolCatalog,
+) -> bool:
+    if TOOL_NEO4J_CYPHER_READ not in catalog:
+        return False
+    item = _fleet_plan_item(state, need_id)
+    skip = item.get("skip_tools") or []
+    if TOOL_NEO4J_CYPHER_READ in skip:
+        return False
+    allow = item.get("tool_allowlist")
+    if allow is not None and TOOL_NEO4J_CYPHER_READ not in allow:
+        return False
+    return neo4j_available(catalog)
 
 
 def run_fleet_worker(
@@ -285,14 +331,48 @@ def run_fleet_worker(
         duration_ms=elapsed_ms(tool_started),
     )
 
+    available = list((split or {}).get("available") or [])
+    graph_notes: list[dict[str, Any]] = []
+    source_tables = ["assets", "bookings"]
+    if _should_run_neo4j(working, need_id, catalog):
+        read = catalog.get(TOOL_NEO4J_CYPHER_READ)
+        seen: set[str] = set()
+        for cand in available:
+            asset_id = str((cand or {}).get("asset_id") or "")
+            if not asset_id:
+                continue
+            tool_started = now()
+            hits = list(
+                read(template=TEMPLATE_ASSET_NEIGHBORS, asset_id=asset_id) or []
+            )
+            working["tool_traces"] = _append_trace(
+                working,
+                role="worker",
+                node="fleet_worker",
+                need_id=need_id,
+                tool=TOOL_NEO4J_CYPHER_READ,
+                status="ok",
+                duration_ms=elapsed_ms(tool_started),
+            )
+            for note in hits:
+                note_id = str((note or {}).get("id") or "")
+                if note_id and note_id in seen:
+                    continue
+                if note_id:
+                    seen.add(note_id)
+                graph_notes.append(note)
+        if graph_notes:
+            source_tables.append("kg-2")
+
     # Persist traces first (fleet role may write tool_traces), then fleet slice.
     traced = apply_partition_write(ROLE_FLEET_WORKER, state, working, need_id=need_id)
     updated = write_fleet_slice(
         traced,
         need_id,
-        candidates=list((split or {}).get("available") or []),
+        candidates=available,
         unavailable=list((split or {}).get("unavailable") or []),
-        source_tables=["assets", "bookings"],
+        source_tables=source_tables,
+        graph_notes=graph_notes or None,
     )
     done = deepcopy(_as_dict(updated))
     done["tool_traces"] = _append_trace(

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added (S7.2 / Phase 7 — 2026-08-13)
+
+- Allowlisted in-process KG-2 tools in `app/agents/neo4j_tools.py`: `neo4j_cypher_read` (templates only) and `trigger_neo4j_populate` (non-blocking `job_id` / no-op).
+- `FakeNeo4jBackend` default is empty; fixture inject for template tests. Free-form Cypher/SQL kwargs raise `FreeFormCypherRejected`; unknown templates raise `UnknownNeo4jTemplateError`.
+- Delegator K-3 skip: empty graph omits `neo4j_cypher_read` from fleet allowlist (`skip_tools`). Recommend is not blocked. Fleet worker attaches optional `graph_notes` when a fixture graph is present.
+- Tests: `tests/test_neo4j_tools.py`, fixture `tests/fixtures/recommend/neo4j_graph.json`.
+- OpenSpec archive: `openspec/changes/archive/2026-08-13-s7-2-neo4j-tools/`.
+
 ### Added (S7.7 / Phase 7 — 2026-08-13)
 
 - Isolated recommend A–L prompt contracts in `app/agents/recommend_prompts.py` (Coordinator [8], Delegator, Workers [5][6][7]). Stage-1 Q&A `app/agents/prompts.py` unchanged.

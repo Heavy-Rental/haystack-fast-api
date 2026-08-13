@@ -1,0 +1,34 @@
+{
+  "nodes": [
+    {
+      "id": "AST-SL-001",
+      "label": "Asset",
+      "category": "scissor lift",
+      "properties": {"equipment_type": "Scissors Lift"}
+    },
+    {
+      "id": "AST-SL-002",
+      "label": "Asset",
+      "category": "scissor lift",
+      "properties": {"equipment_type": "Scissors Lift"}
+    },
+    {
+      "id": "ATT-SL-RAIL",
+      "label": "Attachment",
+      "category": "guardrail",
+      "properties": {"name": "Guardrail kit"}
+    }
+  ],
+  "relationships": [
+    {
+      "from": "AST-SL-001",
+      "to": "ATT-SL-RAIL",
+      "type": "HAS_ATTACHMENT"
+    },
+    {
+      "from": "AST-SL-001",
+      "to": "AST-SL-002",
+      "type": "SAME_CATEGORY"
+    }
+  ]
+}

@@ -101,6 +101,7 @@ class WorkPlanItem(TypedDict, total=False):
     worker_kind: str
     need_id: str
     tool_allowlist: list[str]
+    skip_tools: list[str]
 
 
 class FleetCandidate(TypedDict, total=False):
@@ -118,6 +119,7 @@ class FleetSlice(TypedDict, total=False):
     candidates: list[FleetCandidate]
     unavailable: list[FleetCandidate]
     source_tables: list[str]
+    graph_notes: list[dict[str, Any]]
 
 
 class PriceRow(TypedDict, total=False):
@@ -405,15 +407,19 @@ def write_fleet_slice(
     candidates: list[dict[str, Any]] | None = None,
     unavailable: list[dict[str, Any]] | None = None,
     source_tables: list[str] | None = None,
+    graph_notes: list[dict[str, Any]] | None = None,
 ) -> RecommendAgentState:
     """Convenience: legal Fleet Worker write for one need_id."""
     proposed = deepcopy(_as_dict(current))
     fleet = dict(proposed.get("fleet_by_need") or {})
-    fleet[need_id] = {
+    slice_: dict[str, Any] = {
         "candidates": list(candidates or []),
         "unavailable": list(unavailable or []),
         "source_tables": list(source_tables or ["assets", "bookings"]),
     }
+    if graph_notes is not None:
+        slice_["graph_notes"] = list(graph_notes)
+    fleet[need_id] = slice_
     proposed["fleet_by_need"] = fleet
     return apply_partition_write(
         ROLE_FLEET_WORKER, current, proposed, need_id=need_id

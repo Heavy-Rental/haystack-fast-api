@@ -65,7 +65,7 @@ def build_recommend_graph(
             source_text, catalog=tools, decomposer=decomposer
         ),
     )
-    builder.add_node("delegator", make_delegator())
+    builder.add_node("delegator", make_delegator(catalog=tools))
     builder.add_node(
         "execute_needs",
         make_execute_needs(
