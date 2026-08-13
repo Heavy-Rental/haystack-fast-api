@@ -1,0 +1,20 @@
+{
+  "items": [
+    {
+      "needId": "need_access",
+      "equipment": {
+        "id": "AST-SL-001",
+        "name": "Scissors Lift",
+        "baseDailyRate": 185.0
+      }
+    },
+    {
+      "needId": "need_earthwork",
+      "equipment": {
+        "id": "AST-EX-001",
+        "name": "Excavator",
+        "baseDailyRate": 185.0
+      }
+    }
+  ]
+}

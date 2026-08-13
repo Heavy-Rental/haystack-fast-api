@@ -1,7 +1,9 @@
 """Call 2: recommend / quote from a Call 1 project-knowledge session.
 
-Uses FR-010 ``RecommendationService`` (seed fleet + pricing) grounded on session
-text/meta. Does **not** invent asset_id or rates.
+Default: FR-010 ``RecommendationService`` (seed fleet + pricing).
+S7.5: ``RECOMMEND_VIA_AGENT_GRAPH=true`` runs the C/W/D graph and maps
+``results_by_need`` onto the **same** quote DTO. Does **not** invent
+asset_id or rates. ``tool_traces`` stay on graph state (not the HTTP body).
 """
 
 from __future__ import annotations
@@ -9,16 +11,24 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import date
+from typing import Any, Callable
 
+from app.agents.recommend_graph import run_recommend_graph
+from app.agents.recommend_state import indexing_ok as state_indexing_ok
+from app.agents.tool_factory import RecommendToolCatalog
+from app.config import Settings, get_settings
+from app.core.exceptions import BadRequestError
 from app.schemas.recommend_quote import (
     AssetRecommendResponse,
     EquipmentQuote,
     RecommendQuoteItem,
 )
 from app.schemas.recommendations import (
+    NeedResult,
     RecommendFromProjectSpecResponse,
     RecommendOptions,
 )
+from app.services.need_decomposer import NeedDecomposer
 from app.services.project_knowledge_session import (
     ProjectKnowledgeSession,
     get_project_knowledge_registry,
@@ -174,11 +184,58 @@ def map_recommend_to_quote(
     )
 
 
+def results_to_recommend_response(
+    state: dict[str, Any],
+    *,
+    start_date: date | None,
+    end_date: date | None,
+) -> RecommendFromProjectSpecResponse:
+    """Map graph ``recommendation.results_by_need`` to the FR-010 envelope."""
+    rec = state.get("recommendation") or {}
+    rows = rec.get("results_by_need") or []
+    return RecommendFromProjectSpecResponse(
+        recommendation_id=f"rec_{uuid.uuid4().hex}",
+        start_date=start_date,
+        end_date=end_date,
+        results_by_need=[NeedResult.model_validate(row) for row in rows],
+    )
+
+
+def _session_indexing_ok(session: ProjectKnowledgeSession) -> bool:
+    """Session existence implies gate success unless meta overrides."""
+    meta = session.meta or {}
+    if "indexing_ok" in meta:
+        return bool(meta["indexing_ok"])
+    return True
+
+
 class SessionRecommendService:
     """Recommend quote for an existing Call 1 session."""
 
-    def __init__(self, recommendation_service: RecommendationService | None = None) -> None:
+    def __init__(
+        self,
+        recommendation_service: RecommendationService | None = None,
+        *,
+        catalog: RecommendToolCatalog | None = None,
+        decomposer: NeedDecomposer | None = None,
+        price_fn: Callable[..., dict[str, Any]] | None = None,
+        fanout_cap: int | None = None,
+        via_agent_graph: bool | None = None,
+        settings: Settings | None = None,
+    ) -> None:
         self._recommend = recommendation_service or RecommendationService()
+        self._catalog = catalog
+        self._decomposer = decomposer
+        self._price_fn = price_fn
+        self._fanout_cap = fanout_cap
+        self._via_agent_graph = via_agent_graph
+        self._settings = settings
+
+    def _use_agent_graph(self) -> bool:
+        if self._via_agent_graph is not None:
+            return bool(self._via_agent_graph)
+        cfg = self._settings or get_settings()
+        return bool(cfg.recommend_via_agent_graph)
 
     def recommend(
         self,
@@ -198,13 +255,24 @@ class SessionRecommendService:
         start = _parse_iso_date(meta.get("tentative_start_date"))
         end = _parse_iso_date(meta.get("tentative_end_date"))
 
-        recommend = self._recommend.recommend_from_project_spec(
-            project_text=project_text,
-            file_text=None,
-            start_date=start,
-            end_date=end,
-            options=RecommendOptions(include_pricing=include_pricing),
-        )
+        if self._use_agent_graph():
+            recommend = self._recommend_via_graph(
+                session=session,
+                user_id=user_id,
+                ingest_id=ingest_id,
+                project_text=project_text,
+                start=start,
+                end=end,
+                include_pricing=include_pricing,
+            )
+        else:
+            recommend = self._recommend.recommend_from_project_spec(
+                project_text=project_text,
+                file_text=None,
+                start_date=start,
+                end_date=end,
+                options=RecommendOptions(include_pricing=include_pricing),
+            )
         return map_recommend_to_quote(
             user_id=user_id,
             ingest_id=ingest_id,
@@ -212,4 +280,38 @@ class SessionRecommendService:
             recommend=recommend,
             session=session,
             top_k=top_k,
+        )
+
+    def _recommend_via_graph(
+        self,
+        *,
+        session: ProjectKnowledgeSession,
+        user_id: str,
+        ingest_id: str,
+        project_text: str,
+        start: date | None,
+        end: date | None,
+        include_pricing: bool,
+    ) -> RecommendFromProjectSpecResponse:
+        gate_ok = _session_indexing_ok(session)
+        state = run_recommend_graph(
+            user_id=user_id,
+            ingest_id=ingest_id,
+            indexing_ok=gate_ok,
+            source_text=project_text,
+            start_date=start.isoformat() if start is not None else None,
+            end_date=end.isoformat() if end is not None else None,
+            include_pricing=include_pricing,
+            catalog=self._catalog,
+            decomposer=self._decomposer,
+            fanout_cap=self._fanout_cap,
+            price_fn=self._price_fn,
+            settings=self._settings,
+        )
+        if not state_indexing_ok(state):
+            raise BadRequestError(
+                "indexing gate refused: indexing_ok=false; no recommend"
+            )
+        return results_to_recommend_response(
+            state, start_date=start, end_date=end
         )

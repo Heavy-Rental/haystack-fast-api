@@ -1,6 +1,6 @@
 """Read-only mapping onto Spring-Boot-owned ``assets`` (primary_snapshot).
 
-Only the columns pricing actually reads (specification/SPEC-dynamic-pricing.md
+Only the columns pricing actually reads (openspec/specs/dynamic-pricing/spec.md
 §5.3): category join, ``period_utilization`` spec-banding inputs
 (``capacity``/``platform_height``), the model feature ``condition``, and the
 guardrail bounds ``min_daily_rate``/``max_daily_rate`` (read by Phase 2a, not

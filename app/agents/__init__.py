@@ -1,4 +1,4 @@
-"""LangGraph multi-agent orchestration (Stage 1 + S3 + S6 + S7.0–S7.4)."""
+"""LangGraph multi-agent orchestration (Stage 1 + S3 + S6 + S7.0–S7.6)."""
 
 from app.agents.fleet_tools import (
     TOOL_CHECK_BOOKING_AVAILABILITY,

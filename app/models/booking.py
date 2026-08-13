@@ -1,10 +1,10 @@
 """Read-only mapping onto Spring-Boot-owned ``bookings`` (primary_snapshot).
 
 Only the columns ``period_utilization``'s overlap query needs
-(specification/SPEC-dynamic-pricing.md §5.2/§5.3): the rental window and
+(openspec/specs/dynamic-pricing/spec.md §5.2/§5.3): the rental window and
 ``status`` (drives the live-hold status filter). No asset link here — that's
 on ``BookingItem`` (see app/models/booking_item.py), not ``Booking`` itself,
-per specification/SPEC-spring-entity-repository.md §7's relationship map.
+per openspec/specs/spring-entity-repository/spec.md §7's relationship map.
 """
 
 from __future__ import annotations

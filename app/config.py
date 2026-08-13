@@ -97,6 +97,14 @@ class Settings(BaseSettings):
     # 1 = serialize each need pipeline (fleet→price); >=2 batches fleets first.
     recommend_fanout_cap: int = Field(default=4, alias="RECOMMEND_FANOUT_CAP", ge=1)
 
+    # Phase 7 / S7.5: Call 2 getassetrecommendations via recommend LangGraph.
+    # false (default) = SessionRecommendService → RecommendationService MVP
+    # true  = run_recommend_graph → same quote DTO (no invent)
+    recommend_via_agent_graph: bool = Field(
+        default=False,
+        alias="RECOMMEND_VIA_AGENT_GRAPH",
+    )
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:

@@ -59,9 +59,12 @@ Spring Boot (RestClient / WebClient saga)
      POST /internal/v1/recommendations/project-knowledge/getassetrecommendations
        body: user_id + ingest_id + optional query
        SessionRecommendService → RecommendationService (seed fleet + pricing)
+         optional S7.5: RECOMMEND_VIA_AGENT_GRAPH=true
+           → run_recommend_graph → same quote DTO (gate refuse → 400)
        → quote envelope: quoteRef, items[].equipment, rates, estimatedTotal
        → Spring maps Call 2 body back to React as primary response
        → MUST NOT invent asset_id or rates
+       → MUST NOT put tool_traces on this body (S7.6 stays on graph state)
 
   └─ Call 3 CHATBOT Q&A (optional follow-ups) ───────────────────────
      POST /internal/v1/recommendations/project-knowledge/query
@@ -75,8 +78,9 @@ S7.0 as-built: RecommendAgentState + F-2 partition validation
 S7.1 as-built: fleet/needs allowlisted tools + DI factory (fake/SQL)
 S7.3 as-built: recommend LangGraph DAG (gate → [5] → Delegator → ([6]→[7])×N)
 S7.4 as-built: tool-free stub Coordinator synthesis [8]
-S7.2 / S7.5–S7.7 TARGET: Neo4j tools, HTTP Call 2 enrich, traces metrics, prompts A–L
-C/W/D graph can replace MVP RecommendationService behind same Call 2 DTO (S7.5)
+S7.5 as-built: Call 2 HTTP enrich behind RECOMMEND_VIA_AGENT_GRAPH (default off)
+S7.6 as-built: tool_traces role / need_id / duration_ms (not on quote DTO)
+S7.2 / S7.7 TARGET: Neo4j tools, prompts A–L
 KG-2 equipment stockpile (Stage 2)
 ```
 
@@ -96,7 +100,7 @@ KG-2 equipment stockpile (Stage 2)
 | **4** | [`specs/project-setup/spec.md`](./specs/project-setup/spec.md) | Stack, env, layering (behaviour); **default pytest isolation** |
 | **5** | [`specs/project-setup/design.md`](./specs/project-setup/design.md) | Layout, uv runbooks, `conftest` isolation table |
 
-**Pytest (as-built):** `uv run pytest` / `uv run pytest tests/ -q` is the full default suite — **no** optional markers or external prereqs. `tests/conftest.py` forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `PROJECT_AGENT_MODE=stub`, and a temp `KG_ARTIFACT_DIR`. Query embedders for vector tools must match the session store dimension (see knowledge-graph + indexing specs).
+**Pytest (as-built):** `uv run pytest` / `uv run pytest tests/ -q` is the full default suite — **no** optional markers or external prereqs. `tests/conftest.py` forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `INDEXING_DOCUMENT_STORE=memory`, `RECOMMEND_VIA_AGENT_GRAPH=false`, `PROJECT_AGENT_MODE=stub`, and a temp `KG_ARTIFACT_DIR`. Query embedders for vector tools must match the session store dimension (see knowledge-graph + indexing specs).
 
 ---
 
@@ -173,4 +177,4 @@ KG-2 equipment stockpile (Stage 2)
 
 ## Legacy path
 
-Old flat files lived under `specification/`. That directory now holds **redirect stubs** only. Prefer `openspec/` for all new work.
+The old flat `specification/` tree was **removed on 2026-08-13**. Do not recreate it. Capability behaviour lives under `specs/`. Historical filename map: [`TRACEABILITY.md`](./TRACEABILITY.md). Spring JPA schema read-copy: [`specs/spring-entity-repository/spec.md`](./specs/spring-entity-repository/spec.md).

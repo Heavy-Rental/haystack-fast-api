@@ -63,7 +63,7 @@ def predict_price_for_asset(
     this call chain (Phase 2a decision, carried through here).
 
     ``db``/``start_date``/``end_date`` are optional (Phase 1e,
-    specification/SPEC-dynamic-pricing.md §5.2/§5.3.1): when all three are
+    openspec/specs/dynamic-pricing/spec.md §5.2/§5.3.1): when all three are
     given, period_utilization/lead_time_days are computed as live aggregates
     against the real schema. When any is missing, this falls back to static
     defaults inside ``predict_price(...)``, unchanged pre-Phase-1e behavior.
