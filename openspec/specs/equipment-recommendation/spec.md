@@ -57,7 +57,7 @@ MVP builds **Components** and a **Pipeline** under `app/pipelines/`. Target may 
 ## Outcomes
 
 - A customer (or portal) can submit **free-text and/or a project file** (+ optional dates) and receive recommendations for each **unit-need** after LLM decomposition and quantity expansion (**product target**; live HTTP is indexing — see FR-040 as-built override).
-- Recommendations use real **Asset** SQL filtering and real **availability** overlap queries when wired (Day 3+); MVP as-built uses seed fleet (pipeline capability).
+- Recommendations use real **Asset** SQL filtering and real **availability** overlap queries when `FLEET_BACKEND=sql` (Call 2 / S4). CI / pipeline sockets still use seed fleet (`FLEET_BACKEND=fake`).
 - Each unit-need has **exactly one** ranked **`item`** (or null if no match), with an honest **rationale** when selected.
 - Pricing is obtained via **`predict_price()`**—never a local stub once the pricing team’s temporary experimental function exists; production swap is a one-line import when `app/services/pricing/` lands.
 - Public behaviour is expressed through this capability and child intake; routers stay thin; pipeline logic lives under `app/pipelines/`.
@@ -263,7 +263,7 @@ Routers MUST stay thin; pipeline construction and SQL live in services/pipelines
 - **FR-018b**: Empty candidate/document lists → predictable empty outputs, no unhandled exceptions.
 - **FR-019**: Ranking generation MUST use Haystack LLM generation + `PromptBuilder` (or equivalent).
 - **FR-019a**: (Target) SuperComponents for recurring subgraphs.
-- **FR-019b**: (Target) Tools with short unique name + NL description. **As-built (S7.1):** allowlisted in-process tools `decompose_project_needs`, `retrieve_fleet_assets`, `filter_fleet_candidates`, `check_booking_availability` (+ S6 `predict_asset_price`) via `app/agents/fleet_tools.py` + `tool_factory.py`. Free-form SQL/Cypher rejected. **As-built (S4):** `FLEET_BACKEND=sql` uses `LiveSqlFleetBackend` / `FleetRepository` (allowlisted ORM; `asset_id` = `assets.name`). Default remains `fake`. **As-built (S7.2):** `neo4j_cypher_read` (templates only) + `trigger_neo4j_populate` (non-blocking no-op) via `app/agents/neo4j_tools.py`; empty graph → `[]`; recommend not blocked (K-3 skip). **As-built (S7.3):** tools are invoked from the recommend LangGraph DAG. **As-built (S7.5):** Call 2 HTTP may run that DAG behind `RECOMMEND_VIA_AGENT_GRAPH`.
+- **FR-019b**: (Target) Tools with short unique name + NL description. **As-built (S7.1):** allowlisted in-process tools `decompose_project_needs`, `retrieve_fleet_assets`, `filter_fleet_candidates`, `check_booking_availability` (+ S6 `predict_asset_price`) via `app/agents/fleet_tools.py` + `tool_factory.py`. Free-form SQL/Cypher rejected. **As-built (S4):** `FLEET_BACKEND=sql` uses `LiveSqlFleetBackend` / `FleetRepository` (allowlisted ORM; DTO `asset_id` = `assets.name`; Call 2 quote `equipment.id` = `assets.id`). Default remains `fake`. **As-built (S7.2):** `neo4j_cypher_read` (templates only) + `trigger_neo4j_populate` (non-blocking no-op) via `app/agents/neo4j_tools.py`; empty graph → `[]`; recommend not blocked (K-3 skip). **As-built (S7.3):** tools are invoked from the recommend LangGraph DAG. **As-built (S7.5):** Call 2 HTTP may run that DAG behind `RECOMMEND_VIA_AGENT_GRAPH`.
 - **FR-019c**: Pipelines assembled with explicit `.add_component` / `.connect` / `.run`.
 - **FR-019d**: (Target) File ingest branch by media type.
 - **FR-019e**: (Target) Hybrid retrieval when catalog knowledge exists.
@@ -417,14 +417,20 @@ Project Worker [5] SHALL call session-bound `project_vector_search` and `project
 
 ### Requirement: Live SQL fleet backend (S4 as-built)
 
-When `FLEET_BACKEND=sql`, recommend fleet tools SHALL read Postgres-Haystack via allowlisted SQLAlchemy selects (`app/repositories/fleet_repository.py`). `asset_id` MUST be `assets.name` (UNIQUE) — MUST NOT invent ids. Bookings SHALL join `booking_items` and count only live-hold statuses (`PENDING_DEPOSIT`, `PENDING_CONFIRMED`, `CONFIRMED`, `MOBILISED`). Empty / unknown category / blank name → skip or `[]`. `FLEET_BACKEND=fake` (default) MUST keep seed/injected DTOs so unmarked CI needs no Postgres. Free-form SQL kwargs remain rejected. Config-repo T0–T2 sync is out of this requirement. D0 map: [`../spring-entity-repository/fleet-read-contract.md`](../spring-entity-repository/fleet-read-contract.md).
+When `FLEET_BACKEND=sql`, recommend fleet tools SHALL read Postgres-Haystack via allowlisted SQLAlchemy selects (`app/repositories/fleet_repository.py`). Internal DTO `asset_id` MUST be `assets.name` (UNIQUE) — MUST NOT invent ids. Call 2 quote `equipment.id` MUST be `str(assets.id)` when the row resolves so Spring can FK `recommendation_items.asset_id`; a missing row MUST omit the item (warning) instead of emitting a seed `AST-*` id. Bookings SHALL join `booking_items` and count only live-hold statuses (`PENDING_DEPOSIT`, `PENDING_CONFIRMED`, `CONFIRMED`, `MOBILISED`). Empty / unknown category / blank name → skip or `[]`. `FLEET_BACKEND=fake` (default) MUST keep seed/injected DTOs so unmarked CI needs no Postgres. `PRICING_SCHEMA` remaps fleet/pricing tables only (`primary_snapshot` default / CI; `public` live). Free-form SQL kwargs remain rejected. Config-repo T0–T2 sync is out of this requirement. D0 map: [`../spring-entity-repository/fleet-read-contract.md`](../spring-entity-repository/fleet-read-contract.md).
 
 **Status:** **as-built (S4 app)**. Tests: `tests/test_fleet_repository.py`.
 
-#### Scenario: Asset.name is asset_id
-- **GIVEN** a mirror row with `assets.name=AST-SL-001` and category `Scissors Lift`
+#### Scenario: Asset.name is DTO asset_id
+- **GIVEN** a mirror row with `assets.id=12`, `assets.name=SL-12m-Yard-A`, and category `Scissors Lift`
 - **WHEN** `list_assets` runs
-- **THEN** the DTO `asset_id` is `AST-SL-001` and `category` is `scissor lift`
+- **THEN** the DTO `asset_id` is `SL-12m-Yard-A` and `category` is `scissor lift`
+
+#### Scenario: Call 2 quote uses assets.id
+- **GIVEN** the same mirror row is selected on `FLEET_BACKEND=sql`
+- **WHEN** Call 2 maps the pick to quote `equipment`
+- **THEN** `equipment.id` is `"12"` and `equipment.name` is `SL-12m-Yard-A`
+- **AND** a missing assets row omits the item instead of emitting a seed `AST-*` id
 
 #### Scenario: Empty mirror
 - **GIVEN** no fleet rows
@@ -769,6 +775,7 @@ Architecture, Ragas pattern, deps, and offline pipeline sketch: [`design.md`](./
 | 0.9.2 | 2026-08-07 | KG as-built pointer; sequential map |
 | 1.0.0 | 2026-08-10 | Migrated to OpenSpec under `openspec/specs/equipment-recommendation/`; architecture/day plan/deployment → design.md |
 | 1.1.0 | 2026-08-12 | **S7.0 + S7.1 as-built:** `RecommendAgentState` + F-2 partition validation; allowlisted fleet/needs tools + DI factory (FR-019b note). Graph (S7.3+) still TARGET. Archives `changes/archive/2026-08-12-s7-0-recommend-agent-state/`, `.../s7-1-fleet-tool-catalog/`. |
+| 1.10.0 | 2026-08-13 | Call 2 quote identity: `equipment.id` = `assets.id` (live SQL); DTO `asset_id` remains `assets.name`. Extra quote fields + `platformHeight` aerial-only; no `img`. `PRICING_SCHEMA` documented. |
 | 1.9.1 | 2026-08-13 | Call 2 quote: `items[].mlPredictedPrice` as-built (same daily rate as `equipment.baseDailyRate`). |
 | 1.9.0 | 2026-08-13 | **S7.8 as-built:** Worker [5] live `project_vector_search` + `project_kg_query` before decompose; soft-fail notes. Archive `changes/archive/2026-08-13-s7-8-worker5-kg1-live/`. |
 | 1.8.0 | 2026-08-13 | **S8.3 as-built:** live `BoltNeo4jBackend` + populate HTTP enqueue behind `NEO4J_BACKEND=bolt` (default fake); K-3 on unavailable; `@pytest.mark.neo4j`. Archive `changes/archive/2026-08-13-s8-3-live-neo4j-tools/`. |

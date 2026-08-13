@@ -6,7 +6,7 @@
         "equipment_type": "Scissors Lift",
         "asset_id": "AST-SL-001",
         "rank": 1,
-        "rationale": "Stub merge: Need scissor lift for 8m access → AST-SL-001.",
+        "rationale": "Matched scissor lift to AST-SL-001 (category scissor lift, available=available, daily_rate=185.0, match_score=0.8).",
         "pricing": {
           "daily_rate": 185.0,
           "total_price": 2590.0,

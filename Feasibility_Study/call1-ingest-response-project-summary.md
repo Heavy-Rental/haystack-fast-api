@@ -5,7 +5,7 @@
 | **Document type** | API / product feasibility study |
 | **Status** | Complete (study) — lean public body + **FR-IX-023 Call 1 summary as-built** (S1a–S1e); not Call 2 recommend quote |
 | **Date** | 2026-08-11 |
-| **Version** | 1.2.2 |
+| **Version** | 1.3.0 |
 | **Endpoint** | `POST /internal/v1/recommendations/submitprojectspecification` |
 | **Question** | What should Call 1 return for Spring/portal without over-exposing indexing/KG internals, while enabling Call 2? |
 | **OpenSpec** | FR-IX-023 **as-built** (S1a–S1e) · contract `openspec/specs/indexing/contracts/ingest-from-project-spec.md` · proposal `openspec/changes/2026-08-10-call1-project-spec-summary/` |
@@ -54,14 +54,20 @@ Required for Spring saga Call 1 → Call 2 without oversharing:
 {
   "ingest_id": "ing_a1b2c3d4e5f6",
   "user_id": "user_demo",
-  "user_requirement_summary": "Indoor elevated work ~8m; need scissors lift on soft clay. Budget SGD 15000. From 2026-09-01 to 2026-09-12.",
+  "user_requirement_summary": "Need a forklift and a scissors lift for indoor work ~8m. Budget SGD 15000. From 1 Sep 2026 to 30 Sep 2026.",
   "tentative_start_date": "2026-09-01",
-  "tentative_end_date": "2026-09-12",
+  "tentative_end_date": "2026-09-30",
   "needs_summary": [
     {
       "need_id": "need_1",
-      "description": "Indoor elevated work ~8m; need scissors lift on soft clay. Budget SGD 15000. From 2026-09-01 to 2026-09-12.",
-      "equipment_hints": [],
+      "description": "Need a forklift",
+      "equipment_hints": ["forklift"],
+      "quantity": 1
+    },
+    {
+      "need_id": "need_2",
+      "description": "Need a scissors lift for indoor work ~8m",
+      "equipment_hints": ["scissor lift"],
       "quantity": 1
     }
   ],
@@ -78,10 +84,10 @@ Required for Spring saga Call 1 → Call 2 without oversharing:
 |-------|--------|-------|
 | `ingest_id` | Generated `ing_` + hex | Handle for Call 2 recommend + Call 3 Q&A |
 | `user_id` | Request echo | Client already sent it |
-| `user_requirement_summary` | Deterministic summary of `project_text` **or** extracted file text after conversion | Not raw bytes; not LLM invent; truncate + warning if long |
-| `tentative_*` | Request dates preferred; else free-text/file extract (S1e) | Null + warning when unknown; never invent |
-| `needs_summary[]` | Need decomposer after index+KG | Stub default in CI |
-| `expected_budget` | Currency/amount phrases only | Null + warning if uncertain; never invent |
+| `user_requirement_summary` | Extracted file text **before** `project_text`; ignore placeholder caption `"Optional caption alongside file"` | Not raw bytes; not LLM invent; truncate + warning if long |
+| `tentative_*` | Request dates preferred; else free-text/file extract (S1e) | ISO, English months, Q3, month-only, `this/next month`, … — `8m` is not a date; never invent |
+| `needs_summary[]` | Need decomposer after index+KG | Stub / LLM-empty fallback: **one need per approved type** via `equipment_hints`; stub default in CI |
+| `expected_budget` | Currency/amount phrases only | `SGD8000`, `SGD 8k`, cue + number, `$8000` when it looks like money. Not words-only / `$10` / `8m`. Never invent |
 | `warnings` | Conversion / truncation / missing extract soft issues | Empty when none |
 
 **Internal (not on public body):** DocumentStore write, KG-1 build, session registry, chunk previews, `kg_artifact_path`, counts, `data_kind`, etc. — still **executed** so Call 2 recommend + Call 3 Q&A work.
@@ -169,6 +175,7 @@ See [`implementation-plan.md`](./implementation-plan.md) Phase 1 (v3.4.0+).
 | **1.1.0** | 2026-08-11 | Lean public body: `ingest_id` + `user_id` + `user_requirement_summary`; internal path `/internal/v1/.../submitprojectspecification`; full FR-IX-023 remains TARGET |
 | **1.1.1** | 2026-08-11 | FR-IX-023 order: S1c → S1d → **S1e free-text dates** (after S1d) → 1.7 as-built; aligns with implementation-plan v3.4.0 |
 | **1.2.0** | 2026-08-11 | **S1e + 1.7 shipped:** free-text date extract; full FR-IX-023 Call 1 summary **as-built** in OpenSpec + Postman |
+| **1.3.0** | 2026-08-13 | File-before-text + ignore caption; multi-need hint split; expanded date/budget patterns (not words-only / `$10` / `8m`) |
 | **1.2.2** | 2026-08-12 | Cross-link: default pytest isolation (mock embedder dim 384, no optional markers) — [`implementation-plan.md`](./implementation-plan.md) §7.0 |
 
 ---

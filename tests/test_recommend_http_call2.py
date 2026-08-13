@@ -142,11 +142,14 @@ def test_flag_on_http_quote_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "answer" not in quote
     assert "tool_traces" not in quote
     assert quote["items"], "graph path should return at least one catalog item"
-    assert quote.get("rationale") and "Stub merge:" in quote["rationale"]
+    assert quote.get("rationale") and "Matched" in quote["rationale"]
+    assert "Stub merge:" not in (quote.get("rationale") or "")
     for item in quote["items"]:
         asset_id = item["equipment"]["id"]
         assert asset_id
         assert str(asset_id).startswith("AST-")
+        assert item.get("matchScore") is not None
+        assert "Stub merge:" not in (item.get("reason") or "")
         predicted = item.get("mlPredictedPrice")
         assert predicted is not None and float(predicted) > 0
         assert item["equipment"]["baseDailyRate"] == predicted

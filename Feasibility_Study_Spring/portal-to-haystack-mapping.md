@@ -3,8 +3,8 @@
 | Field | Value |
 |-------|--------|
 | **Document type** | Integration mapping (Spring-facing) |
-| **Version** | **2.0.0** |
-| **Date** | 2026-08-12 |
+| **Version** | **2.1.0** |
+| **Date** | 2026-08-13 |
 | **Status** | Normative — Call 2 = **recommend**; Call 3 = **chatbot Q&A** |
 | **Package** | [`README.md`](./README.md) |
 
@@ -60,11 +60,14 @@ React  ← primary submit response = Call 2 recommend quote
 |-------|--------|
 | `user_id`, `ingest_id`, `query` | Echo |
 | `quoteRef` | `QUO-…` (Spring may own commercial quote id) |
-| `confidenceScore` | Optional score |
+| `confidenceScore` | Evidence-based: 0.30 need coverage + 0.20 mean matchScore + 0.20 live `assets.id` + 0.15 available + 0.10 priced + 0.05 dates; cap 0.99. `null` when no items |
 | `days`, `estimatedTotal` | Rental window × rates when known |
 | `specSummary` | From Call 1 summary |
-| `rationale` | Tool-backed text |
-| `items[]` | Ranked equipment; `equipment.id` = catalog asset only |
+| `rationale` | Joined per-item evidence reasons |
+| `items[]` | Ranked equipment. Live SQL: `equipment.id` = `assets.id` (PK); `equipment.name` = `assets.name`. CI fake: seed `AST-*`. Missing assets row → omit item |
+| `items[].matchScore` | 0.50 category + 0.20 height cue + 0.15 available + 0.15 priced |
+| `items[].reason` | Factual match sentence (not Stub merge) |
+| `items[].equipment` | `id`, `name`, `category`, `baseDailyRate`, `weekly`, `capacity`, `purchaseYear`, `location`, `available`, `desc`, `platformHeight` (aerial only), `tags`. **No `img`.** Spring MAY drop Haystack-only fields such as `platformHeight` |
 | `warnings` | Soft issues |
 
 Full contract: `openspec/specs/recommendation-pipeline/contracts/get-asset-recommendations.md`.
@@ -108,5 +111,6 @@ Contract: `openspec/specs/knowledge-graph/contracts/project-knowledge-query.md`.
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **2.1.0** | 2026-08-13 | Quote `equipment.id` = `assets.id` (live SQL); evidence scores; extra catalog fields; no `img` |
 | **2.0.0** | 2026-08-12 | Call 2 recommend; Call 3 chatbot Q&A |
 | **1.0.1** | 2026-08-12 | Prior dual-hop with Call 2 as Q&A (superseded) |

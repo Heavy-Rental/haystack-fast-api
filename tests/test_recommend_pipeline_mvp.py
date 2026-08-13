@@ -117,7 +117,8 @@ def test_ranker_picks_one() -> None:
     out = RankRationaleGenerator().run(unit_need=unit, priced_candidates=priced)
     assert out["selected"]["asset_id"] == "B"
     assert out["selected"]["rank"] == 1
-    assert "schema" in out["rationale"].lower() or "terrain" in out["rationale"].lower()
+    assert "matched" in out["rationale"].lower()
+    assert out["selected"]["match_score"] is not None
 
 
 def test_ranker_empty_candidates() -> None:

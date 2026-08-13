@@ -31,7 +31,7 @@ from app.agents.tool_factory import (
     build_recommend_runtime,
     build_recommend_tool_catalog,
 )
-from app.config import Settings, get_settings
+from app.config import Settings, get_settings, is_sql_fleet_backend
 from app.core.exceptions import NotFoundError
 from app.services.need_decomposer import NeedDecomposer
 from app.services.project_knowledge_session import (
@@ -131,8 +131,7 @@ def run_recommend_graph(
         except NotFoundError:
             pk_session = None
     if runtime is None and tools_catalog is None:
-        kind = str(getattr(cfg, "fleet_backend", None) or "fake").strip().lower()
-        if kind == "sql":
+        if is_sql_fleet_backend(getattr(cfg, "fleet_backend", None)):
             from app.core.db import SessionLocal
 
             owned_session = SessionLocal()

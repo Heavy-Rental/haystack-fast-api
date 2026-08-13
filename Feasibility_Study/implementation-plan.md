@@ -5,10 +5,10 @@
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
 | **Date** | 2026-08-13 |
-| **Version** | 3.17.1 |
+| **Version** | 3.18.0 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.17.1** Call 2 `items[].mlPredictedPrice` as-built; **3.17.0** S7.8; **3.16.0** S8.3 live Neo4j; **3.15.0** S8.2 T4 config; **3.14.0** S2b Spring; **3.13.0** S8.1 T3; **3.12.0** S4 T0–T2 config; **3.11.0** S4 app live SQL; **3.10.0** S7.2; **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
+| **Revision notes** | **3.18.0** Call 2 quote `equipment.id`=`assets.id` + scores + `PRICING_SCHEMA` + Call 1 extract expansions; **3.17.1** Call 2 `items[].mlPredictedPrice` as-built; **3.17.0** S7.8; **3.16.0** S8.3 live Neo4j; **3.15.0** S8.2 T4 config; **3.14.0** S2b Spring; **3.13.0** S8.1 T3; **3.12.0** S4 T0–T2 config; **3.11.0** S4 app live SQL; **3.10.0** S7.2; **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -140,7 +140,15 @@ Contract: [`../openspec/specs/recommendation-pipeline/contracts/get-asset-recomm
 ### 1.2.1 Call 2 request contract — `getassetrecommendations` (**recommend**)
 
 **Route:** `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations`  
-**Behaviour (as-built MVP):** Session-backed **equipment recommend / quote** via `RecommendationService` (seed fleet + pricing). Response: `quoteRef`, `items[]` (`equipment.id`, **`mlPredictedPrice`**, `equipment.baseDailyRate` = same daily rate, `lineTotal`), `estimatedTotal`, etc. Rates come from `pricing_client` / `predict_price` only.  
+**Behaviour (as-built):** Session-backed **equipment recommend / quote** via `RecommendationService`. With `FLEET_BACKEND=sql`, candidates come from the `assets` table (no silent seed fallback). CI stays on `FLEET_BACKEND=fake` seed. Rates come from `pricing_client` / `predict_price` only.
+
+**Quote identity:** live SQL `equipment.id` = `assets.id` (PK, string); `equipment.name` = `assets.name`. Internal DTO `asset_id` remains `assets.name`. Missing assets row → omit item + warning (never emit seed `AST-*` on the SQL path).
+
+**Quote `equipment` fields:** `id`, `name`, `category`, `baseDailyRate`, `weekly`, `capacity`, `purchaseYear`, `location`, `available`, `desc`, `platformHeight` (Scissors Lift / Boom Lift only), `tags`. **No `img`.** Spring portal DTO MAY drop Haystack-only fields such as `platformHeight`.
+
+**Scores:** `confidenceScore` = 0.30 need coverage + 0.20 mean matchScore + 0.20 live `assets.id` + 0.15 available + 0.10 priced + 0.05 dates (cap 0.99; `null` when no items). `matchScore` = 0.50 category + 0.20 height cue + 0.15 available + 0.15 priced. `reason` is a factual sentence from those signals (not Stub merge).
+
+Contract: [`../openspec/specs/recommendation-pipeline/contracts/get-asset-recommendations.md`](../openspec/specs/recommendation-pipeline/contracts/get-asset-recommendations.md).  
 **Not chatbot Q&A** — that is Call 3 `.../project-knowledge/query`.
 
 #### As-built request body
@@ -601,7 +609,7 @@ Maps to dual-plane §10 Track D + §11 T-phases. **Primary work in config repo.*
 | **4.3 T2** | Table allowlist (Asset, Booking, Category, …); metrics | Config | Deterministic table set |
 | **4.4 D0** | Freeze schema contract from Phase 0.2 into versioned doc | Shared | Contract tests or snapshot |
 
-**App (as-built 2026-08-13):** `FleetRepository` + `LiveSqlFleetBackend` behind `FLEET_BACKEND=sql` (default **fake**). D0: `openspec/specs/spring-entity-repository/fleet-read-contract.md`. `asset_id` = `assets.name`.
+**App (as-built 2026-08-13):** `FleetRepository` + `LiveSqlFleetBackend` behind `FLEET_BACKEND=sql` (default **fake**). D0: `openspec/specs/spring-entity-repository/fleet-read-contract.md`. DTO `asset_id` = `assets.name`. Call 2 quote `equipment.id` = `assets.id`. `PRICING_SCHEMA=primary_snapshot` (CI default) \| `public` (live translate; fleet + pricing only).
 
 **Config (as-built on pack `develop`):** [Haystack-Fast-API devcontainer pack](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API) — T0 skip/sleep when primary down; T1 `SYNC_INTERVAL_SECONDS=60` + `postgres-haystack-sync` `unless-stopped` + per-cycle `METRICS`/`duration_ms`; T2 `SYNC_TABLE_ALLOWLIST` (default `asset,booking,category`). **Alignment follow-up (config):** pack D0 uses singular table names; haystack ORM reads plural `assets` / `bookings` / `booking_items` / `asset_categories`.
 
@@ -611,7 +619,7 @@ Maps to dual-plane §10 Track D + §11 T-phases. **Primary work in config repo.*
 |-----------|--------|
 | **Independently testable?** | **Yes — app pack in default CI (mocked session); config pack has its own verification.md** |
 | **Does not need** | Neo4j populate, Spring saga |
-| **App test implementation (as-built)** | (1) `assets.name` → `asset_id`; (2) empty → []; (3) live-hold overlap; (4) CANCELLED ignored; (5) free-form SQL reject; (6) default fake |
+| **App test implementation (as-built)** | (1) `assets.name` → DTO `asset_id`; quote `equipment.id` = `assets.id`; (2) empty → []; (3) live-hold overlap; (4) CANCELLED ignored; (5) free-form SQL reject; (6) default fake; (7) missing row omits seed `AST-*` |
 | **Config test implementation (as-built in pack)** | Pack README + `specs/001-haystack-postgres-merge-sync/verification.md`: healthy `postgres-haystack`; skip when primary down; allowlist + METRICS logs |
 | **App modules** | `app/repositories/fleet_repository.py`; `tests/test_fleet_repository.py` |
 | **CI job** | app **default** (fake); config pack verification (not this repo) |
@@ -976,7 +984,7 @@ Every code-bearing PR **must** use the **PR description template** below (bare m
 | **PR-H** | S7.5–7.6 | Call 2 multi-agent enrich + traces | **Shipped** — same quote DTO behind flag; role/`need_id`/`duration_ms` traces; **BDD** Call 2 quote happy path |
 | **PR-I** | S7.7 | Prompts A–L + tool DI | **Shipped** — recommend prompts isolated from Stage-1; Delegator allowlist; **TDD** stub LLM |
 | **PR-J** | S7.2 | Neo4j tools (fake / no-op) | **Shipped** — templates only; free-form Cypher reject; populate non-blocking; K-3 skip; **BDD** recommend not blocked |
-| **PR-K** | S4 | Live SQL fleet backend (app) | **Shipped** — D0 map; `FLEET_BACKEND=sql`; `asset_id`=`assets.name`; fake default; **BDD** empty / live-hold |
+| **PR-K** | S4 | Live SQL fleet backend (app) | **Shipped** — D0 map; `FLEET_BACKEND=sql`; DTO `asset_id`=`assets.name`; quote `equipment.id`=`assets.id`; `PRICING_SCHEMA`; fake default; **BDD** empty / live-hold |
 | **PR-K2** | S4 | Config T0–T2 as-built stamp | **Docs** — pack already ships 60s sync + allowlist + METRICS; alignment note on table names |
 | **PR-L** | S8.1 T3 | Config `neo4j-populate` | **As-built (config pack)** — SQL→Cypher MERGE; fleet labels isolated; this repo docs stamp only |
 | **PR-M** | S8.2 T4 | Config populate trigger | **As-built (config pack)** — post-sync HTTP + admin `POST /v1/populate` :8089; scoped delete; KG-1 preserved |

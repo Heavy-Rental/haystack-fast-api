@@ -101,6 +101,8 @@ traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01
 
 Sources: multipart file uploads are packaged as Haystack `ByteStream` with `mime_type` derived from filename extension. Non-empty JSON `project_text` is unstructured `text/plain` when no file (or in addition to file sources).
 
+**As-built source merge:** extracted file text is used **before** `project_text`. The placeholder caption `"Optional caption alongside file"` is ignored so a multipart caption does not replace the brief.
+
 ### Example request (JSON)
 
 ```json
@@ -122,13 +124,13 @@ Sources: multipart file uploads are packaged as Haystack `ByteStream` with `mime
 |-------|------|--------|
 | `ingest_id` | string | `ing_` + hex — **required handle for Call 2 / Call 3** |
 | `user_id` | string | Echo of request |
-| `user_requirement_summary` | string | Deterministic summary of `project_text` or **extracted** multipart content (not raw bytes); may be truncated |
+| `user_requirement_summary` | string | Deterministic summary of **extracted file text first**, then `project_text` (not raw bytes; not the placeholder caption); may be truncated |
 | `tentative_start_date` | date \| null | **S1b+S1e as-built:** request preferred; else free-text/file extract when confident; else `null` |
 | `tentative_end_date` | date \| null | **S1b+S1e as-built:** request preferred; else free-text/file extract when confident; else `null` |
-| `needs_summary` | array | **S1c as-built:** structured needs after index+KG via need decomposer (stub default in CI) |
+| `needs_summary` | array | **S1c as-built:** structured needs after index+KG via need decomposer (`NEED_DECOMPOSER=stub` in CI; live may use `llm`) |
 | `needs_summary[].need_id` | string \| null | Optional stable id (e.g. `need_1`) |
 | `needs_summary[].description` | string | Human-readable need |
-| `needs_summary[].equipment_hints` | string[] | Optional category/type hints |
+| `needs_summary[].equipment_hints` | string[] | Optional category/type hints; stub / LLM-empty fallback emits **one need per approved type** using hints |
 | `needs_summary[].quantity` | int \| null | Optional |
 | `expected_budget` | object \| null | **S1d as-built:** extract only when confident; null + warning if not found; never invent |
 | `expected_budget.amount` | number | When extracted |
@@ -142,14 +144,20 @@ Sources: multipart file uploads are packaged as Haystack `ByteStream` with `mime
 {
   "ingest_id": "ing_a1b2c3d4e5f6",
   "user_id": "user_demo",
-  "user_requirement_summary": "Indoor elevated work ~8m; need scissors lift on soft clay. Budget SGD 15000. From 2026-09-01 to 2026-09-12.",
+  "user_requirement_summary": "Need a forklift and a scissors lift for indoor work ~8m. Budget SGD 15000. From 1 Sep 2026 to 30 Sep 2026.",
   "tentative_start_date": "2026-09-01",
-  "tentative_end_date": "2026-09-12",
+  "tentative_end_date": "2026-09-30",
   "needs_summary": [
     {
       "need_id": "need_1",
-      "description": "Indoor elevated work ~8m; need scissors lift on soft clay. Budget SGD 15000. From 2026-09-01 to 2026-09-12.",
-      "equipment_hints": [],
+      "description": "Need a forklift",
+      "equipment_hints": ["forklift"],
+      "quantity": 1
+    },
+    {
+      "need_id": "need_2",
+      "description": "Need a scissors lift for indoor work ~8m",
+      "equipment_hints": ["scissor lift"],
       "quantity": 1
     }
   ],
@@ -182,6 +190,10 @@ All Call 1 project-spec summary increments are **as-built** (implementation-plan
 | **S1d** | `expected_budget` extract-only (never invent) | **as-built** |
 | **S1e** | Free-text / file date extract when request omits dates (request preferred) | **as-built** |
 | **1.7** | OpenSpec + Postman + regression mark full FR-IX-023 as-built | **as-built** |
+
+**Date extract (S1e) recognized forms:** ISO; `DD/MM/YYYY` and `MM/DD/YYYY` when unambiguous; English months (`1 Sep 2026`, `Sep 1, 2026`, ordinals, hyphenated names, two-digit years); dotted/slashed numerics; compact `YYYYMMDD`; ISO datetimes; quarters (`Q3 2026`); month-only; `start/end of September`; `this/next month`. Heights like `8m` are **not** dates. Request dates still win over extract.
+
+**Budget extract (S1d) recognized forms:** `SGD8000`, `SGD 8k`, `1.5m SGD`, spoken currency, `RM`, yen, cue + bare number (`budget of 8000`), spaced thousands, `$8000` / `$12,500` when the figure looks like money. **Not** a budget: words only (`tight budget`), `$10` room-size, `8m` / `20 ton`.
 
 Default response **SHOULD** stay compact (no public `documents[]` / `kg_*`).
 

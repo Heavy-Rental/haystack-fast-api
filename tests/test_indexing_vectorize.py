@@ -1,5 +1,6 @@
 """Part 3: clean → split → embed → write into DocumentStore."""
 
+import pytest
 from haystack.dataclasses import ByteStream
 from haystack.document_stores.in_memory import InMemoryDocumentStore
 
@@ -27,6 +28,32 @@ def test_build_mock_embedder_dimension() -> None:
     assert len(docs) == 1
     assert docs[0].embedding is not None
     assert len(docs[0].embedding) == 16
+
+
+def test_build_openai_embedder_passes_dimensions() -> None:
+    from app.pipelines.indexing.embedder_factory import openai_embedding_dimensions
+
+    assert openai_embedding_dimensions("text-embedding-3-small", 768) == 768
+    assert openai_embedding_dimensions("text-embedding-3-large", 384) == 384
+    assert openai_embedding_dimensions("text-embedding-ada-002", 384) is None
+
+    emb = build_document_embedder(
+        mode="openai",
+        dimension=768,
+        openai_api_key="sk-test",
+        openai_model="text-embedding-3-small",
+    )
+    assert getattr(emb, "dimensions", None) == 768
+
+
+def test_ingest_maps_pgvector_dimension_error() -> None:
+    from app.core.exceptions import BadRequestError
+    from app.services.indexing import _reraise_embedding_dimension_error
+
+    with pytest.raises(BadRequestError, match="Embedding dimension mismatch"):
+        _reraise_embedding_dimension_error(
+            RuntimeError("expected 384 dimensions, not 768")
+        )
 
 
 def test_pipeline_writes_embedded_chunks() -> None:

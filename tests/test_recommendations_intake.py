@@ -91,6 +91,28 @@ def test_tentative_dates_extracted_from_text_when_request_omits(
     assert body["expected_budget"]["amount"] == 10000.0
 
 
+def test_multipart_caption_plus_file_extracts_named_dates(
+    client: TestClient,
+) -> None:
+    brief = (
+        b"Need one forklift for loading bay and indoor elevated work "
+        b"about 8m for scissors lift. Warehouse fit-out on 1 Sep 2026 "
+        b"to 30 Sep 2026."
+    )
+    response = client.post(
+        ENDPOINT,
+        data={
+            "user_id": "u_named_dates",
+            "project_text": "Optional caption alongside file",
+        },
+        files={"file": ("brief.txt", brief, "text/plain")},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["tentative_start_date"] == "2026-09-01"
+    assert body["tentative_end_date"] == "2026-09-30"
+
+
 def test_request_dates_override_text_extract(client: TestClient) -> None:
     response = client.post(
         ENDPOINT,
@@ -287,6 +309,32 @@ def test_multipart_json_file_structured(client: TestClient) -> None:
     body = response.json()
     _assert_lean_body(body)
     assert "excavator" in body["user_requirement_summary"].lower()
+
+
+def test_multipart_caption_plus_file_splits_two_needs(client: TestClient) -> None:
+    """Placeholder caption must not hide the file brief from needs_summary."""
+    brief = (
+        b"Need one forklift for loading bay and indoor elevated work "
+        b"about 8m for scissors lift."
+    )
+    response = client.post(
+        ENDPOINT,
+        data={
+            "user_id": "u_caption",
+            "project_text": "Optional caption alongside file",
+        },
+        files={"file": ("brief.txt", brief, "text/plain")},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    _assert_lean_body(body)
+    needs = body["needs_summary"]
+    assert len(needs) == 2
+    hints = [row["equipment_hints"] for row in needs]
+    assert hints == [["forklift"], ["scissor lift"]]
+    summary = body["user_requirement_summary"].lower()
+    assert "forklift" in summary
+    assert "optional caption" not in summary
 
 
 def test_multipart_markdown_converts(client: TestClient) -> None:

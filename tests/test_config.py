@@ -1,6 +1,6 @@
 """Settings / configuration tests."""
 
-from app.config import Settings
+from app.config import Settings, is_sql_fleet_backend, normalize_fleet_backend
 
 
 def test_default_database_url() -> None:
@@ -66,10 +66,31 @@ def test_recommend_via_agent_graph_defaults_to_false() -> None:
     assert settings.recommend_via_agent_graph is False
 
 
+def test_pricing_schema_defaults_to_primary_snapshot() -> None:
+    settings = Settings()
+    assert settings.pricing_schema == "primary_snapshot"
+
+
+def test_pricing_schema_accepts_public() -> None:
+    settings = Settings(PRICING_SCHEMA="public")
+    assert settings.pricing_schema == "public"
+
+
 def test_fleet_backend_defaults_to_fake() -> None:
     """Phase 4 / S4: FLEET_BACKEND defaults to fake (CI-safe seed)."""
     settings = Settings()
     assert settings.fleet_backend == "fake"
+
+
+def test_fleet_backend_normalizes_dotenv_double_equals() -> None:
+    """FLEET_BACKEND==sql in .env is parsed as value '=sql'; still means sql."""
+    assert normalize_fleet_backend("=sql") == "sql"
+    assert normalize_fleet_backend("SQL") == "sql"
+    assert normalize_fleet_backend("  =SQL  ") == "sql"
+    assert is_sql_fleet_backend("=sql") is True
+    assert is_sql_fleet_backend("fake") is False
+    settings = Settings(fleet_backend="=sql")
+    assert settings.fleet_backend == "sql"
 
 
 def test_neo4j_backend_defaults_to_fake() -> None:

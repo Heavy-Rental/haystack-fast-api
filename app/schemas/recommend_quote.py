@@ -8,15 +8,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 
 class EquipmentQuote(BaseModel):
     """Tool-backed equipment identity and rates (never invented)."""
 
-    id: str | None = Field(default=None, description="asset_id from catalog/fleet")
+    id: str | None = Field(
+        default=None,
+        description="assets.id when live SQL; seed asset_id otherwise",
+    )
     name: str | None = Field(
-        default=None, description="Display name or equipment_type"
+        default=None,
+        description="assets.name when live SQL; equipment_type otherwise",
     )
     category: str | None = None
     baseDailyRate: float | None = Field(
@@ -25,10 +29,41 @@ class EquipmentQuote(BaseModel):
     weekly: float | None = Field(
         default=None, description="Optional weekly rate if known"
     )
+    capacity: float | None = Field(
+        default=None, description="assets.capacity when the row resolves"
+    )
+    purchaseYear: int | None = Field(
+        default=None, description="assets.purchase_year when the row resolves"
+    )
+    location: str | None = Field(
+        default=None, description="assets.location when the column exists"
+    )
+    available: bool | None = Field(
+        default=None,
+        description="False when a live-hold booking overlaps the rental window",
+    )
+    desc: str | None = Field(
+        default=None, description="assets.description when the row resolves"
+    )
+    platformHeight: float | None = Field(
+        default=None,
+        description=(
+            "assets.platform_height for Scissors Lift / Boom Lift "
+            "(category_id 2 or 3) only; omitted otherwise"
+        ),
+    )
+    tags: list[str] = Field(default_factory=list)
     extra: dict[str, Any] = Field(
         default_factory=dict,
-        description="Optional extra catalog fields (condition, capacity, …)",
+        description="Optional extra catalog fields (condition, …)",
     )
+
+    @model_serializer(mode="wrap")
+    def _omit_platform_height_unless_set(self, handler):
+        data = handler(self)
+        if data.get("platformHeight") is None:
+            data.pop("platformHeight", None)
+        return data
 
 
 class RecommendQuoteItem(BaseModel):

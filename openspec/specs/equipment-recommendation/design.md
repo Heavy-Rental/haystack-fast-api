@@ -189,7 +189,7 @@ See [`../recommendation-pipeline/design.md`](../recommendation-pipeline/design.m
 |--------|------|
 | `app/agents/recommend_state.py` | **S7.0** `RecommendAgentState` + F-2 `validate_state_transition` / partition writes; optional `graph_notes` |
 | `app/agents/fleet_tools.py` | **S7.1** fleet tools; **S4** `LiveSqlFleetBackend` |
-| `app/repositories/fleet_repository.py` | **S4** allowlisted ORM reads; `asset_id` = `assets.name` |
+| `app/repositories/fleet_repository.py` | **S4** allowlisted ORM reads; DTO `asset_id` = `assets.name`; quote `equipment.id` = `assets.id` |
 | `app/agents/neo4j_tools.py` | **S7.2 + S8.3** templates + `FakeNeo4jBackend` / `BoltNeo4jBackend` / populate HTTP |
 | `app/agents/tool_factory.py` | **S7.1** DI catalog (`fake` seed default \| `sql` DTO backend); **S7.2** Neo4j tools; **S7.7** `ALLOWED_WORKER_KINDS` + `build_recommend_runtime` |
 | `app/agents/tools.py` | S3 `run_indexing_from_request`; S6 `predict_asset_price` |

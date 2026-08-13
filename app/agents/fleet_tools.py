@@ -260,7 +260,18 @@ def filter_fleet_candidates(
         cat = str(category).strip().lower()
         categories = [cat]
     else:
-        categories = infer_model_categories(need)
+        hints = [
+            str(h).strip()
+            for h in (need.get("equipment_hints") or [])
+            if str(h).strip()
+        ]
+        if hints:
+            # Hints win: do not let a shared description pull extra types.
+            categories = infer_model_categories(
+                {"equipment_hints": hints, "description": ""}
+            ) or [h.lower() for h in hints]
+        else:
+            categories = infer_model_categories(need)
 
     if not categories:
         return []

@@ -12,12 +12,18 @@ per ingest; ``pgvector`` shares a table and relies on meta filters + delete/TTL.
 
 from __future__ import annotations
 
+import logging
+import re
 from typing import Any, Literal
 
 from haystack.document_stores.in_memory import InMemoryDocumentStore
 from haystack.utils import Secret
 
 from app.config import Settings, get_settings
+
+logger = logging.getLogger(__name__)
+
+_VECTOR_TYPE_RE = re.compile(r"vector\((\d+)\)", re.IGNORECASE)
 
 DocumentStoreMode = Literal["memory", "pgvector"]
 
@@ -88,6 +94,66 @@ def _connection_string_for_pgvector(
     return _psycopg_url_to_libpq(str(raw).strip())
 
 
+def parse_pgvector_type(type_name: str) -> int | None:
+    """Parse ``vector(N)`` from a Postgres ``format_type`` string."""
+    match = _VECTOR_TYPE_RE.search(str(type_name or ""))
+    return int(match.group(1)) if match else None
+
+
+def existing_pgvector_embedding_dim(
+    connection_string: str,
+    *,
+    table_name: str = PGVECTOR_TABLE_NAME,
+) -> int | None:
+    """Return the live ``embedding vector(N)`` width, or ``None`` if unknown.
+
+    Connection / missing-table failures return ``None`` so mocked factory tests
+    and first-time creates are not blocked.
+    """
+    try:
+        import psycopg
+    except ImportError:
+        return None
+    try:
+        with psycopg.connect(connection_string) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT format_type(a.atttypid, a.atttypmod)
+                    FROM pg_attribute a
+                    JOIN pg_class c ON a.attrelid = c.oid
+                    JOIN pg_namespace n ON c.relnamespace = n.oid
+                    WHERE n.nspname = 'public'
+                      AND c.relname = %s
+                      AND a.attname = 'embedding'
+                      AND NOT a.attisdropped
+                    """,
+                    (table_name,),
+                )
+                row = cur.fetchone()
+    except Exception:  # noqa: BLE001 — inspect is best-effort
+        logger.debug("could not inspect pgvector embedding dimension", exc_info=True)
+        return None
+    if not row:
+        return None
+    return parse_pgvector_type(str(row[0]))
+
+
+def embedding_dimension_mismatch_message(
+    *,
+    existing: int,
+    configured: int,
+    table_name: str = PGVECTOR_TABLE_NAME,
+) -> str:
+    """User-facing explanation when the pgvector column and settings disagree."""
+    return (
+        f"Pgvector table {table_name} embedding column is vector({existing}), "
+        f"but INDEXING_EMBEDDING_DIM={configured}. "
+        f"Set INDEXING_EMBEDDING_DIM={existing} (process env overrides .env) "
+        f"or drop and recreate {table_name} at the new dimension."
+    )
+
+
 def build_document_store(
     *,
     mode: str | None = None,
@@ -132,6 +198,16 @@ def build_document_store(
         settings=cfg,
         connection_string=connection_string,
     )
+    if not recreate_table:
+        existing = existing_pgvector_embedding_dim(conn, table_name=PGVECTOR_TABLE_NAME)
+        if existing is not None and existing != int(dim):
+            raise ValueError(
+                embedding_dimension_mismatch_message(
+                    existing=existing,
+                    configured=int(dim),
+                    table_name=PGVECTOR_TABLE_NAME,
+                )
+            )
     return PgvectorDocumentStore(
         connection_string=Secret.from_token(conn),
         embedding_dimension=dim,

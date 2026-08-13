@@ -10,7 +10,7 @@
 | **Document type** | Architecture vocabulary / agent role mapping (study only) |
 | **Status** | Complete (docs only — no runtime rename required) |
 | **Date** | 2026-08-11 |
-| **Version** | 2.1.9 |
+| **Version** | 2.1.10 |
 | **Application** | `haystack-fast-api` Multi-Agent Orchestrator (LangGraph) |
 | **Question** | How do **Coordinator**, **Worker**, and **Delegator** map onto the existing Orchestrator + domain agents + in-process tools design? |
 | **Authority** | **Authoritative for role vocabulary.** Dual-plane study remains authoritative for data planes, tool catalog, and sync. Implementation plan Phase 7 is authoritative for rollout steps. |
@@ -2913,6 +2913,7 @@ Indexing gate checklist: validate `user_id` + sources + MIME → run index servi
 | **1.8.0** | 2026-08-11 | **§10 I Context management** (hierarchy global/session/task + switching preserve/restore/merge); §10.0.8 |
 | **1.9.0** | 2026-08-11 | **§10 J Decision integration** (retrieval + patterns + optimization); §10.0.9; role decision authority |
 | **2.0.0** | 2026-08-11 | **§10 K Workflow optimization** (DAG, fan-out caps, resources, dynamic adjustment); §10.0.10 |
+| **2.1.10** | 2026-08-13 | Call 2 quote remaps `equipment.id`=`assets.id`; internal DTO `asset_id` stays `assets.name` (do not invent) |
 | **2.1.9** | 2026-08-13 | **S7.8 as-built:** Worker [5] live KG-1 `project_vector_search` + `project_kg_query` |
 | **2.1.8** | 2026-08-13 | **S8.3 as-built:** live Bolt Neo4j tools + populate HTTP; default fake; K-3 on unavailable |
 | **2.1.7** | 2026-08-13 | **S4 app as-built:** live SQL fleet (`FLEET_BACKEND=sql`); `asset_id` = `assets.name` |

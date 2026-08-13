@@ -513,7 +513,8 @@ MUST NOT treat summary as ranked fleet recommendations or ML rent (`results_by_n
 **Status:** **as-built** for Call 1 project-spec summary (S1a–S1e).
 
 ### Requirement: Needs summary on ingest response (as-built S1c)
-After successful index + mandatory KG, the live success body MUST include **`needs_summary`** (array), produced by the configured need decomposer (`NEED_DECOMPOSER=stub|llm`) on project text or extracted file content.  
+After successful index + mandatory KG, the live success body MUST include **`needs_summary`** (array), produced by the configured need decomposer (`NEED_DECOMPOSER=stub|llm`) on **extracted file text first**, then `project_text`. The placeholder caption `"Optional caption alongside file"` MUST be ignored.  
+Stub / LLM-empty fallback MUST split **one need per approved type** when distinct types appear, using `equipment_hints` (not a shared description) so a forklift need cannot pick a scissor lift.  
 Empty list + warning is allowed when no needs can be inferred; MUST NOT invent fleet inventory or rates.  
 (Trace: partial FR-IX-023 / S1c)  
 **Status:** **as-built (S1c)**.
@@ -536,6 +537,7 @@ After successful index + mandatory KG, the live success body MUST include **`exp
 - **`null`** when missing or uncertain, with a warning that budget was not found.  
 
 MUST NOT invent a budget. MUST NOT treat `options.include_pricing` as a budget amount.  
+Recognized extract forms include `SGD8000`, `SGD 8k`, `1.5m SGD`, spoken currency, `RM`, yen, cue + bare number (`budget of 8000`), spaced thousands, and `$8000` / `$12,500` when the figure looks like money. Words only (`tight budget`), `$10` room-size, and `8m` / `20 ton` MUST NOT become a budget.  
 (Trace: partial FR-IX-023 / S1d)  
 **Status:** **as-built (S1d)**.
 
@@ -543,18 +545,20 @@ MUST NOT invent a budget. MUST NOT treat `options.include_pricing` as a budget a
 - **GIVEN** successful ingest
 - **WHEN** the project-spec does not state a budget
 - **THEN** `expected_budget` is null and a warning MAY state that budget was not found
-- **WHEN** the project-spec states a budget confidently (e.g. `SGD 15000`)
+- **WHEN** the project-spec states a budget confidently (e.g. `SGD 15000` or `budget of 8000`)
 - **THEN** `expected_budget` includes amount (and currency when known) with a source marker (e.g. extracted)
+- **AND** words-only / `$10` room-size / `8m` MUST remain `null`
 
 ### Requirement: Free-text rental dates on ingest response (as-built S1e)
 After successful index + mandatory KG, when request omits `start_date` and/or `end_date`, the service MUST attempt deterministic extract from project text / extracted file content.  
 Request values MUST win over extract when present.  
 When no confident dates exist, fields MUST be null (warning MAY state dates not found). MUST NOT invent dates.  
+Recognized forms: ISO; `DD/MM/YYYY` and `MM/DD/YYYY` when unambiguous; English months (`1 Sep 2026`, `Sep 1, 2026`, ordinals, hyphenated names, two-digit years); dotted/slashed numerics; compact `YYYYMMDD`; ISO datetimes; quarters (`Q3 2026`); month-only; `start/end of September`; `this/next month`. Heights like `8m` are not dates.  
 (Trace: partial FR-IX-023 / S1e)  
 **Status:** **as-built (S1e)**.
 
 #### Scenario: Dates from document when request omits (S1e as-built)
-- **GIVEN** request omits dates but the project-spec states a rental window confidently (e.g. from 2026-09-01 to 2026-09-14)
+- **GIVEN** request omits dates but the project-spec states a rental window confidently (e.g. from 2026-09-01 to 2026-09-14, or `1 Sep 2026 to 30 Sep 2026`, or `Q3 2026`)
 - **WHEN** ingest succeeds
 - **THEN** `tentative_start_date` / `tentative_end_date` are filled from the document when confident
 - **AND** when request also supplies dates, request values win over extract
@@ -798,6 +802,7 @@ Sources MUST be classified according to the following normative extension / MIME
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **0.11.0** | 2026-08-13 | Call 1 extract as-built expansions: file-before-text + ignore caption; multi-need hint split; expanded date/budget patterns (not words-only / `$10` / `8m`) |
 | **0.10.0** | 2026-08-12 | **S5-I1 as-built:** FR-IX-028 pipeline/session factory wire; tenant filters; TTL/delete; `@pytest.mark.pgvector` optional pack |
 | **0.9.0** | 2026-08-12 | **S5-I0 as-built:** FR-IX-027 `INDEXING_DOCUMENT_STORE` + `build_document_store()` (`memory` default \| `pgvector`) |
 | **0.8.1** | 2026-08-12 | FR-IX-015: query/store embedding dim must match; pytest conftest forces mock + dim 384 (host env isolation) |

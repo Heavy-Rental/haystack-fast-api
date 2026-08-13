@@ -33,3 +33,7 @@ class Asset(Base):
     condition: Mapped[str | None] = mapped_column()
     min_daily_rate: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     max_daily_rate: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    description: Mapped[str | None] = mapped_column()
+    purchase_year: Mapped[int | None] = mapped_column()
+    # Optional Spring column; omitted from SELECT when the mirror lacks it.
+    location: Mapped[str | None] = mapped_column()

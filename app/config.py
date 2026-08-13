@@ -2,8 +2,28 @@
 
 from functools import lru_cache
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def normalize_fleet_backend(value: object) -> str:
+    """Accept ``sql``, ``SQL``, ``=sql`` (dotenv typo). Anything else stays as given."""
+    text = str(value if value is not None else "fake").strip().lower()
+    text = text.lstrip("=").strip()
+    return text or "fake"
+
+
+def is_sql_fleet_backend(value: object) -> bool:
+    return normalize_fleet_backend(value) == "sql"
+
+
+def normalize_pricing_schema(value: object) -> str:
+    """``primary_snapshot`` (default) or ``public`` (direct Spring tables)."""
+    text = str(value if value is not None else "primary_snapshot").strip().lower()
+    text = text.lstrip("=").strip()
+    if text in {"public", "primary_snapshot"}:
+        return text
+    return "primary_snapshot"
 
 
 class Settings(BaseSettings):
@@ -109,6 +129,22 @@ class Settings(BaseSettings):
     # fake (default, CI) = seed / injected DTOs
     # sql = LiveSqlFleetBackend against Postgres-Haystack (allowlisted ORM)
     fleet_backend: str = Field(default="fake", alias="FLEET_BACKEND")
+
+    @field_validator("fleet_backend", mode="before")
+    @classmethod
+    def _coerce_fleet_backend(cls, value: object) -> str:
+        return normalize_fleet_backend(value)
+
+    # Fleet + pricing SQL schema. Models are mapped to primary_snapshot;
+    # ``public`` is applied via schema_translate_map (same tables).
+    pricing_schema: str = Field(
+        default="primary_snapshot", alias="PRICING_SCHEMA"
+    )
+
+    @field_validator("pricing_schema", mode="before")
+    @classmethod
+    def _coerce_pricing_schema(cls, value: object) -> str:
+        return normalize_pricing_schema(value)
 
     # S8.3 / Phase 8: KG-2 Neo4j tools.
     # fake (default, CI) = FakeNeo4jBackend (empty unless injected)

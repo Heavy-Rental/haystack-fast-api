@@ -3,8 +3,8 @@
 | Field | Value |
 |-------|--------|
 | **Package** | `Feasibility_Study_Spring/` |
-| **Version** | **2.0.0** |
-| **Date** | 2026-08-12 |
+| **Version** | **2.1.0** |
+| **Date** | 2026-08-13 |
 
 ---
 
@@ -60,6 +60,8 @@ Use [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementat
 - Implement C/W/D multi-agent roles inside Spring  
 - Treat Call 2 as chatbot Q&A (that is Call 3 `.../query`)  
 - Expect Call 3 path for portal submit primary body (primary is Call 2 quote)  
+- Map live quote `equipment.id` to seed `AST-*` — live SQL uses `assets.id` (PK) so Spring can FK `recommendation_items.asset_id`  
+- Expect `equipment.img` or require `platformHeight` on the Spring portal DTO (Haystack-only; Spring MAY drop)  
 - Enable aggressive prod ingest retry without S2a  
 - Expand this pack into C2 (202 jobs) without a new plan  
 
@@ -69,6 +71,7 @@ Use [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementat
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **2.1.0** | 2026-08-13 | Live quote `equipment.id` = `assets.id`; no `img`; Spring MAY drop `platformHeight` |
 | **2.0.0** | 2026-08-12 | Call 2 recommend / Call 3 Q&A handoff checklist |
 | **1.1.1** | 2026-08-12 | Dual-hop WireMock checklist; align Feasibility_Study |
 | **1.1.0** | 2026-08-12 | Portal dual-hop saga checklist (Call 1 then Call 2) |

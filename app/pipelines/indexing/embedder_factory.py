@@ -20,6 +20,19 @@ class DocumentEmbedder(Protocol):
     def run(self, documents: list[Any]) -> dict[str, Any]: ...
 
 
+def openai_embedding_dimensions(model: str, dimension: int) -> int | None:
+    """Return the OpenAI ``dimensions`` kwarg when the model supports it.
+
+    ``text-embedding-3-*`` accepts a shortened size so the vector matches
+    ``INDEXING_EMBEDDING_DIM`` / the pgvector column. Older models (ada-002)
+    reject ``dimensions`` and keep their native width.
+    """
+    name = (model or "").strip().lower()
+    if "text-embedding-3" in name:
+        return int(dimension)
+    return None
+
+
 def build_document_embedder(
     *,
     mode: EmbedderMode | str = "mock",
@@ -43,6 +56,9 @@ def build_document_embedder(
             "model": openai_model,
             "progress_bar": False,
         }
+        dims = openai_embedding_dimensions(openai_model, dimension)
+        if dims is not None:
+            kwargs["dimensions"] = dims
         if openai_api_key:
             kwargs["api_key"] = Secret.from_token(openai_api_key)
         if openai_base_url:

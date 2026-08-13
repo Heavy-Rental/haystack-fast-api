@@ -15,6 +15,7 @@ import httpx
 from pydantic import ValidationError
 
 from app.schemas.recommendations import DecomposedNeed
+from app.services.need_decomposer import split_needs_from_text
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +25,18 @@ Return ONLY a JSON array (no markdown fences, no commentary). Each element:
 {
   "need_id": "need_1",
   "description": "clear equipment need description",
-  "equipment_hints": ["scissors lift"],
+  "equipment_hints": ["scissor lift"],
   "quantity": 1
 }
 
 Rules:
-- Prefer approved types when hinting: Boom Lift, Scissors Lift, Fork Lift, Excavator.
-- quantity is the number of units requested (integer >= 1).
+- Emit ONE array element per distinct equipment type. Do not collapse a forklift
+  and a scissors lift into a single need.
+- equipment_hints must use these slugs only: "forklift", "scissor lift",
+  "boom lift", "excavator".
+- quantity is the number of units requested for that type (integer >= 1).
 - Use distinct need_id values: need_1, need_2, ...
+- Ignore placeholder captions such as "Optional caption alongside file".
 - If the text is not about equipment rental, return [].
 - Do not invent needs that are not implied by the text.
 """
@@ -165,10 +170,13 @@ class LlmNeedDecomposer:
             payload = response.json()
         except httpx.HTTPError as exc:
             logger.exception("LLM need decompose HTTP error: %s", exc)
-            return []
+            return split_needs_from_text(text)
 
         content = _extract_message_content(payload)
-        return parse_needs_json(content)
+        needs = parse_needs_json(content)
+        if needs:
+            return needs
+        return split_needs_from_text(text)
 
 
 def _extract_message_content(payload: dict[str, Any]) -> str:

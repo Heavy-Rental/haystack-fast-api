@@ -90,6 +90,21 @@ def test_fake_fleet_filter_by_category() -> None:
     by_cat = filter_fleet_candidates(assets, category="excavator")
     assert {a["asset_id"] for a in by_cat} == {"AST-EX-001", "AST-EX-002"}
 
+    from app.pipelines.seed_fleet import get_seed_assets
+
+    forklift_only = filter_fleet_candidates(
+        get_seed_assets(),
+        unit_need={
+            "description": (
+                "Need one forklift for loading bay and indoor elevated "
+                "work about 8m for scissors lift."
+            ),
+            "equipment_hints": ["forklift"],
+        },
+    )
+    assert forklift_only
+    assert all(a["category"] == "forklift" for a in forklift_only)
+
 
 def test_availability_drops_overlapping_bookings() -> None:
     """Scenario: availability drops overlapping bookings."""

@@ -84,18 +84,36 @@ def _probe(session: Session, schema: str) -> None:
     )
 
 
+def _preferred_schema() -> str:
+    try:
+        from app.config import get_settings
+
+        preferred = str(get_settings().pricing_schema or PRIMARY_SCHEMA).strip()
+    except Exception:
+        preferred = PRIMARY_SCHEMA
+    if preferred == DEGRADED_SCHEMA:
+        return DEGRADED_SCHEMA
+    return PRIMARY_SCHEMA
+
+
 def resolve_pricing_schema(session: Session) -> PricingSchemaResolution:
-    """Resolve which schema this predict_price() call should read from.
+    """Resolve which schema this predict_price() / fleet read should use.
 
     Not per-query -- call once and thread the result through every read.
+    ``PRICING_SCHEMA=public`` probes ``public`` first; default is
+    ``primary_snapshot`` then degrade to ``public``.
     """
+    preferred = _preferred_schema()
+    fallback = (
+        PRIMARY_SCHEMA if preferred == DEGRADED_SCHEMA else DEGRADED_SCHEMA
+    )
     last_exc: Exception | None = None
     for backoff in _TRANSIENT_RETRY_BACKOFF_SECONDS:
         if backoff:
             time.sleep(backoff)
         try:
-            _probe(session, PRIMARY_SCHEMA)
-            return PricingSchemaResolution(schema=PRIMARY_SCHEMA, degraded=False)
+            _probe(session, preferred)
+            return PricingSchemaResolution(schema=preferred, degraded=False)
         except Exception as exc:
             if not _is_undefined_table(exc):
                 raise
@@ -103,7 +121,7 @@ def resolve_pricing_schema(session: Session) -> PricingSchemaResolution:
             session.rollback()
 
     try:
-        _probe(session, DEGRADED_SCHEMA)
+        _probe(session, fallback)
     except Exception as exc:
         if not _is_undefined_table(exc):
             raise
@@ -114,8 +132,10 @@ def resolve_pricing_schema(session: Session) -> PricingSchemaResolution:
         ) from exc
 
     logger.warning(
-        "primary_snapshot unavailable after %d retries (%s); degrading to public",
+        "%s unavailable after %d retries (%s); degrading to %s",
+        preferred,
         len(_TRANSIENT_RETRY_BACKOFF_SECONDS),
         last_exc,
+        fallback,
     )
-    return PricingSchemaResolution(schema=DEGRADED_SCHEMA, degraded=True)
+    return PricingSchemaResolution(schema=fallback, degraded=True)
