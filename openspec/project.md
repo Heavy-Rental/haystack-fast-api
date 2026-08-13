@@ -54,7 +54,7 @@ The industry is capital-intensive. Success depends on:
 
 **As-built DocumentStore (S5-I0 + S5-I1):** `INDEXING_DOCUMENT_STORE` + `build_document_store()` / `create_session_document_store()` (`memory` default = fresh InMemory per ingest \| `pgvector` = shared table). Call 1 wires factory into writer + session registry. Retrieval tools filter `user_id` + `ingest_id`. Optional `INDEXING_CHUNK_TTL_SECONDS` + delete helpers. Dual-mode tests: default CI memory; optional `@pytest.mark.pgvector` (FR-IX-027/028).
 
-**Target (later):** I2 production default `pgvector`; production default `RECOMMEND_VIA_AGENT_GRAPH`; align config sync table names with haystack ORM; live Neo4j populate (S8); Naive/hybrid RAG over manuals; async ML training. Phase 7 **S7.0–S7.7 as-built**. **S4 as-built:** app `FLEET_BACKEND=sql` + config pack T0–T2 (60s poll, allowlist, METRICS). Normative detail lives in capability specs—not here.
+**Target (later):** I2 production default `pgvector`; production default `RECOMMEND_VIA_AGENT_GRAPH`; align config sync table names with haystack ORM; S8.2 T4 + **S8.3** live Neo4j tools; Naive/hybrid RAG over manuals; async ML training. Phase 7 **S7.0–S7.7 as-built**. **S4 as-built.** **S8.1 T3 as-built (config):** `neo4j-populate`. Normative detail lives in capability specs—not here.
 
 ---
 

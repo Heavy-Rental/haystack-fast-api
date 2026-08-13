@@ -36,6 +36,7 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | — (S7.7 new) | `openspec/changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/` | Phase 7 recommend prompts A–L + tool DI / Delegator allowlist |
 | — (S7.2 new) | `openspec/changes/archive/2026-08-13-s7-2-neo4j-tools/` | Phase 7 Neo4j tools (templates + populate no-op; K-3 skip) |
 | — (S4 new) | `openspec/changes/archive/2026-08-13-s4-live-sql-fleet-backend/` | Phase 4 app: D0 fleet-read contract + live SQL fleet backend |
+| — (S8.1 new) | `openspec/changes/archive/2026-08-13-s8-1-t3-neo4j-populate/` | Phase 8.1 T3 config pack neo4j-populate as-built stamp |
 | `app/agents/prompts.py` | `openspec/spdd/prompts/project-knowledge-agents.md` (index) | OpenSPDD first-class Stage-1 Q&A prompts |
 | `app/agents/recommend_prompts.py` | `openspec/spdd/prompts/recommend-agents.md` (index) | OpenSPDD first-class recommend A–L prompts (S7.7) |
 
@@ -89,6 +90,7 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | S7.2 change archive | Neo4j tool catalog tasks | `changes/archive/2026-08-13-s7-2-neo4j-tools/` |
 | S4 (as-built app) | Fleet LTM read — `FLEET_BACKEND=sql` + `FleetRepository`; D0 map | `specs/spring-entity-repository/fleet-read-contract.md`; `app/repositories/fleet_repository.py`; `tests/test_fleet_repository.py`; impl-plan **Phase 4 / S4 app**; archive `changes/archive/2026-08-13-s4-live-sql-fleet-backend/` |
 | S4 (as-built config T0–T2) | Pack `develop`: 60s poll, `SYNC_TABLE_ALLOWLIST`, METRICS; table-name alignment follow-up | Config repo `Haystack-Fast-API/`; impl-plan **3.12.0**; dual-plane **2.8.0** |
+| S8.1 T3 (as-built config) | `neo4j-populate` SQL→Cypher MERGE; `:Asset`/`:Booking`/`:Category` isolated from `:Document` | Pack spec `005-haystack-neo4j-populate`; impl-plan **3.13.0**; archive `changes/archive/2026-08-13-s8-1-t3-neo4j-populate/` |
 | FR-001 … FR-053 (+ NFR, demo) | Equipment recommendation parent | `specs/equipment-recommendation/spec.md` |
 | Domain invariants | Domain | `specs/domain/spec.md` |
 | Setup / layering / stack | Project setup | `specs/project-setup/spec.md` |
