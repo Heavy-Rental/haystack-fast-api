@@ -103,7 +103,7 @@ The normative stack SHALL include: FastAPI, Uvicorn, haystack-ai, langgraph, SQL
 - **THEN** this capability and change-control are updated in the same change set
 
 ### Requirement: Default pytest suite is CI-safe and env-isolated
-Default automated tests SHALL run with `uv run pytest` (or `uv run pytest tests/`) without requiring live LLM keys, external embedder APIs, or a live Pgvector connection. Shared fixtures in `tests/conftest.py` SHALL isolate host/`.env` overrides that would otherwise make the suite host-dependent. Optional `@pytest.mark.pgvector` tests MAY exist but MUST skip unless `RUN_PGVECTOR_TESTS=1` (and Postgres is available).
+Default automated tests SHALL run with `uv run pytest` (or `uv run pytest tests/`) without requiring live LLM keys, external embedder APIs, or a live Pgvector connection. Shared fixtures in `tests/conftest.py` SHALL isolate host/`.env` overrides that would otherwise make the suite host-dependent. Optional `@pytest.mark.pgvector` tests MAY exist but MUST skip unless `RUN_PGVECTOR_TESTS=1` (and Postgres is available). Optional `@pytest.mark.neo4j` tests MAY exist but MUST skip unless `RUN_NEO4J_TESTS=1`.
 
 As-built isolation (autouse fixture):
 
@@ -116,8 +116,9 @@ As-built isolation (autouse fixture):
 | `INDEXING_DOCUMENT_STORE` | `memory` (runtime default; I0+I1) | Default suite never opens Pgvector; host `pgvector` only when tests opt in |
 | `RECOMMEND_VIA_AGENT_GRAPH` | `false` | Call 2 stays on MVP unless a test opts in |
 | `FLEET_BACKEND` | `fake` | Default suite never opens live fleet SQL |
+| `NEO4J_BACKEND` | `fake` | Default suite never opens live Bolt |
 
-**As-built:** default suite needs no live Pgvector/Neo4j/LLM. `@pytest.mark.pgvector` is registered for optional live tests (skip unless `RUN_PGVECTOR_TESTS=1`). Neo4j/integration markers remain TARGET.  
+**As-built:** default suite needs no live Pgvector/Neo4j/LLM. `@pytest.mark.pgvector` skips unless `RUN_PGVECTOR_TESTS=1`. `@pytest.mark.neo4j` skips unless `RUN_NEO4J_TESTS=1`.  
 (Trace: design.md Test runbook; knowledge-graph vector tool dim match; FR-IX-028)
 
 #### Scenario: Full suite without host embedder env
@@ -158,4 +159,5 @@ As-built isolation (autouse fixture):
 | 2.0.2 | 2026-08-10 | Corrected hostname throughout: **`postgres-haystack`** (hyphen), not `postgres_haystack` (underscore) — confirmed via DNS on `HR-87-ml-2-d-production-db-wiring-for-period-utilization` (legacy `specification/SPEC-project-setup.md`, before it was stubbed to point here); `db` is ambiguous on this network and MUST NOT be used. `.env.example`/`app/config.py` `POSTGRES_HOSTNAME` default updated to match. |
 | 2.1.0 | 2026-08-12 | **Pytest isolation as-built:** conftest forces mock embedder + dim 384 (+ stub agents / temp KG dir); default suite has no optional prereq markers; vector-tool tests must match query/store embedding dim |
 | 2.2.0 | 2026-08-12 | **S5-I0:** `INDEXING_DOCUMENT_STORE` default `memory`; `pgvector-haystack` on stack for factory; default suite still no live Pgvector |
+| 2.4.0 | 2026-08-13 | **S8.3:** conftest forces `NEO4J_BACKEND=fake`; optional `@pytest.mark.neo4j` (`RUN_NEO4J_TESTS=1`) |
 | 2.3.0 | 2026-08-12 | **S5-I1:** optional `@pytest.mark.pgvector` + `INDEXING_CHUNK_TTL_SECONDS`; default suite still no live Pgvector |

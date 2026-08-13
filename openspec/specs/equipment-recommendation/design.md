@@ -190,18 +190,18 @@ See [`../recommendation-pipeline/design.md`](../recommendation-pipeline/design.m
 | `app/agents/recommend_state.py` | **S7.0** `RecommendAgentState` + F-2 `validate_state_transition` / partition writes; optional `graph_notes` |
 | `app/agents/fleet_tools.py` | **S7.1** fleet tools; **S4** `LiveSqlFleetBackend` |
 | `app/repositories/fleet_repository.py` | **S4** allowlisted ORM reads; `asset_id` = `assets.name` |
-| `app/agents/neo4j_tools.py` | **S7.2** `neo4j_cypher_read` (templates) + `trigger_neo4j_populate` (no-op); `FakeNeo4jBackend` |
+| `app/agents/neo4j_tools.py` | **S7.2 + S8.3** templates + `FakeNeo4jBackend` / `BoltNeo4jBackend` / populate HTTP |
 | `app/agents/tool_factory.py` | **S7.1** DI catalog (`fake` seed default \| `sql` DTO backend); **S7.2** Neo4j tools; **S7.7** `ALLOWED_WORKER_KINDS` + `build_recommend_runtime` |
 | `app/agents/tools.py` | S3 `run_indexing_from_request`; S6 `predict_asset_price` |
 | `app/agents/recommend_graph.py` | **S7.3** `build_recommend_graph` / `run_recommend_graph` (isolated from Q&A) |
-| `app/agents/recommend_nodes.py` | **S7.3** gate, project worker, delegator, fleet/price workers, `execute_needs`; **S7.2** K-3 Neo4j skip; **S7.7** `validate_work_plan` |
+| `app/agents/recommend_nodes.py` | **S7.3** gate, project worker, delegator, fleet/price workers, `execute_needs`; **S7.2** K-3 Neo4j skip; **S7.7** `validate_work_plan`; **S7.8** Worker [5] KG-1 tools |
 | `app/agents/recommend_synthesis.py` | **S7.4** tool-free stub Coordinator [8]; **S7.7** prompt-backed rationale |
 | `app/agents/recommend_prompts.py` | **S7.7** A–L contracts (Coordinator / Delegator / Workers [5][6][7]) |
 | `app/services/session_recommend.py` | **S7.5** Call 2 flag `RECOMMEND_VIA_AGENT_GRAPH` → graph → same quote DTO |
 | `app/agents/recommend_traces.py` | **S7.6** G-1 `append_tool_trace` / `duration_ms` |
-| Tests | `tests/test_recommend_agent_state.py`, `test_fleet_tools.py`, `test_tool_factory.py`, `test_neo4j_tools.py`, `test_recommend_graph_order.py`, `test_recommend_fanout.py`, `test_recommend_synthesis.py`, `test_recommend_http_call2.py`, `test_tool_traces.py`, `test_recommend_prompts.py`, `test_agent_tool_di.py` |
+| Tests | `tests/test_recommend_agent_state.py`, `test_fleet_tools.py`, `test_tool_factory.py`, `test_neo4j_tools.py`, `test_neo4j_tools_integration.py` (optional), `test_recommend_graph_order.py`, `test_recommend_fanout.py`, `test_recommend_synthesis.py`, `test_recommend_http_call2.py`, `test_tool_traces.py`, `test_recommend_prompts.py`, `test_agent_tool_di.py`, `test_recommend_project_worker.py` |
 
-Live Neo4j **job + T4 triggers** are as-built in the config pack (`neo4j-populate`, post-sync HTTP, admin `:8089`). App `neo4j_cypher_read` / populate trigger remain fake until **S8.3**.
+Live Neo4j **job + T4 triggers** are as-built in the config pack (`neo4j-populate`, post-sync HTTP, admin `:8089`). App **S8.3** wires `NEO4J_BACKEND=bolt` (`BoltNeo4jBackend`) and `trigger_neo4j_populate` → `NEO4J_POPULATE_URL`. Default CI stays fake.
 
 ## O — Operations
 

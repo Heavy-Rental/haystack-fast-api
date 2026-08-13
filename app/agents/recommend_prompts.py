@@ -93,8 +93,8 @@ A. Objective: decompose the project specification into structured needs[].
 
 D. Write partition: project.* (needs, notes). Must not write fleet_by_need, prices_by_need, recommendation, or work_plan.
 
-E. Environment: Runtime tool is decompose_project_needs. Do not call retrieve_fleet_assets or predict_asset_price.
-   (Allowlist named in C/W/D §10.4 also includes project_vector_search / project_kg_query — not invoked in S7.7.)
+E. Environment: Allowlisted tools are project_vector_search, project_kg_query, then decompose_project_needs.
+   Do not call retrieve_fleet_assets, neo4j_cypher_read, or predict_asset_price.
 
 L-1 Sequential: once per run, after the indexing gate, before the Delegator.
 L-2 Parallel: none — do not spawn sibling needs yourself.

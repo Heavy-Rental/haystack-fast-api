@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | **Stage 1 as-built** — mandatory post-join KG assembly (HR-76) + project DocumentStore/KG-1 multi-agent Q&A; **Stage 2** (KG-2 / equipment) pending |
+| **Status** | **Stage 1 as-built** — mandatory post-join KG assembly (HR-76) + project DocumentStore/KG-1 multi-agent Q&A; **KG-2 FR-KG-011 as-built** (pack persist + app S8.3 load) |
 | **Capability** | `knowledge-graph` (HR-76 assembly) · `kg-multi-agent-orchestration` (agents) |
 | **Tracking** | **HR-76** (assembly) |
 | **Standards** | OpenSpec · Spec-kit · OpenSPDD |
@@ -213,14 +213,15 @@ Project-spec indexing + KG assembly SHALL follow Part A. The project knowledge s
 - **WHEN** a session is discarded via registry `delete`
 - **THEN** other sessions (and later KG-2) are unaffected
 
-### Requirement: FR-KG-011 Equipment stockpile knowledge KG-2 (Stage 2 — deferred)
+### Requirement: FR-KG-011 Equipment stockpile knowledge KG-2
 Equipment stockpile knowledge (**KG-2**) SHALL be derived from Postgres (or an approved source) and persisted independently of user sessions.  
 (Trace: source FR-KG-011; was FR-KG-02)  
-**Status:** **Stage 2 — deferred** for in-app persist/load tools. **S8.1–S8.2 as-built (config pack):** `neo4j-populate` MERGEs fleet labels; post-sync + admin HTTP trigger; DocumentStore `:Document` never dropped. **S7.2 as-built** still ships fake `neo4j_cypher_read` / `trigger_neo4j_populate` (K-3 skip). App live tools remain **S8.3**. See [`../equipment-recommendation/spec.md`](../equipment-recommendation/spec.md).
+**Status:** **as-built**. Persist = config pack **S8.1–S8.2** (`neo4j-populate` MERGE + post-sync/admin HTTP; `:Document` never dropped). Load = app **S8.3** `neo4j_cypher_read` against Bolt (`NEO4J_BACKEND=bolt`); templates only; empty/unavailable → `[]` / K-3 skip. See [`../equipment-recommendation/spec.md`](../equipment-recommendation/spec.md).
 
-#### Scenario: Deferred — persistent load without per-request Postgres (Stage 2)
-- **WHEN** Stage 2 is implemented and KG-2 is required online
-- **THEN** KG-2 can be loaded from persistent storage without re-querying Postgres on every request
+#### Scenario: Persistent load without per-request Postgres
+- **WHEN** KG-2 is required online and `NEO4J_BACKEND=bolt`
+- **THEN** fleet graph context is loaded from Neo4j without re-querying Postgres on every request
+- **AND** `:Document` labels are not read or deleted
 
 ### Requirement: FR-KG-012 No file-type-specific KG variants
 There SHALL be no file-type-specific KG *variants*. Only converters/extractors at the pipeline head differ; `KnowledgeGraphGenerator` stays shared.  
@@ -287,11 +288,11 @@ The following product targets are **not** Stage-1 acceptance criteria. They rema
 
 | Deferred item | Related requirement / note |
 |---------------|----------------------------|
-| KG-2 equipment stockpile graph + refresh from Postgres | FR-KG-011 |
+| KG-2 equipment stockpile graph + refresh from Postgres | FR-KG-011 **as-built** (S8.1–S8.3) |
 | Equipment vector store / manuals retrieval tool | Stage 2 backlog |
 | Supervisor / dynamic routing (research, graph, pricing, availability) | Stage 2+ topology |
 | Reattach full recommend pipeline tools (`check_availability`, `recommend_prices`, …) | Stage 2+ |
-| Neo4j optional backend | Persistence policy Stage 2 |
+| Neo4j optional backend | **as-built S8.3** (`NEO4J_BACKEND=bolt`; default fake) |
 | Persist project DocumentStore snapshots for dual-source resume after restart | Stage 2 backlog |
 
 ---
@@ -324,6 +325,7 @@ The following product targets are **not** Stage-1 acceptance criteria. They rema
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **1.4.0** | 2026-08-13 | FR-KG-011 **as-built:** persist S8.1–S8.2 (pack); load S8.3 live Bolt + populate HTTP |
 | **1.3.2** | 2026-08-13 | FR-KG-011: config **S8.2 T4** post-sync + admin HTTP as-built; app tools still S8.3 |
 | **1.3.1** | 2026-08-13 | FR-KG-011: config **S8.1 T3** `neo4j-populate` as-built; in-app persist/tools still Stage 2 / S8.3 |
 | **1.3.0** | 2026-08-13 | FR-KG-011 still Stage 2; pointer that S7.2 ships fake `neo4j_cypher_read` / populate no-op (live persist = S8) |

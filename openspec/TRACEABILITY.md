@@ -39,6 +39,8 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | — (S8.1 new) | `openspec/changes/archive/2026-08-13-s8-1-t3-neo4j-populate/` | Phase 8.1 T3 config pack neo4j-populate as-built stamp |
 | — (S2b new) | `openspec/changes/archive/2026-08-13-s2b-spring-resilience-stamp/` | Phase 2 S2b Spring client/saga as-built stamp |
 | — (S8.2 new) | `openspec/changes/archive/2026-08-13-s8-2-t4-neo4j-populate-trigger/` | Phase 8.2 T4 config post-sync + admin HTTP as-built stamp |
+| — (S8.3 new) | `openspec/changes/archive/2026-08-13-s8-3-live-neo4j-tools/` | Phase 8.3 app live Neo4j Bolt client + populate HTTP |
+| — (S7.8 new) | `openspec/changes/archive/2026-08-13-s7-8-worker5-kg1-live/` | Worker [5] live KG-1 vector + project KG query |
 | `app/agents/prompts.py` | `openspec/spdd/prompts/project-knowledge-agents.md` (index) | OpenSPDD first-class Stage-1 Q&A prompts |
 | `app/agents/recommend_prompts.py` | `openspec/spdd/prompts/recommend-agents.md` (index) | OpenSPDD first-class recommend A–L prompts (S7.7) |
 
@@ -89,12 +91,15 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | S7.5/S7.6 change archive | Call 2 enrich + traces tasks | `changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/` |
 | S7.7 (as-built) | Equipment recommendation — A–L prompt contracts + tool DI + Delegator `worker_kind` allowlist | `specs/equipment-recommendation/spec.md` + design; `app/agents/recommend_prompts.py` · `tool_factory.py`; `tests/test_recommend_prompts.py` · `test_agent_tool_di.py`; impl-plan **Phase 7 / S7.7** · archive `changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/` |
 | S7.7 change archive | Prompts A–L + tool DI tasks | `changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/` |
+| S7.8 (as-built) | Equipment recommendation — Worker [5] live `project_vector_search` + `project_kg_query` before decompose | `specs/equipment-recommendation/spec.md`; `app/agents/recommend_nodes.py`; `tests/test_recommend_project_worker.py`; impl-plan **3.17.0**; archive `changes/archive/2026-08-13-s7-8-worker5-kg1-live/` |
 | S7.2 (as-built) | Equipment recommendation — KG-2 tools `neo4j_cypher_read` (templates) + `trigger_neo4j_populate` (non-blocking no-op); K-3 skip when empty | `specs/equipment-recommendation/spec.md` + design; `app/agents/neo4j_tools.py` · `tool_factory.py`; `tests/test_neo4j_tools.py`; impl-plan **Phase 7 / S7.2** · archive `changes/archive/2026-08-13-s7-2-neo4j-tools/` |
 | S7.2 change archive | Neo4j tool catalog tasks | `changes/archive/2026-08-13-s7-2-neo4j-tools/` |
 | S4 (as-built app) | Fleet LTM read — `FLEET_BACKEND=sql` + `FleetRepository`; D0 map | `specs/spring-entity-repository/fleet-read-contract.md`; `app/repositories/fleet_repository.py`; `tests/test_fleet_repository.py`; impl-plan **Phase 4 / S4 app**; archive `changes/archive/2026-08-13-s4-live-sql-fleet-backend/` |
 | S4 (as-built config T0–T2) | Pack `develop`: 60s poll, `SYNC_TABLE_ALLOWLIST`, METRICS; table-name alignment follow-up | Config repo `Haystack-Fast-API/`; impl-plan **3.12.0**; dual-plane **2.8.0** |
 | S8.1 T3 (as-built config) | `neo4j-populate` SQL→Cypher MERGE; `:Asset`/`:Booking`/`:Category` isolated from `:Document` | Pack spec `005-haystack-neo4j-populate`; impl-plan **3.13.0**; archive `changes/archive/2026-08-13-s8-1-t3-neo4j-populate/` |
 | S8.2 T4 (as-built config) | Post-sync populate trigger + admin HTTP `:8089`; scoped delete; never drop KG-1 | Pack spec 005 T4; impl-plan **3.15.0**; archive `changes/archive/2026-08-13-s8-2-t4-neo4j-populate-trigger/` |
+| S8.3 (as-built app) | Live `neo4j_cypher_read` / `trigger_neo4j_populate` (`NEO4J_BACKEND=bolt`; default fake); FR-KG-011 load | `app/agents/neo4j_tools.py`; `tests/test_neo4j_tools.py` · `test_neo4j_tools_integration.py`; impl-plan **3.16.0**; archive `changes/archive/2026-08-13-s8-3-live-neo4j-tools/` |
+| FR-KG-011 (as-built) | KG-2 persist (pack S8.1–S8.2) + load (app S8.3) | `specs/knowledge-graph/spec.md` |
 | FR-001 … FR-053 (+ NFR, demo) | Equipment recommendation parent | `specs/equipment-recommendation/spec.md` |
 | Domain invariants | Domain | `specs/domain/spec.md` |
 | Setup / layering / stack | Project setup | `specs/project-setup/spec.md` |

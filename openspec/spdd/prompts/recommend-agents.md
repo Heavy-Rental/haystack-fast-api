@@ -20,7 +20,7 @@ Recommend tools only via the in-process catalog. Synthesis **[8]** has **no tool
 |----------|-------|------------------|-------|
 | `RECOMMEND_SYNTHESIS_INTENT` | Coordinator [8] | Merge tool-backed fleet + prices into `results_by_need` | **None** |
 | `DELEGATOR_POLICY_INTENT` | Delegator | Emit allowlisted `work_plan[]` | **None** |
-| `PROJECT_WORKER_INTENT` | Worker [5] | Decompose project text into `needs[]` | `decompose_project_needs` (runtime) |
+| `PROJECT_WORKER_INTENT` | Worker [5] | Ground spec then decompose into `needs[]` | `project_vector_search`, `project_kg_query`, `decompose_project_needs` |
 | `FLEET_WORKER_INTENT` | Worker [6] | Retrieve / filter / availability for one `need_id` | `retrieve_fleet_assets`, `filter_fleet_candidates`, `check_booking_availability` |
 | `PRICING_WORKER_INTENT` | Worker [7] | Price known candidates for one `need_id` | `predict_asset_price` only |
 

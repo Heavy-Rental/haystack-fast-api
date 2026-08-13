@@ -1,6 +1,6 @@
-"""S7.2 — Neo4j tools (templates only, no-op until S8 / Phase 7).
+"""S7.2 + S8.3 — Neo4j tools (templates; fake default; live Bolt + populate HTTP).
 
-BDD scenarios (implementation-plan Stage S7.2):
+BDD scenarios (implementation-plan Stage S7.2 / S8.3):
 
 Feature: Allowlisted Neo4j tools (no-op until S8)
 
@@ -31,6 +31,38 @@ Feature: Allowlisted Neo4j tools (no-op until S8)
     Then  fleet SQL tools still run
     And   neo4j_cypher_read is skipped (K-3)
     And   results_by_need is still produced
+
+Feature: Live Neo4j client (S8.3)
+
+  Scenario: Default catalog stays fake
+    Given unset / NEO4J_BACKEND=fake
+    When  the recommend catalog is built
+    Then  the backend is FakeNeo4jBackend
+
+  Scenario: Populate with live-mode HTTP stub
+    Given a populate URL and an HTTP stub
+    When  trigger_neo4j_populate runs
+    Then  the stub is POSTed immediately
+    And   blocking is false
+
+  Scenario: HTTP populate failure is unavailable
+    Given the populate POST raises
+    When  trigger_neo4j_populate runs
+    Then  status is unavailable
+    And   blocking is false
+    And   no exception is raised
+
+  Scenario: Recommend is not blocked when Neo4j is unavailable
+    Given an unavailable Bolt backend
+    When  run_recommend_graph runs with indexing_ok
+    Then  fleet SQL tools still run
+    And   neo4j_cypher_read is skipped (K-3)
+
+  Scenario: Bolt mapper matches fixture templates
+    Given fixture-shaped Bolt records
+    When  templates run against the mapped backend
+    Then  results match FakeNeo4jBackend
+    And   :Document nodes are dropped
 """
 
 from __future__ import annotations
@@ -43,9 +75,12 @@ import pytest
 from app.agents.neo4j_tools import (
     TOOL_NEO4J_CYPHER_READ,
     TOOL_TRIGGER_NEO4J_POPULATE,
+    BoltNeo4jBackend,
     FakeNeo4jBackend,
     FreeFormCypherRejected,
+    UnavailableNeo4jBackend,
     UnknownNeo4jTemplateError,
+    map_fleet_graph,
     neo4j_cypher_read,
     trigger_neo4j_populate,
 )
@@ -56,6 +91,7 @@ from app.agents.tool_factory import (
     WORKER_KIND_FLEET,
     build_recommend_tool_catalog,
 )
+from app.config import Settings
 from app.schemas.recommendations import DecomposedNeed
 
 FIXTURES = Path(__file__).parent / "fixtures" / "recommend"
@@ -274,3 +310,178 @@ def test_fleet_worker_attaches_graph_notes_when_available() -> None:
     note_ids = {n.get("id") for n in notes}
     assert "ATT-SL-RAIL" in note_ids
     assert "kg-2" in (state["fleet_by_need"]["need_access"].get("source_tables") or [])
+
+
+def test_catalog_default_neo4j_is_fake() -> None:
+    """Scenario: Default catalog stays fake."""
+    catalog = build_recommend_tool_catalog(backend="fake")
+    assert isinstance(catalog.neo4j, FakeNeo4jBackend)
+    assert catalog.neo4j.is_available is True
+    assert catalog.neo4j.is_empty is True
+
+
+def test_catalog_respects_fake_settings() -> None:
+    settings = Settings(neo4j_backend="fake")
+    catalog = build_recommend_tool_catalog(backend="fake", settings=settings)
+    assert isinstance(catalog.neo4j, FakeNeo4jBackend)
+
+
+def test_populate_live_http_stub() -> None:
+    """Scenario: Populate with live-mode HTTP stub."""
+    posts: list[str] = []
+
+    def http_post(url: str) -> dict:
+        posts.append(url)
+        return {"status": "accepted", "job_id": "pack-abc"}
+
+    job = trigger_neo4j_populate(
+        backend=FakeNeo4jBackend(),
+        populate_url="http://neo4j-populate:8089/v1/populate",
+        http_post=http_post,
+    )
+    assert posts == ["http://neo4j-populate:8089/v1/populate"]
+    assert job["blocking"] is False
+    assert job["status"] == "accepted"
+    assert job["job_id"] == "pack-abc"
+
+
+def test_populate_http_failure_unavailable() -> None:
+    """Scenario: HTTP populate failure is unavailable."""
+
+    def http_post(url: str) -> dict:
+        del url
+        raise TimeoutError("populate timed out")
+
+    job = trigger_neo4j_populate(
+        populate_url="http://neo4j-populate:8089/v1/populate",
+        http_post=http_post,
+    )
+    assert job["blocking"] is False
+    assert job["status"] == "unavailable"
+    assert str(job["job_id"]).startswith("neo4j_pop_")
+
+
+def test_catalog_bolt_populate_uses_url() -> None:
+    posts: list[str] = []
+
+    def http_post(url: str) -> dict:
+        posts.append(url)
+        return {"status": "queued"}
+
+    settings = Settings(
+        neo4j_backend="bolt",
+        neo4j_populate_url="http://neo4j-populate:8089/v1/populate",
+    )
+    catalog = build_recommend_tool_catalog(
+        backend="fake",
+        settings=settings,
+        neo4j=UnavailableNeo4jBackend(),
+        populate_url=settings.neo4j_populate_url,
+        populate_http=http_post,
+    )
+    job = catalog.get(TOOL_TRIGGER_NEO4J_POPULATE)()
+    assert posts == ["http://neo4j-populate:8089/v1/populate"]
+    assert job["blocking"] is False
+    assert job["status"] == "queued"
+
+
+def test_recommend_not_blocked_when_neo4j_unavailable() -> None:
+    """Scenario: Recommend is not blocked when Neo4j is unavailable (K-3)."""
+    assets, bookings = _seed()
+    catalog = build_recommend_tool_catalog(
+        backend="fake",
+        assets=assets,
+        bookings=bookings,
+        neo4j=UnavailableNeo4jBackend(),
+    )
+    assert catalog.neo4j.is_available is False
+    assert catalog.neo4j.is_empty is True
+
+    state = run_recommend_graph(
+        user_id="u-test",
+        ingest_id="ing-test",
+        indexing_ok=True,
+        source_text="Need a scissors lift.",
+        start_date="2026-09-01",
+        end_date="2026-09-14",
+        catalog=catalog,
+        decomposer=FixtureOneNeedDecomposer(),
+        fanout_cap=1,
+    )
+
+    fleet_starts = [
+        t
+        for t in state["tool_traces"]
+        if t.get("node") == "fleet_worker" and t.get("status") == "start"
+    ]
+    assert fleet_starts
+    neo4j_calls = [
+        t for t in state["tool_traces"] if t.get("tool") == TOOL_NEO4J_CYPHER_READ
+    ]
+    assert neo4j_calls == []
+
+    plan_fleet = [
+        item
+        for item in (state.get("work_plan") or [])
+        if item.get("worker_kind") == WORKER_KIND_FLEET
+    ]
+    assert plan_fleet
+    assert TOOL_NEO4J_CYPHER_READ in (plan_fleet[0].get("skip_tools") or [])
+    results = state["recommendation"]["results_by_need"]
+    assert results
+    assert results[0]["need_id"] == "need_access"
+
+
+def test_bolt_mapper_matches_fixture_templates() -> None:
+    """Scenario: Bolt mapper matches fixture templates."""
+    fake = FakeNeo4jBackend.from_fixture(FIXTURES / "neo4j_graph.json")
+    raw_nodes = [
+        {
+            "labels": [node["label"]],
+            "properties": {
+                "id": node["id"],
+                "category": node.get("category"),
+                **(node.get("properties") or {}),
+            },
+        }
+        for node in fake.nodes()
+    ]
+    raw_rels = [
+        {"from": rel["from"], "to": rel["to"], "type": rel["type"]}
+        for rel in fake.relationships()
+    ]
+    nodes, rels = map_fleet_graph(raw_nodes, raw_rels)
+    backend = BoltNeo4jBackend.from_mapped(nodes, rels)
+    assert backend.is_available is True
+    assert backend.is_empty is False
+
+    for template, kwargs in (
+        ("asset_neighbors", {"asset_id": "AST-SL-001"}),
+        ("assets_by_category", {"category": "scissor lift"}),
+        ("compatible_attachments", {"asset_id": "AST-SL-001"}),
+    ):
+        live = neo4j_cypher_read(template=template, backend=backend, **kwargs)
+        expected = neo4j_cypher_read(template=template, backend=fake, **kwargs)
+        assert {row["id"] for row in live} == {row["id"] for row in expected}
+
+
+def test_bolt_mapper_drops_document_labels() -> None:
+    """Scenario: :Document nodes are dropped."""
+    nodes, rels = map_fleet_graph(
+        [
+            {"labels": ["Document"], "properties": {"id": "doc-1", "content": "spec"}},
+            {
+                "labels": ["Asset"],
+                "properties": {"id": "AST-SL-001", "category": "scissor lift"},
+            },
+        ],
+        [
+            {"from": "doc-1", "to": "AST-SL-001", "type": "MENTIONS"},
+            {"from": "AST-SL-001", "to": "AST-SL-001", "type": "SELF"},
+        ],
+    )
+    ids = {node["id"] for node in nodes}
+    assert "doc-1" not in ids
+    assert "AST-SL-001" in ids
+    assert all(rel["from"] != "doc-1" and rel["to"] != "doc-1" for rel in rels)
+    assert any(rel["type"] == "SELF" for rel in rels)

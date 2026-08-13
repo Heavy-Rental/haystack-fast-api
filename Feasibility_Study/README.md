@@ -17,17 +17,17 @@ These apply across studies unless a study explicitly narrows scope:
 | **Disambiguation** | Agent **Worker** ≠ ops **job worker** (202 jobs, Neo4j populate, Uvicorn). |
 | **Planes** | KG-1 (project) and KG-2 (fleet Neo4j) stay separate; Spring remains HTTP REST client. |
 | **Fleet data path** | **`postgres-primary`** (write SoT) → **`postgres_haystack_sync`** → **`postgres_haystack` / `heavy_rental`** (agent read mirror). |
-| **Default pytest** | `uv run pytest` is CI-safe (memory DocumentStore). `tests/conftest.py` forces mock embedder **dim 384**, stub agents, temp KG dir so host `.env` does not break CI. Vector tools: query embedder mode/dim **must** match session store; tenant filters on `user_id`/`ingest_id`. Optional `@pytest.mark.pgvector` (S5-I1) skipped unless `RUN_PGVECTOR_TESTS=1`. `neo4j` marker remains **TARGET**. Details: [`implementation-plan.md`](./implementation-plan.md) §7.0 · OpenSpec project-setup. |
+| **Default pytest** | `uv run pytest` is CI-safe (memory DocumentStore). `tests/conftest.py` forces mock embedder **dim 384**, stub agents, temp KG dir so host `.env` does not break CI. Vector tools: query embedder mode/dim **must** match session store; tenant filters on `user_id`/`ingest_id`. Optional `@pytest.mark.pgvector` (S5-I1) skipped unless `RUN_PGVECTOR_TESTS=1`. Optional `@pytest.mark.neo4j` (S8.3) skipped unless `RUN_NEO4J_TESTS=1`. Details: [`implementation-plan.md`](./implementation-plan.md) §7.0 · OpenSpec project-setup. |
 
 **How to read:** start with dual-plane for data + request flow; C/W/D for agent roles; implementation plan for phased rollout; other studies for specialty depth (pricing, synthesis, Spring wire, Call 1, SuperComponent).
 
 | Study | Topic | Version |
 |-------|--------|---------|
-| [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane + Spring multi-call: Call 1 ingest · Call 2 recommend · Call 3 chatbot Q&A. **I0+I1 as-built**. **S4 T0–T2 + app live SQL as-built**. **S8.1–S8.2 neo4j-populate as-built (config)**. **S7.2 fake Neo4j tools as-built**. | **2.8.2** |
+| [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane + Spring multi-call: Call 1 ingest · Call 2 recommend · Call 3 chatbot Q&A. **I0+I1 as-built**. **S4 T0–T2 + app live SQL as-built**. **S8.1–S8.3 neo4j-populate + live tools as-built**. **S7.2 fake default as-built**. | **2.8.3** |
 | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) | Spring ↔ FastAPI wire; Call 1/2/3 saga; resilience C1–C3. | **1.3.2** |
 | [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) | ML pricing as **in-process** agent tool; pricing **Worker** fan-out per need; **S6 tool as-built**; **S7.3 Workers [7]×N as-built**; **S7.5 HTTP flag**. | **1.2.4** |
-| [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) | Synthesis **[8]** → assets + prices (**HTTP Call 2** recommend path). **S7.4 stub [8] as-built**; **S7.5 HTTP enrich as-built**; **S7.7 A–L prompts as-built**; **S7.2 fake Neo4j tools as-built**. | **1.4.7** |
-| [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) | C/W/D roles; Call 2 recommend / Call 3 Q&A numbering aligned. **S7.0–S7.7 as-built** (incl. S7.2 fake Neo4j tools). | **2.1.6** |
+| [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) | Synthesis **[8]** → assets + prices (**HTTP Call 2** recommend path). **S7.4 stub [8] as-built**; **S7.5 HTTP enrich as-built**; **S7.7 A–L prompts as-built**; **S8.3 live Neo4j tools as-built**. | **1.4.8** |
+| [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) | C/W/D roles; Call 2 recommend / Call 3 Q&A numbering aligned. **S7.0–S7.8 as-built**; **S8.3 live Neo4j tools as-built**. | **2.1.9** |
 | [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) | Indexing Pipeline → Haystack SuperComponent (optional packaging for Coordinator gate **[4]**). | **1.2.1** |
 | [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) | Call 1 lean body; FR-IX-023 **as-built** S1a–S1e; not Call 2 recommend quote. | **1.2.2** |
 
@@ -35,7 +35,7 @@ These apply across studies unless a study explicitly narrows scope:
 
 | Document | Topic | Version |
 |----------|--------|---------|
-| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. **S2a+S2b as-built**; **S3 as-built**; **S4 as-built**; **S5-I0+I1 as-built**; **S6 as-built**; **S7.0–S7.7 as-built**; **S8.1–S8.2 as-built (config)**; **§7.0 default pytest isolation** (mock dim 384). | **3.15.0** |
+| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. **S2a+S2b as-built**; **S3 as-built**; **S4 as-built**; **S5-I0+I1 as-built**; **S6 as-built**; **S7.0–S7.8 as-built**; **S8.1–S8.3 as-built**; **§7.0 default pytest isolation** (mock dim 384). | **3.17.0** |
 | [`phase2-s2a-haystack-implementation-plan.md`](./phase2-s2a-haystack-implementation-plan.md) | **Phase 2 / S2a only** — haystack-fast-api: `Idempotency-Key`, correlation logging, docs. **Implemented** (FR-IX-024/025; §7 test runbook + conftest isolation). | **1.1.3** |
 | [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) | **S2b as-built (Spring repo)** — client, Resilience4j, saga. Pointer; canonical plan **v2.1.1** in Spring. | **2.0.1** |
 
@@ -65,11 +65,15 @@ These apply across studies unless a study explicitly narrows scope:
 
 **Stage S7.7 (haystack, as-built):** isolated A–L recommend prompts (`app/agents/recommend_prompts.py`) + `build_recommend_runtime` tool DI + Delegator `worker_kind` allowlist (`validate_work_plan`). Stage-1 Q&A prompts unchanged. OpenSpec archive `openspec/changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/`.
 
-**Stage S7.2 (haystack, as-built):** allowlisted `neo4j_cypher_read` (templates only) + `trigger_neo4j_populate` (non-blocking no-op) via `app/agents/neo4j_tools.py`. Empty graph → `[]`; free-form Cypher rejected; Delegator K-3 skips Neo4j so recommend is not blocked. Live populate job is **S8.1 (config)**; app real client remains **S8.3**. OpenSpec archive `openspec/changes/archive/2026-08-13-s7-2-neo4j-tools/`.
+**Stage S7.8 (haystack, as-built):** Worker [5] calls session `project_vector_search` + `project_kg_query` before `decompose_project_needs`. Empty/missing/error → explicit notes; decompose still runs; no fleet invent. Archive `openspec/changes/archive/2026-08-13-s7-8-worker5-kg1-live/`.
+
+**Stage S7.2 (haystack, as-built):** allowlisted `neo4j_cypher_read` (templates only) + `trigger_neo4j_populate` via `app/agents/neo4j_tools.py`. Empty graph → `[]`; free-form Cypher rejected; Delegator K-3 skips Neo4j so recommend is not blocked. Live client is **S8.3**. OpenSpec archive `openspec/changes/archive/2026-08-13-s7-2-neo4j-tools/`.
 
 **Stage S8.1 / T3 (config pack, as-built):** [Haystack-Fast-API `develop`](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API) Compose service `neo4j-populate` + `populate-neo4j-from-haystack.sh` / `populate_neo4j.py` — SQL → Cypher `MERGE` (`:Asset` / `:Booking` / `:Category`); DocumentStore `:Document` isolated. Spec Kit `specs/005-haystack-neo4j-populate/`.
 
-**Stage S8.2 / T4 (config pack, as-built):** After a **successful** merge, sync best-effort `POST`s the populate URL; admin HTTP host **8089** (`POST /v1/populate`, `GET /health`). Rebuild/scoped delete is fleet-label only — never drops KG-1 `:Document`. 60s poll remains a T3 safety-net. **S8.3** (app live tools) remains.
+**Stage S8.2 / T4 (config pack, as-built):** After a **successful** merge, sync best-effort `POST`s the populate URL; admin HTTP host **8089** (`POST /v1/populate`, `GET /health`). Rebuild/scoped delete is fleet-label only — never drops KG-1 `:Document`. 60s poll remains a T3 safety-net.
+
+**Stage S8.3 (haystack, as-built):** `NEO4J_BACKEND=bolt` → `BoltNeo4jBackend` (fleet labels only); `trigger_neo4j_populate` POSTs `NEO4J_POPULATE_URL` (non-blocking; failure → `unavailable`). Default **fake**. K-3 skip when empty or Bolt down. Optional `@pytest.mark.neo4j`. FR-KG-011 load as-built. Archive `openspec/changes/archive/2026-08-13-s8-3-live-neo4j-tools/`.
 
 ### Spring Boot handoff package
 

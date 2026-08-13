@@ -9,9 +9,10 @@ Workers do not spawn siblings. Tools are in-process / injected only.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from datetime import date
-from typing import Any, Callable
+from typing import Any
 
 from app.agents.fleet_tools import (
     TOOL_CHECK_BOOKING_AVAILABILITY,
@@ -23,14 +24,6 @@ from app.agents.fleet_tools import (
 from app.agents.neo4j_tools import (
     TEMPLATE_ASSET_NEIGHBORS,
     TOOL_NEO4J_CYPHER_READ,
-)
-from app.agents.tool_factory import (
-    RecommendToolCatalog,
-    WORKER_KIND_FLEET,
-    WORKER_KIND_PRICING,
-    neo4j_available,
-    tools_for_worker,
-    validate_work_plan,
 )
 from app.agents.recommend_state import (
     ROLE_DELEGATOR,
@@ -45,7 +38,19 @@ from app.agents.recommend_state import (
 )
 from app.agents.recommend_synthesis import synthesize_recommendation
 from app.agents.recommend_traces import append_tool_trace, elapsed_ms, now
-from app.agents.tools import TOOL_PREDICT_ASSET_PRICE
+from app.agents.tool_factory import (
+    WORKER_KIND_FLEET,
+    WORKER_KIND_PRICING,
+    RecommendToolCatalog,
+    neo4j_available,
+    tools_for_worker,
+    validate_work_plan,
+)
+from app.agents.tools import (
+    TOOL_PREDICT_ASSET_PRICE,
+    TOOL_PROJECT_KG_QUERY,
+    TOOL_PROJECT_VECTOR_SEARCH,
+)
 from app.pipelines.expand_quantity import expand_needs_to_unit_dicts
 from app.services.need_decomposer import NeedDecomposer
 
@@ -105,6 +110,71 @@ def route_after_gate(state: RecommendAgentState | dict[str, Any]) -> str:
     return "synthesis" if not indexing_ok(state) else "project_worker"
 
 
+def _kg1_query_text(source_text: str) -> str:
+    text = (source_text or "").strip()
+    if not text:
+        return "project specification equipment needs"
+    return text[:400]
+
+
+def _invoke_project_tool(
+    catalog: RecommendToolCatalog | None,
+    name: str,
+    query: str,
+    **kwargs: Any,
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """Return (hits, error). hits is None when the tool is not registered."""
+    if catalog is None or name not in catalog:
+        return None, None
+    try:
+        raw = catalog.get(name)(query, **kwargs)
+    except TypeError:
+        try:
+            raw = catalog.get(name)(query)
+        except Exception as exc:  # noqa: BLE001
+            return [], str(exc)
+    except Exception as exc:  # noqa: BLE001
+        return [], str(exc)
+    if raw is None:
+        return [], None
+    return list(raw), None
+
+
+def _research_notes(
+    hits: list[dict[str, Any]] | None, *, error: str | None = None
+) -> str:
+    if hits is None:
+        return "project_vector_search skipped (not registered)."
+    if error:
+        return "project_vector_search unavailable; no project passages."
+    if not hits:
+        return "No vector hits for this project specification."
+    lines = [f"Retrieved {len(hits)} passage(s) via project_vector_search."]
+    for hit in hits[:5]:
+        content = str(hit.get("content") or "").strip().replace("\n", " ")
+        if content:
+            lines.append(f"- {content[:200]}")
+    return "\n".join(lines)
+
+
+def _graph_notes(
+    hits: list[dict[str, Any]] | None, *, error: str | None = None
+) -> str:
+    if hits is None:
+        return "project_kg_query skipped (not registered)."
+    if error:
+        return "project_kg_query unavailable; no KG-1 facts."
+    if not hits:
+        return "No knowledge-graph hits for this project specification."
+    lines = [f"Matched {len(hits)} node(s) via project_kg_query."]
+    for hit in hits[:5]:
+        preview = str(hit.get("content_preview") or "").strip().replace("\n", " ")
+        ntype = hit.get("node_type") or "node"
+        if preview:
+            lines.append(f"- [{ntype}] {preview[:200]}")
+    return "\n".join(lines)
+
+
 def make_project_worker(
     source_text: str,
     *,
@@ -120,6 +190,38 @@ def make_project_worker(
             status="start",
         )
         working = {**_as_dict(state), "tool_traces": traces}
+        query = _kg1_query_text(source_text)
+
+        tool_started = now()
+        vector_hits, vector_err = _invoke_project_tool(
+            catalog, TOOL_PROJECT_VECTOR_SEARCH, query, top_k=5
+        )
+        if vector_hits is not None:
+            traces = _append_trace(
+                working,
+                role="worker",
+                node="project_worker",
+                tool=TOOL_PROJECT_VECTOR_SEARCH,
+                status="error" if vector_err else "ok",
+                duration_ms=elapsed_ms(tool_started),
+            )
+            working["tool_traces"] = traces
+
+        tool_started = now()
+        graph_hits, graph_err = _invoke_project_tool(
+            catalog, TOOL_PROJECT_KG_QUERY, query, limit=10
+        )
+        if graph_hits is not None:
+            traces = _append_trace(
+                working,
+                role="worker",
+                node="project_worker",
+                tool=TOOL_PROJECT_KG_QUERY,
+                status="error" if graph_err else "ok",
+                duration_ms=elapsed_ms(tool_started),
+            )
+            working["tool_traces"] = traces
+
         tool_started = now()
         if decomposer is not None:
             raw = decompose_project_needs(source_text, decomposer=decomposer)
@@ -140,6 +242,12 @@ def make_project_worker(
         proposed = deepcopy(_as_dict(state))
         project = dict(proposed.get("project") or {})
         project["needs"] = units
+        project["research_notes"] = _research_notes(vector_hits, error=vector_err)
+        project["graph_notes"] = _graph_notes(graph_hits, error=graph_err)
+        if vector_hits is not None:
+            project["research_hits"] = vector_hits
+        if graph_hits is not None:
+            project["graph_hits"] = graph_hits
         proposed["project"] = project
         traces = _append_trace(
             working,
@@ -455,7 +563,7 @@ def run_pricing_worker(
                 status="ok",
                 duration_ms=elapsed_ms(tool_started),
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             working["tool_traces"] = _append_trace(
                 working,
                 role="worker",

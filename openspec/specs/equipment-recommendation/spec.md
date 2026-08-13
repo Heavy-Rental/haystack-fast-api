@@ -376,7 +376,7 @@ Recommend-graph `tool_traces` SHALL record `role` (`coordinator` \| `delegator` 
 
 Recommend-mode agents SHALL use isolated A–L prompt contracts in `app/agents/recommend_prompts.py` (`RECOMMEND_SYNTHESIS_*`, `DELEGATOR_POLICY_*`, `PROJECT_WORKER_*`, `FLEET_WORKER_*`, `PRICING_WORKER_*`). Stage-1 Q&A prompts in `app/agents/prompts.py` MUST remain uncontaminated (still forbid invent fleet; MUST NOT name fleet/pricing tools). Coordinator synthesis prompt MUST declare **Tools: none**. Tool DI SHALL inject catalogs via `build_recommend_runtime` / `build_recommend_tool_catalog`. Delegator `worker_kind` MUST be allowlisted (`fleet_worker` \| `pricing_worker`); unknown kinds raise `UnknownWorkerKindError` and MUST NOT be scheduled. `PROJECT_AGENT_MODE=stub` MUST stay deterministic (golden `asset_id` / rates / rationale).
 
-**Status:** **as-built (S7.7)**. Runtime: `recommend_prompts.py`, `tool_factory.py` (`ALLOWED_WORKER_KINDS`, `validate_work_plan`). Tests: `tests/test_recommend_prompts.py`, `tests/test_agent_tool_di.py`. OpenSPDD index: `openspec/spdd/prompts/recommend-agents.md`.
+**Status:** **as-built (S7.7)**. Runtime: `recommend_prompts.py`, `tool_factory.py` (`ALLOWED_WORKER_KINDS`, `validate_work_plan`). Tests: `tests/test_recommend_prompts.py`, `tests/test_agent_tool_di.py`. OpenSPDD index: `openspec/spdd/prompts/recommend-agents.md`. Worker [5] live KG-1 tools are **S7.8**.
 
 #### Scenario: Q&A prompts still forbid invent fleet
 - **GIVEN** Stage-1 `SYNTHESIS_AGENT_SYSTEM` / `RESEARCH_AGENT_SYSTEM`
@@ -394,6 +394,26 @@ Recommend-mode agents SHALL use isolated A–L prompt contracts in `app/agents/r
 - **GIVEN** a work_plan item with `worker_kind="invent_stock"`
 - **WHEN** `validate_work_plan` or `execute_needs` runs
 - **THEN** `UnknownWorkerKindError` is raised and the item is not scheduled
+
+### Requirement: Worker [5] live KG-1 tools (S7.8 as-built)
+
+Project Worker [5] SHALL call session-bound `project_vector_search` and `project_kg_query` (when registered) before `decompose_project_needs`. It SHALL write `project.research_notes`, `project.graph_notes`, and `project.needs[]`. Missing tools, empty hits, or tool errors MUST produce explicit skip/empty notes and MUST NOT block decompose. Worker [5] MUST NOT invent `asset_id` or call fleet / KG-2 / pricing tools. Default CI catalogs without a project session MUST omit the KG-1 tools.
+
+**Status:** **as-built (S7.8)**. Runtime: `recommend_nodes.make_project_worker`; factory `project_session`. Tests: `tests/test_recommend_project_worker.py`.
+
+#### Scenario: Live tools run before decompose
+- **GIVEN** catalog tools for vector + KG-1
+- **WHEN** the project worker runs
+- **THEN** both tools are invoked before `decompose_project_needs`
+- **AND** `project.research_notes` and `project.graph_notes` are populated
+- **AND** `project.needs[]` is still produced
+
+#### Scenario: Empty or missing KG-1 tools do not block recommend
+- **GIVEN** empty hits or no registered KG-1 tools
+- **WHEN** the project worker runs
+- **THEN** notes are explicit (no hits / skipped)
+- **AND** `needs[]` is still produced
+- **AND** no fleet `asset_id` is invented
 
 ### Requirement: Live SQL fleet backend (S4 as-built)
 
@@ -418,9 +438,9 @@ When `FLEET_BACKEND=sql`, recommend fleet tools SHALL read Postgres-Haystack via
 
 ### Requirement: Neo4j KG-2 tools (S7.2 as-built)
 
-Recommend-mode SHALL expose allowlisted in-process KG-2 tools `neo4j_cypher_read` and `trigger_neo4j_populate` via `app/agents/neo4j_tools.py` + `tool_factory.py`. `neo4j_cypher_read` MUST accept only named templates (`asset_neighbors`, `assets_by_category`, `compatible_attachments`) and MUST reject free-form `cypher` / `query` / `raw_cypher` / `sql`. An empty backend MUST return `[]`. `trigger_neo4j_populate` MUST return a `job_id` immediately with `blocking=false` and MUST NOT run on the recommend hot path. Delegator K-3: when the Neo4j backend is empty/unavailable, fleet `tool_allowlist` MUST omit `neo4j_cypher_read` and record `skip_tools`; required SQL fleet tools MUST still run. Recommend MUST NOT invent `asset_id` from graph neighbors. Live Neo4j populate remains **S8**. Default CI uses `FakeNeo4jBackend` (no `neo4j` package).
+Recommend-mode SHALL expose allowlisted in-process KG-2 tools `neo4j_cypher_read` and `trigger_neo4j_populate` via `app/agents/neo4j_tools.py` + `tool_factory.py`. `neo4j_cypher_read` MUST accept only named templates (`asset_neighbors`, `assets_by_category`, `compatible_attachments`) and MUST reject free-form `cypher` / `query` / `raw_cypher` / `sql`. An empty backend MUST return `[]`. `trigger_neo4j_populate` MUST return a `job_id` immediately with `blocking=false` and MUST NOT run on the recommend hot path. Delegator K-3: when the Neo4j backend is empty/unavailable, fleet `tool_allowlist` MUST omit `neo4j_cypher_read` and record `skip_tools`; required SQL fleet tools MUST still run. Recommend MUST NOT invent `asset_id` from graph neighbors. `NEO4J_BACKEND` SHALL be `fake` (default, CI) or `bolt` (live fleet labels only; never `:Document`). Live populate enqueue MUST `POST` `NEO4J_POPULATE_URL` and MUST treat transport errors as `status=unavailable` without raising. Default CI uses `FakeNeo4jBackend` (no `neo4j` package required).
 
-**Status:** **as-built (S7.2)**. Runtime: `neo4j_tools.py`. Tests: `tests/test_neo4j_tools.py`. Config **S8.1–S8.2** populate job + post-sync/admin trigger as-built; app live client remains **S8.3**.
+**Status:** **as-built (S7.2 + S8.3)**. Runtime: `neo4j_tools.py`. Tests: `tests/test_neo4j_tools.py`; optional `tests/test_neo4j_tools_integration.py` (`@pytest.mark.neo4j`). Config **S8.1–S8.2** persist + trigger as-built.
 
 #### Scenario: Empty graph returns empty list
 - **GIVEN** a `FakeNeo4jBackend` with no nodes
@@ -442,6 +462,29 @@ Recommend-mode SHALL expose allowlisted in-process KG-2 tools `neo4j_cypher_read
 - **THEN** fleet SQL tools still run
 - **AND** `neo4j_cypher_read` is skipped
 - **AND** `results_by_need` is still produced
+
+#### Scenario: Default CI stays fake
+- **GIVEN** unset / `fake` `NEO4J_BACKEND`
+- **WHEN** the recommend catalog is built
+- **THEN** the backend is `FakeNeo4jBackend`
+
+#### Scenario: Live populate enqueue is non-blocking HTTP
+- **GIVEN** `NEO4J_BACKEND=bolt` and a populate URL
+- **WHEN** `trigger_neo4j_populate` runs
+- **THEN** the admin URL is POSTed
+- **AND** `blocking` is false
+- **AND** a transport failure yields `status=unavailable` without raising
+
+#### Scenario: Recommend is not blocked when Bolt is unavailable
+- **GIVEN** an unavailable live backend
+- **WHEN** `run_recommend_graph` runs with `indexing_ok` true
+- **THEN** fleet SQL tools still run
+- **AND** `neo4j_cypher_read` is skipped
+
+#### Scenario: Live mapper drops DocumentStore labels
+- **WHEN** Bolt records include `:Document` and `:Asset`
+- **THEN** template results include only fleet labels
+- **AND** `:Document` is neither read nor deleted
 
 ### Requirement: Pricing integration (FR-020–FR-024)
 
@@ -726,6 +769,8 @@ Architecture, Ragas pattern, deps, and offline pipeline sketch: [`design.md`](./
 | 0.9.2 | 2026-08-07 | KG as-built pointer; sequential map |
 | 1.0.0 | 2026-08-10 | Migrated to OpenSpec under `openspec/specs/equipment-recommendation/`; architecture/day plan/deployment → design.md |
 | 1.1.0 | 2026-08-12 | **S7.0 + S7.1 as-built:** `RecommendAgentState` + F-2 partition validation; allowlisted fleet/needs tools + DI factory (FR-019b note). Graph (S7.3+) still TARGET. Archives `changes/archive/2026-08-12-s7-0-recommend-agent-state/`, `.../s7-1-fleet-tool-catalog/`. |
+| 1.9.0 | 2026-08-13 | **S7.8 as-built:** Worker [5] live `project_vector_search` + `project_kg_query` before decompose; soft-fail notes. Archive `changes/archive/2026-08-13-s7-8-worker5-kg1-live/`. |
+| 1.8.0 | 2026-08-13 | **S8.3 as-built:** live `BoltNeo4jBackend` + populate HTTP enqueue behind `NEO4J_BACKEND=bolt` (default fake); K-3 on unavailable; `@pytest.mark.neo4j`. Archive `changes/archive/2026-08-13-s8-3-live-neo4j-tools/`. |
 | 1.7.1 | 2026-08-13 | **S8.2 T4 as-built (config pack):** post-sync + admin HTTP populate; KG-1 preserved. Archive `changes/archive/2026-08-13-s8-2-t4-neo4j-populate-trigger/`. |
 | 1.7.0 | 2026-08-13 | **S8.1 T3 as-built (config pack):** `neo4j-populate` SQL→Cypher MERGE; fleet labels isolated. App tools still S7.2 fake (S8.3). Archive `changes/archive/2026-08-13-s8-1-t3-neo4j-populate/`. |
 | 1.6.0 | 2026-08-13 | **S4 as-built (app):** live SQL fleet backend (`FLEET_BACKEND=sql`); D0 `fleet-read-contract.md`. Config T0–T2 remain config-repo. Archive `changes/archive/2026-08-13-s4-live-sql-fleet-backend/`. |

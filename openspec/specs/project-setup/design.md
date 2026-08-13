@@ -96,12 +96,15 @@ uv run pytest tests/ -q
 | `PROJECT_AGENT_MODE` | `stub` | Deterministic Stage-1 synthesis |
 | `INDEXING_EMBEDDER` | `mock` | Override host `openai` / `sentence-transformers` |
 | `INDEXING_EMBEDDING_DIM` | `384` | Override host dims (e.g. 768); keep mock store/query aligned |
+| `RECOMMEND_VIA_AGENT_GRAPH` | `false` | Call 2 stays on MVP unless a test opts in |
+| `FLEET_BACKEND` | `fake` | No live fleet SQL |
+| `NEO4J_BACKEND` | `fake` | No live Bolt |
 
 Also resets process-local ingest idempotency store and project-knowledge session registry per test, and clears `get_settings` cache.
 
 #### Optional / future CI (TARGET only)
 
-`@pytest.mark.pgvector` is registered for optional live isolation tests (not required for default green). `@pytest.mark.neo4j` / `integration` remain TARGET. Do not treat live pgvector as a prereq for `uv run pytest`.
+`@pytest.mark.pgvector` is registered for optional live isolation tests (not required for default green). `@pytest.mark.neo4j` is registered and skipped unless `RUN_NEO4J_TESTS=1`. Do not treat live pgvector or Neo4j as a prereq for `uv run pytest`.
 
 ### Manual smoke
 

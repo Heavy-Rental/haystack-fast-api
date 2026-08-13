@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Added (S7.8 / Worker [5] KG-1 — 2026-08-13)
+
+- Project Worker [5] calls session-bound `project_vector_search` and `project_kg_query` before `decompose_project_needs`.
+- Writes `project.research_notes` / `project.graph_notes` (explicit empty or skip when tools missing or fail). Decompose still runs; no invented `asset_id`.
+- Catalog registers KG-1 tools when a `ProjectKnowledgeSession` is passed; Call 2 graph path supplies the session.
+- Tests: `tests/test_recommend_project_worker.py`. Implementation-plan **3.17.0**. Archive `openspec/changes/archive/2026-08-13-s7-8-worker5-kg1-live/`.
+
+### Added (S8.3 / Phase 8 app — 2026-08-13)
+
+- Live KG-2 tools behind `NEO4J_BACKEND=bolt` (default **fake**): `BoltNeo4jBackend` reads fleet labels only (`:Asset` / `:Booking` / `:Category` / `:Attachment`); never `:Document`.
+- `trigger_neo4j_populate` POSTs `NEO4J_POPULATE_URL` (pack admin `:8089`) and returns immediately; transport errors → `status=unavailable`. Fake path stays `noop` / `queued`.
+- K-3: empty **or** Bolt-unavailable backends skip `neo4j_cypher_read`; SQL fleet tools still run.
+- Optional `@pytest.mark.neo4j` (`RUN_NEO4J_TESTS=1`); extra `uv sync --extra neo4j`.
+- FR-KG-011 marked as-built (persist = pack S8.1–S8.2; load = app S8.3).
+- Tests: `tests/test_neo4j_tools.py` (HTTP stub, mapper, K-3 unavailable); `tests/test_neo4j_tools_integration.py`.
+- Feasibility_Study implementation-plan **3.16.0**; dual-plane **2.8.3**. Archive `openspec/changes/archive/2026-08-13-s8-3-live-neo4j-tools/`.
+
 ### Changed (S8.2 / T4 config — 2026-08-13)
 
 - Stamped Phase 8 **8.2 T4** as-built from the [Haystack-Fast-API pack](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API): post-sync populate trigger, admin HTTP `:8089` (`POST /v1/populate`), scoped fleet delete, KG-1 `:Document` never dropped.

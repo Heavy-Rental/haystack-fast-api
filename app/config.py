@@ -110,6 +110,22 @@ class Settings(BaseSettings):
     # sql = LiveSqlFleetBackend against Postgres-Haystack (allowlisted ORM)
     fleet_backend: str = Field(default="fake", alias="FLEET_BACKEND")
 
+    # S8.3 / Phase 8: KG-2 Neo4j tools.
+    # fake (default, CI) = FakeNeo4jBackend (empty unless injected)
+    # bolt = live driver against fleet labels only (never :Document)
+    neo4j_backend: str = Field(default="fake", alias="NEO4J_BACKEND")
+    neo4j_uri: str = Field(default="bolt://neo4j:7687", alias="NEO4J_URI")
+    neo4j_user: str = Field(default="neo4j", alias="NEO4J_USER")
+    neo4j_password: str = Field(default="neo4j", alias="NEO4J_PASSWORD")
+    neo4j_populate_url: str = Field(
+        default="http://neo4j-populate:8089/v1/populate",
+        alias="NEO4J_POPULATE_URL",
+    )
+    neo4j_populate_timeout_seconds: float = Field(
+        default=2.0,
+        alias="NEO4J_POPULATE_TIMEOUT_SECONDS",
+    )
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:

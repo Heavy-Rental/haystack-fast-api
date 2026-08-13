@@ -1,4 +1,4 @@
-"""LangGraph multi-agent orchestration (Stage 1 + S3 + S6 + S7.0–S7.7 + S7.2)."""
+"""LangGraph multi-agent orchestration (Stage 1 + S3 + S6 + S7.0–S7.7 + S7.2 + S8.3)."""
 
 from app.agents.fleet_tools import (
     TOOL_CHECK_BOOKING_AVAILABILITY,
@@ -7,16 +7,23 @@ from app.agents.fleet_tools import (
     TOOL_RETRIEVE_FLEET_ASSETS,
 )
 from app.agents.graph import build_project_knowledge_graph, run_project_knowledge_agents
-from app.agents.recommend_graph import build_recommend_graph, run_recommend_graph
-from app.agents.recommend_synthesis import (
-    SynthesisSchemaError,
-    synthesize_recommendation,
-    validate_recommendation_shape,
-)
 from app.agents.indexing_gate import (
     build_indexing_gate_graph,
     run_indexing_gate,
 )
+from app.agents.neo4j_tools import (
+    TOOL_NEO4J_CYPHER_READ,
+    TOOL_TRIGGER_NEO4J_POPULATE,
+    BoltNeo4jBackend,
+    FakeNeo4jBackend,
+    FreeFormCypherRejected,
+    UnavailableNeo4jBackend,
+    UnknownNeo4jTemplateError,
+    build_neo4j_backend,
+    neo4j_cypher_read,
+    trigger_neo4j_populate,
+)
+from app.agents.recommend_graph import build_recommend_graph, run_recommend_graph
 from app.agents.recommend_state import (
     ROLE_COORDINATOR,
     ROLE_DELEGATOR,
@@ -29,13 +36,10 @@ from app.agents.recommend_state import (
     empty_recommend_state,
     validate_state_transition,
 )
-from app.agents.neo4j_tools import (
-    TOOL_NEO4J_CYPHER_READ,
-    TOOL_TRIGGER_NEO4J_POPULATE,
-    FreeFormCypherRejected,
-    UnknownNeo4jTemplateError,
-    neo4j_cypher_read,
-    trigger_neo4j_populate,
+from app.agents.recommend_synthesis import (
+    SynthesisSchemaError,
+    synthesize_recommendation,
+    validate_recommendation_shape,
 )
 from app.agents.tool_factory import (
     ALLOWED_WORKER_KINDS,
@@ -59,11 +63,6 @@ __all__ = [
     "ROLE_FLEET_WORKER",
     "ROLE_PRICING_WORKER",
     "ROLE_PROJECT_WORKER",
-    "RecommendAgentState",
-    "StateTransitionError",
-    "UnknownWorkerKindError",
-    "FreeFormCypherRejected",
-    "UnknownNeo4jTemplateError",
     "TOOL_CHECK_BOOKING_AVAILABILITY",
     "TOOL_DECOMPOSE_PROJECT_NEEDS",
     "TOOL_FILTER_FLEET_CANDIDATES",
@@ -72,9 +71,18 @@ __all__ = [
     "TOOL_RETRIEVE_FLEET_ASSETS",
     "TOOL_RUN_INDEXING",
     "TOOL_TRIGGER_NEO4J_POPULATE",
-    "apply_partition_write",
+    "BoltNeo4jBackend",
+    "FakeNeo4jBackend",
+    "FreeFormCypherRejected",
+    "RecommendAgentState",
+    "StateTransitionError",
     "SynthesisSchemaError",
+    "UnavailableNeo4jBackend",
+    "UnknownNeo4jTemplateError",
+    "UnknownWorkerKindError",
+    "apply_partition_write",
     "build_indexing_gate_graph",
+    "build_neo4j_backend",
     "build_project_knowledge_graph",
     "build_recommend_graph",
     "build_recommend_runtime",
@@ -84,11 +92,11 @@ __all__ = [
     "neo4j_cypher_read",
     "predict_asset_price",
     "run_indexing_from_request",
-    "trigger_neo4j_populate",
     "run_indexing_gate",
     "run_project_knowledge_agents",
     "run_recommend_graph",
     "synthesize_recommendation",
+    "trigger_neo4j_populate",
     "validate_recommendation_shape",
     "validate_state_transition",
     "validate_work_plan",
