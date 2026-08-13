@@ -53,10 +53,10 @@ CATEGORY_PRICE_DRIVER = {
 # Ordering (forklift cheapest -> excavator most expensive) follows Pollisum /
 # Ben's Rental published rate-card ranges and general industry rate guides.
 CATEGORY_BASE_RATE = {
-    "forklift": {"rate_at_min": 90, "rate_at_max": 220},
-    "excavator": {"rate_at_min": 180, "rate_at_max": 750},
-    "scissor lift": {"rate_at_min": 140, "rate_at_max": 260},
-    "boom lift": {"rate_at_min": 220, "rate_at_max": 480},
+    "forklift": {"rate_at_min": 80, "rate_at_max": 220},
+    "excavator": {"rate_at_min": 230, "rate_at_max": 985},
+    "scissor lift": {"rate_at_min": 85, "rate_at_max": 205},
+    "boom lift": {"rate_at_min": 120, "rate_at_max": 500},
 }
 
 # Concave elasticity exponent: price scales with the price-driver dimension but
@@ -70,16 +70,16 @@ CAPACITY_ELASTICITY_EXPONENT = 0.6
 # doesn't compete with platform_height as the dominant aerial price signal.
 SECONDARY_CAPACITY_SLOPE = 0.10
 
-# Per-row guardrail jitter ranges. Wide enough that the non-linear duration
-# discount (down to ~0.35x at long durations) is not clipped away for most rows.
-GUARDRAIL_MIN_RATIO_RANGE = (0.28, 0.35)
-GUARDRAIL_MAX_RATIO_RANGE = (1.15, 1.30)
+# Phase 2d-ii: fitted to the real asset base/min/max relationship. Kept close
+# enough to the duration floor that multi-day signal survives target clamping.
+GUARDRAIL_MIN_RATIO_RANGE = (0.74, 0.88)
+GUARDRAIL_MAX_RATIO_RANGE = (1.12, 1.33)
 
 # Non-linear duration discount: m(d) = DISCOUNT_FLOOR + (1 - DISCOUNT_FLOOR) * exp(-DISCOUNT_RATE * (d - 1))
-# m(1) = 1.0 exactly; m(7) ~= 0.487 -> weekly total ~= 3.4x daily (target 3-4x);
-# m(30) ~= 0.350 -> monthly total ~= 10.5x daily (target 10-12x); floors at long durations.
-DISCOUNT_FLOOR = 0.35
-DISCOUNT_RATE = 0.26
+# Phase 2d-ii duration calibration: m(1)=1, m(7)≈0.894, m(14)≈0.855,
+# m(30)≈0.841. The curve stays mostly inside duration-agnostic asset bounds.
+DISCOUNT_FLOOR = 0.84
+DISCOUNT_RATE = 0.18
 
 # Seasonality: NEA Northeast Monsoon (~Dec-Mar, wettest Dec-Jan) suppresses
 # outdoor/earthmoving demand most; aerial lifts (facade/exterior work) are

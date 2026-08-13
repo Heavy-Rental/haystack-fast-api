@@ -2,10 +2,10 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | Phase 2a/2b/2c **implemented**. Phase 6 / S6 **as-built (2026-08-12)** — in-process agent tool `predict_asset_price` → `pricing_client` (same entrypoint as pipeline); never silent zeros; `tests/test_predict_asset_price_tool.py`. Phase 2d-i and Phase 2d-ii **done**; Phase 2d-iii candidate validation remains, and Phase 2e promotion stays separately gated. Phase 3 (real-data blend + scheduled retrain) not yet implemented. Phase 7 Pricing Workers [7]×N **as-built S7.3**; Call 2 graph enrich **as-built S7.5** (`RECOMMEND_VIA_AGENT_GRAPH`) |
+| **Status** | Phase 2a/2b/2c **implemented**. Phase 6 / S6 **as-built (2026-08-12)** — in-process agent tool `predict_asset_price` → `pricing_client` (same entrypoint as pipeline); never silent zeros; `tests/test_predict_asset_price_tool.py`. Phase 2d-i/2d-ii/2d-iii **done**; the Phase 2d-iii candidate gate passed 2026-08-13, while Phase 2e promotion remains a separate, not-yet-executed action. Phase 3 (real-data blend + scheduled retrain) not yet implemented. Phase 7 Pricing Workers [7]×N **as-built S7.3**; Call 2 graph enrich **as-built S7.5** (`RECOMMEND_VIA_AGENT_GRAPH`) |
 | **Feature module** | `app/services/pricing/` — **implemented** (2026-08-11): `model.py`, `train.py`, `feature_schema.py`, `pricing_tables.py`, `category_mapping.py`, `repository.py`, `read_resilience.py`, `artifacts/` |
 | **Standards** | OpenSpec · Spec-kit user stories · OpenSPDD (see [`design.md`](./design.md)) |
-| **Depends on** | [`../project-setup/spec.md`](../project-setup/spec.md); [`../domain-seed-data/spec.md`](../domain-seed-data/spec.md) (Phase 2 prep dependency — **executed & verified 2026-08-11**; the data side is no longer a blocker, only the category-name mapping code fix below remains) |
+| **Depends on** | [`../project-setup/spec.md`](../project-setup/spec.md); [`../domain-seed-data/spec.md`](../domain-seed-data/spec.md) (Phase 2 prep dependency — data executed/verified and category-name normalization implemented 2026-08-11) |
 | **Related, not specs** | `docs/dynamic-pricing-masterplan.md` (decision log); `docs/dynamic-pricing-execution-plan.md` (day-by-day tasks) |
 | **Built on** | `ml-experiments/` — Phase 1 offline experimentation (scratch, outside SDD) |
 | **Related capabilities** | [`../recommendation-pipeline/spec.md`](../recommendation-pipeline/spec.md); [`../equipment-recommendation/spec.md`](../equipment-recommendation/spec.md) |
@@ -20,6 +20,7 @@
 > **Category-name mismatch note (found 2026-08-11, fixed 2026-08-11):** `AssetCategory.name` in the real DB (`Excavator`, `Scissors Lift`, `Boom Lift`, `Fork Lift`) does not match `feature_schema.CATEGORIES`'s naming (`excavator`, `scissor lift`, `boom lift`, `forklift`), used everywhere in pricing code and in every candidate dict built so far. Confirmed live against `heavy_rental`: `compute_period_utilization()`'s `AssetCategory.name == category` join had **never matched a real row** — it silently fell back to the static `pricing_tables.CATEGORY_UTILIZATION` constant every time a feature_schema-style name was passed (no error, no degraded flag), or raised `ValueError` from `spec_band()` if a DB-style name was passed instead. **Fixed same day** via `app/services/pricing/category_mapping.py` (`DB_NAME_TO_FEATURE_NAME`/`to_db_name()`), applied inside the relocated `repository.py`'s `compute_period_utilization()`. Re-verified live against `heavy_rental` post-fix: `period_utilization` now returns genuine varied fractions per category/spec-band (e.g. 0.75/1.00/0.00 across real assets), not the static constant. See "Requirement: Category name normalization" below and `design.md`'s "Category name mapping" section.
 >
 > **Internal pricing quote API note (2026-08-11):** Beyond the in-process `predict_price(...)` the recommendation pipeline uses, Spring Boot needs a synchronous, service-to-service HTTP endpoint for an authoritative per-asset quote at checkout (`POST /internal/v1/pricing/quote`) — a consumer this spec didn't originally anticipate. This is **not** a renter-facing route (called only by Spring Boot's backend, never a browser/mobile client) and does not reverse the "no public `/predict-price` renter route" outcome below. **Hard dependency**: this endpoint needs Phase 2a's real per-asset guardrail clamping and the category-name mapping fix (both elsewhere in this doc) already in place — it cannot be built against `ml-experiments/predict_price.py`'s static-table stand-in without returning Spring Boot the wrong guardrail-bound shape it was already told to expect. See "Requirement: Internal pricing quote endpoint" (US-4) and `design.md`'s "Internal quote API" for the full contract.
+
 
 ---
 
@@ -310,6 +311,48 @@ Every pricing DB read against `primary_snapshot` SHALL share one 3-tier fallback
 - **WHEN** `predict_price(...)` is called
 - **THEN** it raises rather than returning a fabricated price
 
+### Requirement: Phase 2d-iii candidate validation is a read-only, common-input comparison
+
+The system SHALL provide a standalone validation command that directly loads the current and v2 candidate pricing artifacts, evaluates both over the same live-asset feature rows at 1/7/14/30 days, and scores both over the same deterministic v2 holdout. It SHALL reuse the production feature schema and production clamp formula. It MUST NOT replace or reload the serving artifacts.
+
+#### Scenario: Candidate materially reduces realistic-duration clamping
+
+- **GIVEN** all 27 live pricing assets and compatible current/candidate artifacts
+- **WHEN** both models are evaluated over identical rows
+- **THEN** at both 7 and 14 days the candidate clamp rate is at least 20 percentage points below current
+- **AND** the candidate clamp rate at each duration is no more than 50%
+
+#### Scenario: Candidate accuracy is compared fairly
+
+- **GIVEN** the Phase 2d-ii v2 dataset
+- **WHEN** the deterministic trainer holdout (`seed=42`, `test_size=0.2`) is rebuilt
+- **THEN** both models are scored on the exact same holdout rows
+- **AND** the candidate MAE is no more than 5% worse than current
+- **AND** the candidate R² is no more than 0.01 below current
+
+#### Scenario: Formal gate inputs cannot be tuned
+
+- **WHEN** the Phase 2d-iii formal comparison runs
+- **THEN** it requires exactly 27 assets and durations 1/7/14/30
+- **AND** it fixes `distance_km=20.0`, category-utilization fallbacks, and `lead_time_days=0.0`
+- **AND** the CLI exposes no current/candidate artifact, data-path, asset-count, distance, or output override for the formal gate
+
+#### Scenario: Candidate data provenance is verified
+
+- **GIVEN** the ignored Phase 2d-ii v2 CSV
+- **WHEN** candidate accuracy is evaluated
+- **THEN** its SHA-256 is `3b2b79d28f42fe62e2971f48b055af0cabecadc3b5fb0b7463a58929766e2d05`
+- **AND** its total/test row counts match `current_v2.json`
+- **AND** the recomputed candidate MAE/RMSE/R² match `current_v2.json`
+- **AND** a missing CSV reports the exact seed-42 regeneration command
+
+#### Scenario: Validation does not promote the candidate
+
+- **WHEN** Phase 2d-iii completes, whether the gate passes or fails
+- **THEN** `model.pkl` and `current.json` remain byte-for-byte untouched
+- **AND** the command does not invoke `reload_model()`
+- **AND** promotion remains a separate Phase 2e action
+
 ---
 
 ## Verification
@@ -323,7 +366,10 @@ Every pricing DB read against `primary_snapshot` SHALL share one 3-tier fallback
 - Category-normalization test: exercise `compute_period_utilization()`/`spec_band()` with **real DB-shaped** `AssetCategory.name` values (`"Excavator"`, `"Scissors Lift"`, etc.) through the actual `WHERE` clause — not `session.execute` mocked to bypass it, the gap that let the 2026-08-11 mismatch ship unnoticed. At least one test should run against a live/test Postgres instance (or a query-builder-level assertion on the generated SQL) rather than only a fully mocked session.
 - Internal quote endpoint tests: multi-item request/response shape; per-item guardrail bounds sourced from real `Asset` rows (not the static `ml-experiments` stand-in); per-item `degraded` independence within one multi-item request; an unresolvable `asset_id` returns a per-item error without failing the rest of the batch; route inventory confirms it is not registered under the public `/api/v1` router. **Implemented** (2026-08-11): `tests/test_internal_pricing_api.py`, 5 tests, all against a mocked session/collaborators (HTTP shape/wiring test — guardrail-clamping math and `compute_period_utilization()`'s SQL are covered elsewhere, not re-tested here).
 - Pipeline-integration tests: `pricing_client.py` calls the production `predict_price(...)`, not the `ml-experiments` prototype; `item.pricing.daily_rate` populates on the recommend response and stays within the selected asset's guardrail bounds. Not a re-test of guardrail-clamping math or feature-schema transforms — Phase 2a's tests already cover those. **Implemented** (2026-08-11): `tests/test_pricing_client_phase1e.py` (wrapper shaping/threading, mocked `predict_price`), `tests/test_pricing_phase2b_wiring.py` (2 tests against the real loaded model, end to end through `PredictPriceAdapter` and `RecommendationService`).
+
 - Agent tool tests (US-5 / S6): golden shape from real model; SoT parity with `predict_price_for_asset`; `was_clamped` pass-through; silent zero / non-positive rate raises; tool name `"predict_asset_price"`; optional `asset_id` echo. **Implemented** (2026-08-12): `tests/test_predict_asset_price_tool.py`.
+- Phase 2d-iii candidate-validation tests: shared-row construction and production fallbacks; below/above guardrail direction; non-finite/inverted guardrail rejection; direct clamp-rate summaries; both models scored on the same v2 holdout; missing-data regeneration guidance; SHA/row-count/candidate-metric provenance; artifact-schema mismatch rejection; gate pass/fail across clamp, accuracy, and 27-asset completeness. **Implemented** (2026-08-13): `tests/test_candidate_validation_check.py`, 8 tests. The live run loaded 27 undegraded `primary_snapshot` assets; candidate clamp rates at 7/14 days were 25.93%/29.63% vs. current 92.59%/100%, and common-holdout MAE/R² were 16.6376/0.9866 vs. current 151.2595/0.1165. All Phase 2e gates and candidate-data provenance checks passed; serving artifacts were hash-verified unchanged.
+- Phase 2d-iii chart verification: `candidate_validation_check.png` shows overall current/candidate clamp rates in the upper grouped bars and category-level `current − candidate` reduction in the lower heatmap. All category cells improved. At 7/14/30 days, reductions were boom lift `71.43/71.43/71.43`, excavator `57.14/42.86/42.86`, forklift `83.33/83.33/83.33`, and scissor lift `57.14/85.71/85.71` percentage points. Excavator remains the post-promotion watch item because its candidate clamp rate is `42.86%` at 7 days and `57.14%` at 14/30 days. Final verification: 8 focused tests and 391 full-suite tests passed; 5 tests skipped; Ruff and diff hygiene passed.
 
 ---
 
@@ -336,6 +382,8 @@ Maps to `docs/dynamic-pricing-execution-plan.md` Day 4–5 subtasks:
 2. ☑ `feature/ml-4-integration-tests` (Day 5, lean) — **done (2026-08-11).** Wired `predict_price(...)` into `app.pipelines`: `pricing_client.py`'s `predict_price_for_asset()` now calls `app.services.pricing.model.predict_price(...)` directly (the `_ensure_loaded()`/`_predict_fn` `ml-experiments` loader and its static `_fallback_daily_rate()` table are gone), returning the prediction in the recommendation response (`item.pricing.daily_rate`); no DB write — Spring Boot persists `RecommendationItem.mlPredictedPrice` on its side (locked 2026-08-11; see masterplan). Since `predict_price(...)` requires real per-asset `min_daily_rate`/`max_daily_rate`, `predict_price_adapter.py`'s `PredictPriceAdapter.run()` now reads them off each candidate dict too. Per the trimmed lean scope (2026-08-11 resequencing), only pipeline-integration tests were added — guardrail-clamping/feature-schema tests are already covered by task 1's 24 tests, and the manual retrain endpoint stays out of this task's scope (moved to subtask 5). Rewrote `tests/test_pricing_client_phase1e.py` and added `tests/test_pricing_phase2b_wiring.py` (2 new pipeline-integration tests against the real loaded model); updated candidate fixtures elsewhere in `tests/` that lacked the now-required guardrail fields. 154 total tests passing (was 149).
 3. ☑ `feature/ml-6-internal-pricing-api` — **done (2026-08-11).** Built ahead of `feature/ml-4-integration-tests` (lean Phase 2b), not alongside/after it — resequenced the same day since this endpoint's only real dependency is task 1 (Phase 2a), already satisfied; it never touches `pricing_client.py`/`predict_price_adapter.py`/`recommendations.py`, task 2's exclusive surface. See `docs/dynamic-pricing-masterplan.md` "Phase 2b/2c sequencing and lean 2b scope". Adds `app/api/internal_pricing.py` (`POST /internal/v1/pricing/quote`, registered directly on the app, not via `api_router`), `app/schemas/pricing.py` (request/response models), and `app/services/pricing/repository.py::get_asset_for_pricing()` (new — resolves category/condition/capacity/platform_height/guardrail bounds server-side from `asset_id`, through the same tiered `read_resilience` resolver as every other pricing read). Reuses `predict_price(...)` — no second prediction path. 5 new tests (`tests/test_internal_pricing_api.py`), 149 total passing. Contract: `design.md` "Internal quote API".
 4. ☑ **Phase 6 / S6 — `predict_asset_price` agent tool (2026-08-12).** `app/agents/tools.py`: `TOOL_PREDICT_ASSET_PRICE` + `predict_asset_price(...)` → `pricing_client.predict_price_for_asset` (single SoT with pipeline); silent-zero guard; optional `asset_id` echo. Tests: `tests/test_predict_asset_price_tool.py`. Phase 7 Pricing Workers graph **not** in this task. OpenSpec archive: `openspec/changes/archive/2026-08-12-s6-predict-asset-price-tool/`.
+
+5. ☑ **Phase 2d-iii candidate validation — done (2026-08-13), `HR-146-ml-candidate-validation`.** Added the direct-artifact, common-input validation script and 8 focused tests. The formal gate locks 27 assets/20 km/fallback utilization/zero lead time, verifies the ignored v2 CSV's SHA-256, row counts, and candidate metrics, and reports an actionable regeneration command when it is absent. The live 1/7/14/30-day run and common-v2-holdout comparison passed every explicit promotion gate. No artifact was renamed, copied, overwritten, or reloaded; Phase 2e remains separate. The ignored chart shows no category regression; excavator is the documented residual watch item.
 
 **External dependency — resolved (2026-08-11):** richer Spring Boot seed data per [`../domain-seed-data/spec.md`](../domain-seed-data/spec.md) landed same-day and was independently verified (8→27 assets, 20→90 bookings, full status/condition coverage, 0 orphaned bookings). Combined with task 1's category-mapping fix (also done same-day), `period_utilization` now genuinely reflects live bookings — both halves of what Phase 2's own verification needed are in place.
 
@@ -395,5 +443,7 @@ Full rationale: `docs/dynamic-pricing-masterplan.md`. Summary for implementers:
 | 2.8.0 | 2026-08-12 (Phase 2d-i implemented) | **Real-bound measurement implemented and live-verified.** Added `ml-experiments/guardrail_calibration_check.py`, reusing `SessionLocal`, `resolve_pricing_schema()`, and `to_feature_name()`. Read all 27 `primary_snapshot` assets undegraded, compared real bounds separately against the implied category base and configured min/max ratio bands, and generated the ignored Phase 2d chart. Real-min band hit rate was 0% for all categories; real-max hits were 50%/0%/14.3%/0%. No trained model, baseline CSV, production artifact, or DB row changed; 188 tests passed. |
 | 2.9.0 | 2026-08-12 (Phase 6 / S6) | **In-process agent tool `predict_asset_price` (US-5).** `app/agents/tools.py` wraps `pricing_client.predict_price_for_asset` (single SoT with pipeline); golden shape, SoT parity, silent-zero guard, optional `asset_id` echo. Tests: `tests/test_predict_asset_price_tool.py`. Does not wire Phase 7 Pricing Workers graph. Feasibility_Study implementation-plan **3.5.6**; archive `openspec/changes/archive/2026-08-12-s6-predict-asset-price-tool/`. |
 | 2.10.0 | 2026-08-13 (Phase 2d-ii implemented) | Recalibrated synthetic anchors (`80/220`, `230/985`, `85/205`, `120/500`), guardrail bands (`0.74–0.88` / `1.12–1.33`), and duration curve (floor/rate `0.84/0.18`) jointly. Generated the ignored 5,000-row `synthetic_pricing_data_v2.csv` and tracked candidate `model_v2.pkl`/`current_v2.json`; strict checks passed with 35.3% generation-time target clipping. Candidate holdout MAE/RMSE/R²: 16.6376/26.1103/0.9866. Serving artifacts stayed unchanged; 2d-iii validation and 2e promotion remain gated. |
+| 2.11.0 | 2026-08-13 (Phase 2d-iii implemented) | Added `candidate_validation_check.py` plus 5 focused tests; directly compared current/candidate artifacts over identical production-schema rows for all 27 live assets at 1/7/14/30 days and over the same deterministic v2 holdout. Candidate 7/14-day clamp rates were 25.93%/29.63% vs. current 92.59%/100%; common-holdout MAE/R² were 16.6376/0.9866 vs. 151.2595/0.1165. Every explicit gate passed. Artifact hashes stayed unchanged and no reload/promotion occurred; Phase 2e is unblocked but separate. |
+| 2.11.1 | 2026-08-13 (Phase 2d-iii gap audit/final convergence) | Restored the approved Phase 2d-ii calibration constants that were documented and used for candidate generation but missing from tracked `ml-experiments/pricing_tables.py`; fresh seed-42 generation byte-matches the ignored candidate CSV (`sha256=3b2b79d28f42fe62e2971f48b055af0cabecadc3b5fb0b7463a58929766e2d05`). Locked artifact/data/input/output identities, added CSV hash/row-count/candidate-metric provenance, actionable missing-data guidance, invalid-guardrail and non-finite-prediction rejection, and expanded focused coverage 5→8. The category heatmap showed improvement everywhere, with excavator retained as the residual watch item. Final verification: 8 focused tests and 391 full-suite tests passed and 5 tests skipped; Ruff and diff hygiene passed. Live gate results and serving artifacts are unchanged. |
 
 **Design / feature schema / artifacts / Phase 3 cutover:** [`design.md`](./design.md)
