@@ -32,6 +32,7 @@ from app.agents.recommend_state import (
     write_price_rows,
 )
 from app.agents.recommend_synthesis import synthesize_recommendation
+from app.agents.recommend_traces import append_tool_trace, elapsed_ms, now
 from app.agents.tool_factory import RecommendToolCatalog
 from app.agents.tools import TOOL_PREDICT_ASSET_PRICE
 from app.pipelines.expand_quantity import expand_needs_to_unit_dicts
@@ -48,9 +49,7 @@ def _append_trace(
     state: RecommendAgentState | dict[str, Any],
     **fields: Any,
 ) -> list[dict[str, Any]]:
-    traces = list((_as_dict(state).get("tool_traces") or []))
-    traces.append({k: v for k, v in fields.items() if v is not None})
-    return traces
+    return append_tool_trace(state, **fields)
 
 
 def _parse_date(value: Any) -> date | None:
@@ -78,6 +77,7 @@ def check_gate(
     state: RecommendAgentState | dict[str, Any],
 ) -> dict[str, Any]:
     """Coordinator non-agent: record indexing gate; do not run tools."""
+    started = now()
     ok = indexing_ok(state)
     traces = _append_trace(
         state,
@@ -85,6 +85,7 @@ def check_gate(
         node="check_gate",
         status="ok" if ok else "refused",
         gate=ok,
+        duration_ms=elapsed_ms(started),
     )
     return {"tool_traces": traces}
 
@@ -100,37 +101,41 @@ def make_project_worker(
     decomposer: NeedDecomposer | None = None,
 ) -> Callable[[RecommendAgentState], dict[str, Any]]:
     def project_worker(state: RecommendAgentState) -> dict[str, Any]:
+        started = now()
         traces = _append_trace(
             state,
             role="worker",
             node="project_worker",
             status="start",
         )
+        working = {**_as_dict(state), "tool_traces": traces}
+        tool_started = now()
         if decomposer is not None:
             raw = decompose_project_needs(source_text, decomposer=decomposer)
         elif catalog is not None and TOOL_DECOMPOSE_PROJECT_NEEDS in catalog:
             raw = catalog.get(TOOL_DECOMPOSE_PROJECT_NEEDS)(source_text)
         else:
             raw = decompose_project_needs(source_text)
-        traces.append(
-            {
-                "role": "worker",
-                "node": "project_worker",
-                "tool": TOOL_DECOMPOSE_PROJECT_NEEDS,
-                "status": "ok",
-            }
+        traces = _append_trace(
+            working,
+            role="worker",
+            node="project_worker",
+            tool=TOOL_DECOMPOSE_PROJECT_NEEDS,
+            status="ok",
+            duration_ms=elapsed_ms(tool_started),
         )
+        working["tool_traces"] = traces
         units = expand_needs_to_unit_dicts(list(raw or []))
         proposed = deepcopy(_as_dict(state))
         project = dict(proposed.get("project") or {})
         project["needs"] = units
         proposed["project"] = project
-        traces.append(
-            {
-                "role": "worker",
-                "node": "project_worker",
-                "status": "completed",
-            }
+        traces = _append_trace(
+            working,
+            role="worker",
+            node="project_worker",
+            status="completed",
+            duration_ms=elapsed_ms(started),
         )
         proposed["tool_traces"] = traces
         result = apply_partition_write(ROLE_PROJECT_WORKER, state, proposed)
@@ -170,6 +175,7 @@ def make_delegator() -> Callable[[RecommendAgentState], dict[str, Any]]:
                             "tool_allowlist": [TOOL_PREDICT_ASSET_PRICE],
                         }
                     )
+        started = now()
         proposed = deepcopy(_as_dict(state))
         proposed["work_plan"] = plan
         proposed["tool_traces"] = _append_trace(
@@ -177,6 +183,7 @@ def make_delegator() -> Callable[[RecommendAgentState], dict[str, Any]]:
             role="delegator",
             node="delegator",
             status="ok",
+            duration_ms=elapsed_ms(started),
         )
         result = apply_partition_write(ROLE_DELEGATOR, state, proposed)
         return {"work_plan": result["work_plan"], "tool_traces": result["tool_traces"]}
@@ -218,6 +225,7 @@ def run_fleet_worker(
     catalog: RecommendToolCatalog,
 ) -> RecommendAgentState:
     """Fleet Worker [6] for one need_id (must run before pricing)."""
+    started = now()
     working = deepcopy(_as_dict(state))
     working["tool_traces"] = _append_trace(
         state,
@@ -229,6 +237,7 @@ def run_fleet_worker(
 
     need = _find_need(working, need_id)
     retrieve = catalog.get(TOOL_RETRIEVE_FLEET_ASSETS)
+    tool_started = now()
     assets = list(retrieve() or [])
     working["tool_traces"] = _append_trace(
         working,
@@ -237,9 +246,11 @@ def run_fleet_worker(
         need_id=need_id,
         tool=TOOL_RETRIEVE_FLEET_ASSETS,
         status="ok",
+        duration_ms=elapsed_ms(tool_started),
     )
 
     filt = catalog.get(TOOL_FILTER_FLEET_CANDIDATES)
+    tool_started = now()
     candidates = list(filt(assets, unit_need=need) or [])
     working["tool_traces"] = _append_trace(
         working,
@@ -248,10 +259,12 @@ def run_fleet_worker(
         need_id=need_id,
         tool=TOOL_FILTER_FLEET_CANDIDATES,
         status="ok",
+        duration_ms=elapsed_ms(tool_started),
     )
 
     run = working.get("run") or {}
     avail = catalog.get(TOOL_CHECK_BOOKING_AVAILABILITY)
+    tool_started = now()
     split = avail(
         candidates,
         start_date=run.get("start_date"),
@@ -264,6 +277,7 @@ def run_fleet_worker(
         need_id=need_id,
         tool=TOOL_CHECK_BOOKING_AVAILABILITY,
         status="ok",
+        duration_ms=elapsed_ms(tool_started),
     )
 
     # Persist traces first (fleet role may write tool_traces), then fleet slice.
@@ -282,6 +296,7 @@ def run_fleet_worker(
         node="fleet_worker",
         need_id=need_id,
         status="completed",
+        duration_ms=elapsed_ms(started),
     )
     return apply_partition_write(ROLE_FLEET_WORKER, updated, done, need_id=need_id)
 
@@ -307,6 +322,7 @@ def run_pricing_worker(
     price_fn: PriceFn | None = None,
 ) -> RecommendAgentState:
     """Pricing Worker [7] for one need_id (candidates must already exist)."""
+    started = now()
     working = deepcopy(_as_dict(state))
     working["tool_traces"] = _append_trace(
         state,
@@ -328,6 +344,7 @@ def run_pricing_worker(
     rows: list[dict[str, Any]] = []
     for cand in candidates:
         asset_id = cand.get("asset_id")
+        tool_started = now()
         try:
             price = _call_price(
                 price_fn=price_fn,
@@ -351,6 +368,7 @@ def run_pricing_worker(
                 need_id=need_id,
                 tool=TOOL_PREDICT_ASSET_PRICE,
                 status="ok",
+                duration_ms=elapsed_ms(tool_started),
             )
         except Exception:
             working["tool_traces"] = _append_trace(
@@ -360,6 +378,7 @@ def run_pricing_worker(
                 need_id=need_id,
                 tool=TOOL_PREDICT_ASSET_PRICE,
                 status="error",
+                duration_ms=elapsed_ms(tool_started),
             )
             continue
         rate = price.get("daily_rate")
@@ -396,6 +415,7 @@ def run_pricing_worker(
         node="pricing_worker",
         need_id=need_id,
         status="completed",
+        duration_ms=elapsed_ms(started),
     )
     return apply_partition_write(
         ROLE_PRICING_WORKER, updated, done, need_id=need_id

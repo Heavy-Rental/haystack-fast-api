@@ -51,14 +51,14 @@ Sizing rationale: `pricing_tables.CAPACITY_BINS`/`HEIGHT_BINS` each define 4 spe
 ### What NOT to change
 
 - `asset_categories.name` — stays exactly as-is (`Excavator`, `Scissors Lift`, `Boom Lift`, `Fork Lift`). The mismatch against `feature_schema.CATEGORIES` is a Haystack-side read-time mapping fix (`../dynamic-pricing/design.md`), not a seed-data change. Renaming here would also risk breaking `AssetCategoryRepository.findByName` callers and the `UNIQUE` constraint's meaning for anything else that reads these names.
-- No new columns, tables, or entity fields — this is row data only, within the existing schema documented in `specification/SPEC-spring-entity-repository.md`.
+- No new columns, tables, or entity fields — this is row data only, within the existing schema documented in [`../spring-entity-repository/spec.md`](../spring-entity-repository/spec.md).
 - No change to existing `min_daily_rate`/`max_daily_rate`/`base_daily_rate` ranges for the 8 assets that already exist — they're realistic; only null/missing/thin fields need filling in.
 
 ### Execution runbook (for the Spring Boot developer) — completed 2026-08-11
 
 Kept below as the record of what was asked for and as a template for any future reseed; steps 1-8 are done and independently verified (see `../domain-seed-data/spec.md` "Execution result"/"State after reseed"). Step 9 (coordinate with Haystack) is what triggered this update.
 
-1. **Confirm the existing seed mechanism first.** `specification/SPEC-spring-entity-repository.md` §7/§8 references a `SPEC-seed-data.md` and an upsert-based `data.sql`, consistent with `ddl-auto=update` (schema persists between runs — seeding must be `ON CONFLICT`-safe, not a fresh-DB assumption). That doc isn't mirrored into this repo — find it in the Spring Boot repo and extend that mechanism rather than introducing a second one.
+1. **Confirm the existing seed mechanism first.** [`../spring-entity-repository/spec.md`](../spring-entity-repository/spec.md) §7/§8 references a `SPEC-seed-data.md` and an upsert-based `data.sql`, consistent with `ddl-auto=update` (schema persists between runs — seeding must be `ON CONFLICT`-safe, not a fresh-DB assumption). That doc isn't mirrored into this repo — find it in the Spring Boot repo and extend that mechanism rather than introducing a second one.
 2. **Add the 16 new assets** (4 per category, on top of today's 8) per the target table above — vary `capacity`, `condition`, and rates within each category's existing range; populate `capacity` on every row, including the 2 pre-existing forklifts if still identical.
 3. **Backfill `capacity` on the 6 pre-existing non-forklift assets** — they're currently `NULL`; give them realistic, non-identical values within their category's `CATEGORY_CAPACITY_KG` range (see `spec.md` "Current state").
 4. **Rework booking generation to be date-relative**, per "Booking generation" above, replacing the hardcoded 2026-08-06→2026-08-16 literals.

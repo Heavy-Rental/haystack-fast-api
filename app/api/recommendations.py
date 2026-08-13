@@ -296,6 +296,10 @@ async def get_asset_recommendations(
     ``user_id`` + ``ingest_id``. Returns a quote envelope (``quoteRef``,
     ``items[].equipment``, rates). Does **not** invent asset ids or rates.
 
+    Default: ``RecommendationService`` MVP. When
+    ``RECOMMEND_VIA_AGENT_GRAPH=true`` (S7.5), the C/W/D graph runs and
+    maps ``results_by_need`` onto this same DTO. Gate refuse → 400.
+
     Stage-1 project-knowledge **chatbot Q&A** is Call 3:
     ``POST .../project-knowledge/query``.
     """

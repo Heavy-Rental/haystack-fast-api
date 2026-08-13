@@ -6,7 +6,7 @@ Isolated from Stage-1 Q&A (``app.agents.graph``). Sequence:
                       → project_worker → delegator → execute_needs → synthesis → END
 
 Fan-out: must-seq fleet→price within a need; batches of ``RECOMMEND_FANOUT_CAP``
-across needs. HTTP Call 2 is not wired here (S7.5).
+across needs. HTTP Call 2 is wired behind ``RECOMMEND_VIA_AGENT_GRAPH`` (S7.5).
 """
 
 from __future__ import annotations
@@ -91,7 +91,7 @@ def run_recommend_graph(
     price_fn: Callable[..., dict[str, Any]] | None = None,
     settings: Settings | None = None,
 ) -> RecommendAgentState:
-    """Invoke one recommend-mode graph run. Does not touch Call 2 HTTP."""
+    """Invoke one recommend-mode graph run (Call 2 uses this when flagged)."""
     cfg = settings or get_settings()
     cap = int(fanout_cap) if fanout_cap is not None else int(cfg.recommend_fanout_cap)
     cap = max(1, cap)

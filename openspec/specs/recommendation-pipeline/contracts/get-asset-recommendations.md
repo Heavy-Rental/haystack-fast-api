@@ -5,9 +5,9 @@
 | **Capability** | recommendation-pipeline (+ session from indexing/KG) |
 | **Method / path** | `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` |
 | **Schemas** | `app/schemas/recommend_quote.py` |
-| **Service** | `app/services/session_recommend.py` → `RecommendationService` (MVP) |
+| **Service** | `app/services/session_recommend.py` → `RecommendationService` (default MVP) or `run_recommend_graph` when `RECOMMEND_VIA_AGENT_GRAPH=true` (S7.5) |
 | **Prerequisite** | Successful Call 1 ingest session `(user_id, ingest_id)` same process |
-| **Status** | **as-built MVP** (seed fleet + pricing; not full C/W/D graph yet) |
+| **Status** | **as-built** — same quote DTO; graph path optional behind flag (default off) |
 | **Standards** | OpenSpec · Spec-kit · OpenSPDD · no invent |
 
 ---
@@ -89,7 +89,7 @@ Chatbot Q&A is **Call 3**: `POST .../project-knowledge/query`.
 | Status | When |
 |--------|------|
 | 404 | Session missing for `(user_id, ingest_id)` |
-| 400 | Validation / recommend intake failure |
+| 400 | Validation / recommend intake failure; graph flag on + `indexing_ok=false` (S7.5 gate refuse) |
 
 ---
 
@@ -97,4 +97,5 @@ Chatbot Q&A is **Call 3**: `POST .../project-knowledge/query`.
 
 - Do not invent `equipment.id` or rates — only seed/catalog + pricing path.  
 - Empty match → `items: []` + warning.  
-- Do not return Q&A `answer` on this route (use Call 3).  
+- Do not return Q&A `answer` or `tool_traces` on this route (use Call 3 for Q&A; traces stay on graph state).  
+- `RECOMMEND_VIA_AGENT_GRAPH` default **false**; same body when true.  

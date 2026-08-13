@@ -11,7 +11,7 @@
 | **Parent** | [`../equipment-recommendation/spec.md`](../equipment-recommendation/spec.md) |
 | **Live route authority** | [`../indexing/spec.md`](../indexing/spec.md) · KG: [`../knowledge-graph/spec.md`](../knowledge-graph/spec.md) |
 | **Related** | [`../recommendation-pipeline/spec.md`](../recommendation-pipeline/spec.md); [`../../AGENTS.md`](../../AGENTS.md) Path C |
-| **Legacy source** | `specification/SPEC-recommendation-intake.md` |
+| **Legacy source** | `specification/SPEC-recommendation-intake.md` (removed 2026-08-13; see [`../../TRACEABILITY.md`](../../TRACEABILITY.md)) |
 
 **Read** [`../../project.md`](../../project.md) and [`../project-setup/spec.md`](../project-setup/spec.md) first. Domain language: [`../domain/spec.md`](../domain/spec.md).
 

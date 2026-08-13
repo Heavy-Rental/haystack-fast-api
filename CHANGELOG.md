@@ -2,11 +2,23 @@
 
 ## Unreleased
 
+### Changed (specification/ removal — 2026-08-13)
+
+- Relocated the only unique spec, Spring JPA catalog, to `openspec/specs/spring-entity-repository/spec.md`.
+- Retargeted live code/docs/OpenSpec pointers. Deleted the legacy `specification/` stub tree.
+
+### Added (S7.5 + S7.6 / Phase 7 — 2026-08-12)
+
+- Call 2 `getassetrecommendations` can run the C/W/D recommend graph behind `RECOMMEND_VIA_AGENT_GRAPH` (default **false**). Same quote DTO (`quoteRef`, `items[]`); gate refuse → 400; traces stay off the body.
+- G-1 `tool_traces` contract: `role`, `node`, `need_id` on fan-out, `duration_ms >= 0` on terminal spans (`app/agents/recommend_traces.py`).
+- Tests: `tests/test_recommend_http_call2.py`, `tests/test_tool_traces.py`.
+- OpenSpec archive: `openspec/changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/`.
+
 ### Added (S7.3 + S7.4 / Phase 7 — 2026-08-12)
 
 - Recommend LangGraph DAG (`app/agents/recommend_graph.py` / `recommend_nodes.py`): `check_gate → project_worker → delegator → execute_needs → synthesis`. Must-seq fleet→price within need; `RECOMMEND_FANOUT_CAP` (default 4) batches across needs. Gate false skips fleet/price tools.
 - Tool-free Coordinator stub synthesis (`app/agents/recommend_synthesis.py`): merge `fleet_by_need` + `prices_by_need` → `results_by_need`; empty fleet / missing prices → `item: null` + warning; no invent; F-2 on apply.
-- Isolated from Stage-1 Q&A (`app/agents/graph.py`) and from Call 2 HTTP (still `SessionRecommendService` MVP / S7.5).
+- Isolated from Stage-1 Q&A (`app/agents/graph.py`). Call 2 HTTP enrich landed in S7.5.
 - Tests: `tests/test_recommend_graph_order.py`, `test_recommend_fanout.py`, `test_recommend_synthesis.py`.
 - OpenSpec archive: `openspec/changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/`.
 

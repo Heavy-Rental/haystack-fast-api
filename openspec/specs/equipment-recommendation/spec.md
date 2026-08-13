@@ -10,7 +10,7 @@
 | **Map** | [`../../AGENTS.md`](../../AGENTS.md) Path D |
 | **Haystack reference** | *Building Natural Language and LLM Pipelines* — Ch. 3–5, **7** |
 | **Depends on** | `haystack-ai` (Haystack 2.0), LangGraph, real `Asset` / `Booking` / `BookingItem` schema, pricing `predict_price()`; (target KG) `ragas`, `ragas-haystack`, LangChain document types |
-| **Legacy source** | `specification/SPEC-agentic-equipment-recommendation-and-pricing.md` |
+| **Legacy source** | `specification/SPEC-agentic-equipment-recommendation-and-pricing.md` (removed 2026-08-13; see [`../../TRACEABILITY.md`](../../TRACEABILITY.md)) |
 
 **Read** [`../../project.md`](../../project.md) and [`../project-setup/spec.md`](../project-setup/spec.md) first. Domain: [`../domain/spec.md`](../domain/spec.md).
 
@@ -263,7 +263,7 @@ Routers MUST stay thin; pipeline construction and SQL live in services/pipelines
 - **FR-018b**: Empty candidate/document lists → predictable empty outputs, no unhandled exceptions.
 - **FR-019**: Ranking generation MUST use Haystack LLM generation + `PromptBuilder` (or equivalent).
 - **FR-019a**: (Target) SuperComponents for recurring subgraphs.
-- **FR-019b**: (Target) Tools with short unique name + NL description. **As-built (S7.1):** allowlisted in-process tools `decompose_project_needs`, `retrieve_fleet_assets`, `filter_fleet_candidates`, `check_booking_availability` (+ S6 `predict_asset_price`) via `app/agents/fleet_tools.py` + `tool_factory.py`. Free-form SQL/Cypher rejected. **As-built (S7.3):** tools are invoked from the recommend LangGraph DAG. HTTP Call 2 enrich remains S7.5.
+- **FR-019b**: (Target) Tools with short unique name + NL description. **As-built (S7.1):** allowlisted in-process tools `decompose_project_needs`, `retrieve_fleet_assets`, `filter_fleet_candidates`, `check_booking_availability` (+ S6 `predict_asset_price`) via `app/agents/fleet_tools.py` + `tool_factory.py`. Free-form SQL/Cypher rejected. **As-built (S7.3):** tools are invoked from the recommend LangGraph DAG. **As-built (S7.5):** Call 2 HTTP may run that DAG behind `RECOMMEND_VIA_AGENT_GRAPH`.
 - **FR-019c**: Pipelines assembled with explicit `.add_component` / `.connect` / `.run`.
 - **FR-019d**: (Target) File ingest branch by media type.
 - **FR-019e**: (Target) Hybrid retrieval when catalog knowledge exists.
@@ -305,7 +305,7 @@ The multi-agent recommend path SHALL use a shared `RecommendAgentState` (STM) wi
 
 ### Requirement: Recommend LangGraph DAG (S7.3 as-built)
 
-The recommend path SHALL run an isolated LangGraph DAG (not the Stage-1 Q&A graph): `check_gate → project_worker [5] → delegator → execute_needs ([6]→[7]×N) → synthesis [8]`. Within a need, fleet MUST complete before pricing. Across needs, fan-out width is `RECOMMEND_FANOUT_CAP` (default 4, min 1): cap 1 serializes each need pipeline; cap ≥ 2 batches fleets then prices. `run.indexing_ok == false` MUST skip project/fleet/price tools and emit a gate warning. Workers MUST NOT spawn sibling needs. Runtime: `app/agents/recommend_graph.py`, `app/agents/recommend_nodes.py`. HTTP Call 2 remains the service MVP (S7.5).
+The recommend path SHALL run an isolated LangGraph DAG (not the Stage-1 Q&A graph): `check_gate → project_worker [5] → delegator → execute_needs ([6]→[7]×N) → synthesis [8]`. Within a need, fleet MUST complete before pricing. Across needs, fan-out width is `RECOMMEND_FANOUT_CAP` (default 4, min 1): cap 1 serializes each need pipeline; cap ≥ 2 batches fleets then prices. `run.indexing_ok == false` MUST skip project/fleet/price tools and emit a gate warning. Workers MUST NOT spawn sibling needs. Runtime: `app/agents/recommend_graph.py`, `app/agents/recommend_nodes.py`. HTTP Call 2 may invoke this DAG (S7.5).
 
 **Status:** **as-built (S7.3)**.
 
@@ -337,6 +337,40 @@ Coordinator synthesis [8] MUST be tool-free. It SHALL merge `fleet_by_need` + `p
 - **WHEN** synthesis runs
 - **THEN** `item` is null
 - **AND** warnings mention no fleet match
+
+### Requirement: Call 2 multi-agent enrich (S7.5 as-built)
+
+`POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` SHALL keep the as-built quote DTO (`quoteRef`, `items[]`). When `RECOMMEND_VIA_AGENT_GRAPH` is **false** (default), Call 2 uses `RecommendationService` MVP. When **true**, `SessionRecommendService` SHALL run `run_recommend_graph` and map `results_by_need` onto the same quote. A registered session implies `indexing_ok=true` unless `session.meta.indexing_ok` is false. Gate refuse MUST return **400** shared error JSON. Missing session remains **404**. MUST NOT invent `equipment.id` or rates. MUST NOT put `tool_traces` or Q&A `answer` on the quote body.
+
+**Status:** **as-built (S7.5)**. Runtime: `app/services/session_recommend.py`. Config: `RECOMMEND_VIA_AGENT_GRAPH`.
+
+#### Scenario: Flag on returns quote shape
+- **GIVEN** a Call 1 session and `RECOMMEND_VIA_AGENT_GRAPH=true`
+- **WHEN** POST `getassetrecommendations`
+- **THEN** response is 200 with `quoteRef` and `items[]`
+- **AND** the body has no `answer` and no `tool_traces`
+
+#### Scenario: Flag off uses MVP
+- **GIVEN** `RECOMMEND_VIA_AGENT_GRAPH=false`
+- **WHEN** Call 2 recommend runs
+- **THEN** `run_recommend_graph` is not invoked
+
+#### Scenario: Gate refuse is 400
+- **GIVEN** a session with `meta.indexing_ok=false` and the graph flag on
+- **WHEN** POST `getassetrecommendations`
+- **THEN** response is **400** `{"error","message"}`
+
+### Requirement: Recommend tool_traces (S7.6 as-built)
+
+Recommend-graph `tool_traces` SHALL record `role` (`coordinator` \| `delegator` \| `worker`), `node`, and `status`. Fan-out fleet/pricing events MUST include `need_id`. Terminal statuses (`ok`, `completed`, `error`, `refused`) MUST include `duration_ms >= 0`. Empty fleet still emits a fleet-worker span and a synthesis warning. Traces are STM/audit only — not part of the Call 2 quote DTO.
+
+**Status:** **as-built (S7.6)**. Runtime: `app/agents/recommend_traces.py`.
+
+#### Scenario: Fan-out traces carry need_id and duration
+- **GIVEN** two fixture needs and `indexing_ok` true
+- **WHEN** `run_recommend_graph` completes
+- **THEN** fleet and pricing traces include `need_id`
+- **AND** terminal spans include `duration_ms >= 0`
 
 ### Requirement: Pricing integration (FR-020–FR-024)
 
@@ -621,6 +655,7 @@ Architecture, Ragas pattern, deps, and offline pipeline sketch: [`design.md`](./
 | 0.9.2 | 2026-08-07 | KG as-built pointer; sequential map |
 | 1.0.0 | 2026-08-10 | Migrated to OpenSpec under `openspec/specs/equipment-recommendation/`; architecture/day plan/deployment → design.md |
 | 1.1.0 | 2026-08-12 | **S7.0 + S7.1 as-built:** `RecommendAgentState` + F-2 partition validation; allowlisted fleet/needs tools + DI factory (FR-019b note). Graph (S7.3+) still TARGET. Archives `changes/archive/2026-08-12-s7-0-recommend-agent-state/`, `.../s7-1-fleet-tool-catalog/`. |
+| 1.3.0 | 2026-08-12 | **S7.5 + S7.6 as-built:** Call 2 graph enrich behind `RECOMMEND_VIA_AGENT_GRAPH` (same quote DTO; gate 400); G-1 `tool_traces` duration contract. Archive `changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/`. |
 | 1.2.0 | 2026-08-12 | **S7.3 + S7.4 as-built:** recommend LangGraph DAG (gate → [5] → Delegator → ([6]→[7])×N) + tool-free stub synthesis [8]. HTTP Call 2 still service MVP (S7.5). Archive `changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/`. |
 
 When behaviour, API paths, tool names, or schedule gates change, bump this table and align OpenAPI / tests / execution plan in the same change set.

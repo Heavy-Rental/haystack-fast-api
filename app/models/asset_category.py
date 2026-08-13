@@ -1,6 +1,6 @@
 """Read-only mapping onto Spring-Boot-owned ``asset_categories`` (primary_snapshot).
 
-See specification/SPEC-dynamic-pricing.md §5.3 — pricing reads this schema
+See openspec/specs/dynamic-pricing/spec.md §5.3 — pricing reads this schema
 only for the category join (never encodes the raw ``category_id`` FK).
 """
 

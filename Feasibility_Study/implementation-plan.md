@@ -5,10 +5,10 @@
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
 | **Date** | 2026-08-12 |
-| **Version** | 3.7.0 |
+| **Version** | 3.8.0 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.7.0** Phase 7 / **S7.3 + S7.4 as-built** (recommend LangGraph DAG + tool-free stub synthesis); **3.6.0** S7.0 + S7.1 as-built; **3.5.6** S6 as-built; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
+| **Revision notes** | **3.8.0** Phase 7 / **S7.5 + S7.6 as-built** (Call 2 graph enrich behind flag + `tool_traces` duration contract); **3.7.0** S7.3 + S7.4 as-built; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -61,6 +61,7 @@ Call 1: POST /internal/v1/recommendations/submitprojectspecification
 Call 2: POST /internal/v1/recommendations/project-knowledge/getassetrecommendations
   → requires user_id + ingest_id from Call 1 (+ optional query)
   → **RECOMMEND / quote** via SessionRecommendService → RecommendationService MVP
+  → optional S7.5: RECOMMEND_VIA_AGENT_GRAPH=true → run_recommend_graph (same DTO)
   → quoteRef, items[].equipment, rates (no invent)
   → portal dual-hop primary body for React
 
@@ -85,8 +86,10 @@ Pricing: pricing_client → app.services.pricing.model.predict_price (production
   predict_asset_price agent tool (S6) — **as-built** (same entrypoint; Phase 7 Workers [7]×N as-built S7.3)
   RecommendAgentState + F-2 partition validation (S7.0) — **as-built**
   Fleet/needs tool catalog + DI factory (S7.1) — **as-built** (fake default; SQL DTO backend)
-  Phase 7 graph + stub synthesis (S7.3–S7.4) — **as-built** (HTTP enrich S7.5 not wired)
-  Neo4j tools / traces metrics / prompts A–L (S7.2, S7.6, S7.7) — **not wired**
+  Phase 7 graph + stub synthesis (S7.3–S7.4) — **as-built**
+  HTTP Call 2 multi-agent enrich (S7.5) — **as-built** (`RECOMMEND_VIA_AGENT_GRAPH`, default off)
+  tool_traces duration contract (S7.6) — **as-built**
+  Neo4j tools / prompts A–L (S7.2, S7.7) — **not wired**
 Error JSON: {"error","message"} handlers already as-built
 Idempotency-Key / ingest correlation headers — **as-built S2a** (process-local store + middleware)
 Agent indexing tool + Coordinator gate [4] — **as-built S3** (flag default off)
@@ -96,6 +99,7 @@ Default pytest (as-built):
   → no optional markers / skip-if-service patterns in the suite
   → tests/conftest.py autouse forces:
        INDEXING_EMBEDDER=mock, INDEXING_EMBEDDING_DIM=384,
+       INDEXING_DOCUMENT_STORE=memory, RECOMMEND_VIA_AGENT_GRAPH=false,
        PROJECT_AGENT_MODE=stub, KG_ARTIFACT_DIR=tmp
   → host .env (e.g. dim 768 for OpenAI) MUST NOT break CI
   → project_vector_search: query embedder mode/dim MUST match session store
@@ -417,8 +421,8 @@ Use **stage IDs** in PRs and test names. Every stage below that ships code has a
 | **S7.2** | Neo4j tools (no-op until S8) | 7 | app | S7.1 | **yes** (fake) |
 | **S7.3** | Recommend LangGraph DAG (seq/par C/W/D) | 7 | app | S7.0–S7.1 | **yes** (**as-built**) |
 | **S7.4** | Tool-free synthesis + F-2 validation | 7 | app | S7.3 | **yes** (**as-built**) |
-| **S7.5** | HTTP Call 2 multi-agent enrich (same quote DTO) | 7 | app | S7.4 | **yes** |
-| **S7.6** | `tool_traces` / metrics (role, need_id, duration) | 7 | app | S7.3 | **yes** |
+| **S7.5** | HTTP Call 2 multi-agent enrich (same quote DTO) | 7 | app | S7.4 | **yes** (**as-built**) |
+| **S7.6** | `tool_traces` / metrics (role, need_id, duration) | 7 | app | S7.3 | **yes** (**as-built**) |
 | **S7.7** | Prompts A–L + tool DI factory | 7 | app | S7.3–7.4 | **yes** |
 | **S8** | Neo4j populate + real graph tools | 8 | config+app | seed SQL | optional |
 | **S9.1** | C2 202 jobs / SSE | 9 | app (+ Spring) | HTTP surface | **yes** (fake worker) |
@@ -685,8 +689,8 @@ Maps to dual-plane §4.1 [5]–[8], [`multi-agent-synthesis-recommend-output.md`
 | Neo4j tools (fake then real) | optional | **S7.2** / S8 | Todo |
 | LangGraph DAG seq/par | Coordinator + Delegator + Workers | **S7.3** | **As-built** |
 | Tool-free synthesis | Coordinator [8] | **S7.4** | **As-built** |
-| HTTP Call 2 multi-agent enrich | API | **S7.5** | Todo |
-| tool_traces metrics | G-1 | **S7.6** | Todo |
+| HTTP Call 2 multi-agent enrich | API | **S7.5** | **As-built** |
+| tool_traces metrics | G-1 | **S7.6** | **As-built** |
 | Prompts A–L + DI | all agents | **S7.7** | Todo |
 
 ---
@@ -770,30 +774,36 @@ Maps to dual-plane §4.1 [5]–[8], [`multi-agent-synthesis-recommend-output.md`
 
 ---
 
-#### Stage S7.5 — HTTP Call 2 multi-agent enrich
+#### Stage S7.5 — HTTP Call 2 multi-agent enrich — **as-built**
 
 | Field | Content |
 |-------|---------|
+| **Status** | **As-built (2026-08-12)** |
 | **Work** | Enrich **Call 2** `getassetrecommendations` with full C/W/D orchestrator; map to quote DTO / `results_by_need`; feature flag for graph vs MVP |
-| **Exit criteria** | Contract tests vs OpenAPI / schema |
-| **As-built note** | Call 2 `getassetrecommendations` is **recommend quote MVP** (`SessionRecommendService` + `RecommendationService`). S7.5 enriches multi-agent graph behind the **same** Call 2 DTO. Call 3 is chatbot `.../query`. |
+| **Exit criteria** | Contract tests vs OpenAPI / schema — **met** |
+| **As-built note** | Flag `RECOMMEND_VIA_AGENT_GRAPH` (default **false**) keeps MVP `RecommendationService`. Flag on: `SessionRecommendService` → `run_recommend_graph` → same `AssetRecommendResponse`. Gate refuse → 400. Call 3 is chatbot `.../query`. |
 | **Test implementation** | (1) POST recommend with fixtures → 200 shape; (2) flag off → MVP Call 2 path; (3) gate fail → 4xx/structured error; (4) multi-need body matches golden |
-| **Suggested modules** | `tests/test_recommend_http_call3.py` |
+| **Modules** | `app/services/session_recommend.py`; `tests/test_recommend_http_call2.py` |
+| **Config** | `RECOMMEND_VIA_AGENT_GRAPH` (default false) |
 | **CI job** | **default** |
 | **C/W/D** | Coordinator handoff; I session |
+| **OpenSpec** | archive `openspec/changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/` |
+| **Not in S7.5** | Neo4j tools (S7.2); prompts A–L (S7.7); production default flip |
 
 ---
 
-#### Stage S7.6 — tool_traces and metrics
+#### Stage S7.6 — tool_traces and metrics — **as-built**
 
 | Field | Content |
 |-------|---------|
+| **Status** | **As-built (2026-08-12)** |
 | **Work** | Append traces with `role`, `node`, `need_id`, `tool`, `duration_ms`; warnings on empty fleet |
-| **Exit criteria** | Contract asserts on trace fields |
+| **Exit criteria** | Contract asserts on trace fields — **met** |
 | **Test implementation** | (1) After graph run, traces include worker roles; (2) fan-out traces have `need_id`; (3) duration ≥ 0; (4) empty fleet warning present |
-| **Suggested modules** | `tests/test_tool_traces.py` |
+| **Modules** | `app/agents/recommend_traces.py`; `tests/test_tool_traces.py` |
 | **CI job** | **default** |
 | **C/W/D** | G-1 |
+| **OpenSpec** | same archive as S7.5 |
 
 ---
 
@@ -932,7 +942,8 @@ Every code-bearing PR **must** use the **PR description template** below (bare m
 | **PR-E** | S7.0 | RecommendAgentState + validation | **Shipped** — illegal partition writes rejected (**TDD** unit-first) |
 | **PR-F** | S7.1 | Fleet tool catalog + DI factory | **Shipped** — fake fleet filter/availability; allowlist (**TDD** + contract) |
 | **PR-G** | S7.3–7.4 | Recommend graph + synthesis | **Shipped** — order, fan-out, golden results_by_need; **BDD** no invent / empty fleet |
-| **PR-H** | S7.5–7.7 | Call 2 multi-agent enrich + traces + prompts | Contract + role traces; **BDD** Call 2 quote happy path |
+| **PR-H** | S7.5–7.6 | Call 2 multi-agent enrich + traces | **Shipped** — same quote DTO behind flag; role/`need_id`/`duration_ms` traces; **BDD** Call 2 quote happy path |
+| **PR-I** | S7.7 | Prompts A–L + tool DI | Recommend prompts isolated from Stage-1; Delegator allowlist; **TDD** stub LLM |
 
 ### PR description template (required bare minimum)
 
@@ -1021,7 +1032,7 @@ Normative OpenSpec companions: [`../openspec/specs/project-setup/`](../openspec/
 | **Command** | `uv run pytest` or `uv run pytest tests/ -q` from app root |
 | **Markers / skips** | `@pytest.mark.pgvector` registered; live tests skip unless `RUN_PGVECTOR_TESTS=1` |
 | **External prereqs** | **None** for default green (no live LLM, Neo4j, Pgvector required) |
-| **`tests/conftest.py` autouse** | Forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `PROJECT_AGENT_MODE=stub`, temp `KG_ARTIFACT_DIR`; clears settings cache; resets session + idempotency stores |
+| **`tests/conftest.py` autouse** | Forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `INDEXING_DOCUMENT_STORE=memory`, `RECOMMEND_VIA_AGENT_GRAPH=false`, `PROJECT_AGENT_MODE=stub`, temp `KG_ARTIFACT_DIR`; clears settings cache; resets session + idempotency stores |
 | **Embed dim rule** | Query embedder for `project_vector_search` **must** use same mode/dim as documents in the session store (mismatch → Haystack embedding-size error) |
 | **Tenant filters** | Vector tools filter session `user_id` + `ingest_id` (FR-IX-028) |
 | **Health tests** | Do not skip if Postgres is down — accept `database=up\|down` |
@@ -1142,8 +1153,8 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | Phase 7 / S7.1 fleet tool catalog | **As-built** — allowlisted in-process tools + fake/SQL DI factory |
 | Phase 7 / S7.3 recommend LangGraph DAG | **As-built** — gate → [5] → Delegator → ([6]→[7])×N; `RECOMMEND_FANOUT_CAP` |
 | Phase 7 / S7.4 tool-free synthesis | **As-built** — stub Coordinator [8]; empty fleet → `item: null`; no invent |
-| FR-010 service recommend (seed) | **As-built Call 2 MVP** via SessionRecommendService; S7.5 wires graph behind same DTO |
-| Full recommend multi-agent path | S7.0–S7.1 + S7.3–S7.4 **as-built**; S7.2 / S7.5–S7.7 remain (Neo4j, HTTP enrich, traces, prompts) |
+| FR-010 service recommend (seed) | **As-built Call 2 MVP** via SessionRecommendService; S7.5 wires graph behind same DTO (`RECOMMEND_VIA_AGENT_GRAPH`) |
+| Full recommend multi-agent path | S7.0–S7.1 + S7.3–S7.6 **as-built**; S7.2 / S7.7 remain (Neo4j, prompts A–L) |
 | Pgvector / Neo4j populate | Not in app path |
 | Idempotency-Key on ingest | **As-built S2a** (process-local; multi-replica later) |
 | Stage catalog | **Specified** (§3.1) |

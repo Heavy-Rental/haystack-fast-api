@@ -182,7 +182,7 @@ Storage: in-memory during build → JSON file; no Neo4j by default.
 
 See [`../recommendation-pipeline/design.md`](../recommendation-pipeline/design.md) full inventory. Key: `app/pipelines/*`, `app/services/recommendations.py`, `app/services/pricing_client.py`.
 
-### As-built multi-agent building blocks (Phase 7 S7.0–S7.4)
+### As-built multi-agent building blocks (Phase 7 S7.0–S7.6)
 
 | Module | Role |
 |--------|------|
@@ -193,9 +193,11 @@ See [`../recommendation-pipeline/design.md`](../recommendation-pipeline/design.m
 | `app/agents/recommend_graph.py` | **S7.3** `build_recommend_graph` / `run_recommend_graph` (isolated from Q&A) |
 | `app/agents/recommend_nodes.py` | **S7.3** gate, project worker, delegator, fleet/price workers, `execute_needs` |
 | `app/agents/recommend_synthesis.py` | **S7.4** tool-free stub Coordinator [8] |
-| Tests | `tests/test_recommend_agent_state.py`, `test_fleet_tools.py`, `test_tool_factory.py`, `test_recommend_graph_order.py`, `test_recommend_fanout.py`, `test_recommend_synthesis.py` |
+| `app/services/session_recommend.py` | **S7.5** Call 2 flag `RECOMMEND_VIA_AGENT_GRAPH` → graph → same quote DTO |
+| `app/agents/recommend_traces.py` | **S7.6** G-1 `append_tool_trace` / `duration_ms` |
+| Tests | `tests/test_recommend_agent_state.py`, `test_fleet_tools.py`, `test_tool_factory.py`, `test_recommend_graph_order.py`, `test_recommend_fanout.py`, `test_recommend_synthesis.py`, `test_recommend_http_call2.py`, `test_tool_traces.py` |
 
-HTTP Call 2 multi-agent enrich remains **S7.5**. Prompts A–L remain **S7.7**.
+Prompts A–L remain **S7.7**. Neo4j tools remain **S7.2**.
 
 ## O — Operations
 

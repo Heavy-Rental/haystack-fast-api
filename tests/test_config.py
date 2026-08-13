@@ -58,3 +58,9 @@ def test_recommend_fanout_cap_defaults_to_four() -> None:
     """Phase 7 / S7.3: RECOMMEND_FANOUT_CAP defaults to 4 (min 1)."""
     settings = Settings()
     assert settings.recommend_fanout_cap == 4
+
+
+def test_recommend_via_agent_graph_defaults_to_false() -> None:
+    """Phase 7 / S7.5: RECOMMEND_VIA_AGENT_GRAPH defaults off (MVP Call 2)."""
+    settings = Settings()
+    assert settings.recommend_via_agent_graph is False

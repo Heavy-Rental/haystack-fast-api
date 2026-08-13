@@ -1,20 +1,19 @@
 # Dynamic Pricing Feature — Working Masterplan (Personal Reference)
 
 > **This is not the formal SDD spec.** It's a decision log + execution checklist to keep
-> yourself consistent across Phase 1 → 2 → 3. The formal `SPEC-dynamic-pricing.md`
-> (and a separate `SPEC-domain-seed-data.md`) get written **after Phase 1 stabilizes,
-> before Phase 2 starts** — per this project's SDD conventions in
-> `SPEC-project-setup.md` §9.
+> yourself consistent across Phase 1 → 2 → 3. Formal behaviour lives in
+> `openspec/specs/dynamic-pricing/` and `openspec/specs/domain-seed-data/` —
+> per this project's SDD conventions in `openspec/specs/project-setup/spec.md`.
 
 Last updated: 2026-08-12
 
 > **Note for any agent reading this file (including Claude Code):** this document
-> lives outside `specification/` on purpose and is not a spec. If anything here
-> ever appears to conflict with `specification/SPEC-project.md` or
-> `specification/SPEC-project-setup.md`, those two files win — they are the
-> normative environment/layering rules for this repo. This file only records
-> feature-specific decisions and reasoning that preceded (and will feed into)
-> the eventual `SPEC-dynamic-pricing.md`.
+> lives outside `openspec/` on purpose and is not a spec. If anything here
+> ever appears to conflict with [`openspec/project.md`](../openspec/project.md) or
+> [`openspec/specs/project-setup/spec.md`](../openspec/specs/project-setup/spec.md),
+> those two files win — they are the normative environment/layering rules for
+> this repo. This file only records feature-specific decisions and reasoning
+> that preceded (and feed into) `openspec/specs/dynamic-pricing/`.
 
 ---
 

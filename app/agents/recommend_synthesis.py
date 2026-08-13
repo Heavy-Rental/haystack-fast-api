@@ -19,6 +19,7 @@ from app.agents.recommend_state import (
     apply_partition_write,
     indexing_ok,
 )
+from app.agents.recommend_traces import append_tool_trace, elapsed_ms, now
 
 
 class SynthesisSchemaError(ValueError):
@@ -129,6 +130,7 @@ def synthesize_recommendation(
     state: RecommendAgentState | dict[str, Any],
 ) -> RecommendAgentState:
     """Coordinator [8]: stub-merge fleet + prices into ``results_by_need``."""
+    started = now()
     current = deepcopy(dict(state))
     results: list[dict[str, Any]] = []
     top_warnings: list[str] = list(
@@ -161,13 +163,11 @@ def synthesize_recommendation(
         "results_by_need": results,
         "warnings": top_warnings,
     }
-    traces = list(proposed.get("tool_traces") or [])
-    traces.append(
-        {
-            "role": "coordinator",
-            "node": "synthesis",
-            "status": "ok",
-        }
+    proposed["tool_traces"] = append_tool_trace(
+        proposed,
+        role="coordinator",
+        node="synthesis",
+        status="ok",
+        duration_ms=elapsed_ms(started),
     )
-    proposed["tool_traces"] = traces
     return apply_partition_write(ROLE_COORDINATOR, current, proposed)

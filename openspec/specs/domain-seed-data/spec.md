@@ -6,9 +6,9 @@
 | **Owner / executes** | Spring Boot (`heavy_rental` schema owner) — this spec defines requirements Haystack needs from the data; it does not seed anything itself |
 | **Consumes** | [`../dynamic-pricing/spec.md`](../dynamic-pricing/spec.md) — `predict_price(...)`'s `period_utilization`/guardrail-clamping/per-asset differentiation all depend on this data being present and varied |
 | **Standards** | OpenSpec · OpenSPDD (see [`design.md`](./design.md)) |
-| **Depends on** | [`../project-setup/spec.md`](../project-setup/spec.md); real schema per `specification/SPEC-spring-entity-repository.md` |
+| **Depends on** | [`../project-setup/spec.md`](../project-setup/spec.md); real schema per [`../spring-entity-repository/spec.md`](../spring-entity-repository/spec.md) |
 | **Related, not specs** | `docs/dynamic-pricing-masterplan.md`; `docs/dynamic-pricing-execution-plan.md` |
-| **Legacy source** | Supersedes the never-written `specification/SPEC-domain-seed-data.md` referenced in `docs/dynamic-pricing-masterplan.md`'s original phase order |
+| **Legacy source** | Supersedes the never-written `SPEC-domain-seed-data.md` referenced in `docs/dynamic-pricing-masterplan.md`'s original phase order (historical path `specification/`; folder removed 2026-08-13 — see [`../../TRACEABILITY.md`](../../TRACEABILITY.md)) |
 
 **Read** [`../dynamic-pricing/spec.md`](../dynamic-pricing/spec.md) before this document — it explains *why* this data needs to look a particular way.
 
@@ -91,7 +91,7 @@ When this spec is executed:
 - Row-level data for `assets` (capacity, condition, min/max/base daily rate spread), `bookings` (status, dates, customer spread), `booking_items` (completeness — every booking linked to an asset), optionally `users` (more than one customer).
 - A relative/rolling date-generation approach for booking windows, so re-seeding doesn't require hand-editing literal dates each time.
 - Volume/distribution targets per category (see [`design.md`](./design.md) "Approach" for the concrete numbers).
-- Idempotent upsert seeding, consistent with the existing `ddl-auto=update` + `data.sql` upsert convention referenced in `specification/SPEC-spring-entity-repository.md` §7/§8 (that repo's own `SPEC-seed-data.md`, not mirrored in this repo).
+- Idempotent upsert seeding, consistent with the existing `ddl-auto=update` + `data.sql` upsert convention referenced in [`../spring-entity-repository/spec.md`](../spring-entity-repository/spec.md) §7/§8 (that repo's own `SPEC-seed-data.md`, not mirrored in this repo).
 
 ### Out of scope
 

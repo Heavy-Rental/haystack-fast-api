@@ -25,12 +25,14 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | `specification/tasks-indexing-file-type-router.md` | `openspec/changes/archive/2026-08-07-indexing-file-type-router/tasks.md` | |
 | `specification/tasks-knowledge-graph.md` | `openspec/changes/archive/2026-08-07-knowledge-graph-hr-76/tasks.md` | |
 | `specification/tasks-kg-multi-agent-stage1.md` | `openspec/changes/archive/2026-08-08-kg-multi-agent-stage1/tasks.md` | |
+| `specification/SPEC-spring-entity-repository.md` | `openspec/specs/spring-entity-repository/spec.md` | Spring JPA entity/repo catalog (haystack read copy) |
 | — (S2a new) | `openspec/changes/archive/2026-08-12-s2a-ingest-idempotency-correlation/` | FR-IX-024/025 proposal + tasks |
 | — (S3 new) | `openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/` | FR-IX-026 proposal + tasks |
 | — (S6 new) | `openspec/changes/archive/2026-08-12-s6-predict-asset-price-tool/` | US-5 / Phase 6 agent pricing tool |
 | — (S7.0 new) | `openspec/changes/archive/2026-08-12-s7-0-recommend-agent-state/` | Phase 7 RecommendAgentState + F-2 partition validation |
 | — (S7.1 new) | `openspec/changes/archive/2026-08-12-s7-1-fleet-tool-catalog/` | Phase 7 fleet/needs in-process tool catalog + DI factory |
 | — (S7.3 + S7.4 new) | `openspec/changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/` | Phase 7 recommend LangGraph DAG + tool-free stub synthesis |
+| — (S7.5 + S7.6 new) | `openspec/changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/` | Phase 7 Call 2 graph enrich + tool_traces duration |
 | `app/agents/prompts.py` | `openspec/spdd/prompts/project-knowledge-agents.md` (index) | OpenSPDD first-class prompts |
 
 ## FR / requirement ID map
@@ -74,6 +76,9 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | S7.3 (as-built) | Equipment recommendation — recommend LangGraph DAG (gate → [5] → Delegator → ([6]→[7])×N) | `specs/equipment-recommendation/spec.md` + design; `app/agents/recommend_graph.py` · `recommend_nodes.py`; `tests/test_recommend_graph_order.py` · `test_recommend_fanout.py`; impl-plan **Phase 7 / S7.3** · archive `changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/` |
 | S7.4 (as-built) | Equipment recommendation — tool-free Coordinator synthesis [8] | `specs/equipment-recommendation/spec.md`; `app/agents/recommend_synthesis.py`; `tests/test_recommend_synthesis.py`; impl-plan **Phase 7 / S7.4** · same archive |
 | S7.3/S7.4 change archive | Recommend graph + synthesis tasks | `changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/` |
+| S7.5 (as-built) | Equipment recommendation — Call 2 multi-agent enrich behind `RECOMMEND_VIA_AGENT_GRAPH` (same quote DTO) | `specs/equipment-recommendation/spec.md` + recommendation-pipeline contract; `app/services/session_recommend.py`; `tests/test_recommend_http_call2.py`; impl-plan **Phase 7 / S7.5** · archive `changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/` |
+| S7.6 (as-built) | Equipment recommendation — G-1 `tool_traces` (`role`, `need_id`, `duration_ms`) | `specs/equipment-recommendation/spec.md`; `app/agents/recommend_traces.py`; `tests/test_tool_traces.py`; impl-plan **Phase 7 / S7.6** · same archive |
+| S7.5/S7.6 change archive | Call 2 enrich + traces tasks | `changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/` |
 | FR-001 … FR-053 (+ NFR, demo) | Equipment recommendation parent | `specs/equipment-recommendation/spec.md` |
 | Domain invariants | Domain | `specs/domain/spec.md` |
 | Setup / layering / stack | Project setup | `specs/project-setup/spec.md` |
@@ -93,8 +98,8 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | Structured agent prompts indexed (OpenSPDD) | Yes |
 | Testing guides not mislabeled as behaviour SoT | Yes (`docs/testing/`) |
 | Historical HR-65 archived | Yes |
-| Legacy path stubs | Yes (`specification/*.md` redirects) |
+| Legacy path stubs | **Removed 2026-08-13** (`specification/` deleted; map above) |
 
 ## Soft-compat
 
-Old paths under `specification/` remain as **redirect stubs** so bookmarks and relative links resolve.
+`specification/` was **removed on 2026-08-13**. Redirect stubs are gone. Start at [`AGENTS.md`](./AGENTS.md). The table above is the historical path map only.

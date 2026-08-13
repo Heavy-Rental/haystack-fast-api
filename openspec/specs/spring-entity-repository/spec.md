@@ -1,15 +1,20 @@
-# Specification: Entities & Repositories (Data Model)
+# Spring Entity & Repository Specification
 
 | Field | Value |
 |-------|--------|
+| **Capability id** | `spring-entity-repository` |
 | **Document type** | SDD data-model reference (not a request/response feature spec) |
-| **Status** | As-built (documents the current `entity` / `repository` packages) |
+| **Status** | As-built (haystack-side **read** copy of the Spring JPA schema) |
 | **Module** | `heavy-rental-spring-rest-api` |
 | **Packages** | `com.heavy_rental.rest_api.entity`, `com.heavy_rental.rest_api.repository`, `com.heavy_rental.rest_api.enums` |
-| **Environment context** | [`SPEC-project-environment.md`](./SPEC-project-environment.md) (read first) |
+| **Write source of truth** | Spring Boot repo (JPA entities + `application.properties`) — update this file in the same change set when haystack read models depend on a schema change |
+| **Environment context** | [`../project-setup/spec.md`](../project-setup/spec.md) (read first) |
+| **Related** | [`../domain/spec.md`](../domain/spec.md) · [`../domain-seed-data/spec.md`](../domain-seed-data/spec.md) · [`../dynamic-pricing/spec.md`](../dynamic-pricing/spec.md) |
 | **Related code** | 13 JPA entities, 12 Spring Data repositories, `enums.ConditionType` |
+| **Legacy path** | `specification/SPEC-spring-entity-repository.md` (removed 2026-08-13) |
+| **Standards** | OpenSpec · Spec-kit · OpenSPDD |
 
-This document is the **single source of truth** for the JPA data model: entities, columns, relationships, enums, and the Spring Data repositories built on top of them. It does not define REST endpoints — see §3.2 for what is and isn't exposed today.
+This document is the **haystack-side read reference** for the JPA data model: entities, columns, relationships, enums, and the Spring Data repositories built on top of them. It does not define REST endpoints — see §3.2. Spring-only companion SPECs named below (`SPEC-booking-delivery-return-api`, `SPEC-auth-login-logout`, `SPEC-seed-data`, `SPEC-api-index`) live in the Spring Boot repo and are **not** mirrored here.
 
 ---
 
@@ -48,7 +53,7 @@ When this spec is followed:
 ### 3.2 Out of scope / not yet built
 
 - **REST controllers, services, and DTOs for this data model — partially.** `User`/`UserRepository` are consumed by the auth flow (`CustomUserDetailsService`). `Payment` has a controller (`PaymentController`/`PaymentService`, merged via `HR-60`) that creates Stripe `PaymentIntent`s but does **not** use `PaymentRepository` — no `Payment` row is ever persisted by that flow; no feature spec covers it. `Booking` has a full read/update surface plus delivery/return status transitions — see [`SPEC-booking-delivery-return-api.md`](./SPEC-booking-delivery-return-api.md) for the contract, including why `DeliveryRecord`/`ReturnRecord` (§5.10/§5.11 below) are never created by that flow. The remaining entities/repositories (`AssetCategory`, `Asset`, `AssetImage`, `RentalPlan`, `RentalPlanRecord`, `AIRecommendation`, `RecommendationItem`) still compile and would create tables, but have **no controller, service, or DTO wired up** on this branch. Adding one is a new feature SDD.
-- Database migrations (Flyway/Liquibase) — schema is Hibernate-generated only; see [`SPEC-project-environment.md`](./SPEC-project-environment.md) §5.2.
+- Database migrations (Flyway/Liquibase) — schema is Hibernate-generated only; see [`../project-setup/spec.md`](../project-setup/spec.md) §5.2.
 - Validation annotations (Bean Validation) — none of these entities use `@NotNull`/`@Size`/etc.; the only enforced constraints are JPA `@Column(nullable=…)` / `unique=…`, which become DB-level `NOT NULL` / `UNIQUE` constraints.
 
 ---
@@ -64,7 +69,7 @@ When this spec is followed:
 | Money fields | `BigDecimal` with `precision = 10, scale = 2` |
 | Timestamps | `LocalDateTime` for instants (`createdAt`, `updatedAt`, `deliveredAt`, …), `LocalDate` for date-only fields (`startDate`, `endDate`) — none are DB-defaulted; the application must set them explicitly |
 | Table naming | `@Table(name = "…")`, snake_case, matching the entity's plural/domain name |
-| Schema lifecycle | `spring.jpa.hibernate.ddl-auto=update` — Hibernate creates/updates tables/constraints from these annotations at context startup and leaves them in place at shutdown. Schema persists between runs; see [`SPEC-project-environment.md`](./SPEC-project-environment.md) §5.2 and [`SPEC-seed-data.md`](./SPEC-seed-data.md) (whose upsert-based seeding only makes sense against a persistent schema). |
+| Schema lifecycle | `spring.jpa.hibernate.ddl-auto=update` — Hibernate creates/updates tables/constraints from these annotations at context startup and leaves them in place at shutdown. Schema persists between runs; see [`../project-setup/spec.md`](../project-setup/spec.md) §5.2 and [`SPEC-seed-data.md`](./SPEC-seed-data.md) (whose upsert-based seeding only makes sense against a persistent schema). |
 
 ---
 
@@ -374,7 +379,7 @@ No other table declares a unique or composite-unique constraint (e.g. nothing pr
 3. **`Asset.capacity` has dead `precision`/`scale` metadata** — it's an `Integer` field annotated as if it were a `BigDecimal`; Hibernate ignores those attributes for integer columns.
 4. **`RentalPlan.PlanStatus.QUOTEED`** is the literal enum constant in code (likely meant "QUOTED"). Any future DTO/API mapping to this enum should use the value as spelled unless a dedicated change renames it.
 5. **`AssetCategoryRepository.findByName` breaks the `Optional` convention** used everywhere else in this codebase (e.g. `UserRepository.findByEmail`); callers must null-check instead of using `Optional` idioms.
-6. **Schema is persistent, not ephemeral.** `ddl-auto=update` means Hibernate creates missing tables/columns at startup but never drops or truncates existing ones — data survives across app/test-context restarts against the same Postgres instance (see [`SPEC-project-environment.md`](./SPEC-project-environment.md) §5.2). This is why `SPEC-seed-data.md`'s `data.sql` needs `ON CONFLICT` upserts: it reruns against a database that already has last run's rows in it, not a fresh one.
+6. **Schema is persistent, not ephemeral.** `ddl-auto=update` means Hibernate creates missing tables/columns at startup but never drops or truncates existing ones — data survives across app/test-context restarts against the same Postgres instance (see [`../project-setup/spec.md`](../project-setup/spec.md) §5.2). This is why `SPEC-seed-data.md`'s `data.sql` needs `ON CONFLICT` upserts: it reruns against a database that already has last run's rows in it, not a fresh one.
 7. **`User`, `Payment`, and `Booking` are wired to a controller today; the rest are not.** `Payment` has a live but unspecified route (`PaymentController`, merged on `develop` before this branch — §3.2 above). `Booking` has a full contract in [`SPEC-booking-delivery-return-api.md`](./SPEC-booking-delivery-return-api.md), including why it doesn't fully exercise its own data model (`DeliveryRecord`/`ReturnRecord` never created — that spec's §6.3). `AssetCategory`, `Asset`, `AssetImage`, `RentalPlan`, `RentalPlanRecord`, `AIRecommendation`, and `RecommendationItem` remain a data-model foundation for future feature SDDs, not yet a working API surface on this branch.
 
 ---
@@ -421,4 +426,5 @@ Or read the Hibernate DDL directly from build/test output (`spring.jpa.show-sql=
 |---------|------|--------|
 | 1.0.0 | 2026-08-04 | Initial as-built data-model spec: 13 entities, 12 repositories, shared `ConditionType` enum, relationship map, unique constraints, and known modeling quirks |
 | 1.1.0 | 2026-08-09 | Corrected claims left stale by two changes this doc was never updated alongside: (1) `HR-77` (already on `develop`) split `Booking.BookingStatus.PENDING` into `PENDING_DEPOSIT`/`PENDING_CONFIRMED`, removed `Booking.PaidStatus`/`paidStatus` entirely, and changed `sitePostalCode` to a computed `@Formula` — §5.7/§6.2/§8 updated to match. (2) This branch (`HR-80`) wired `Booking` to `BookingController`/`DeliveryController`/`ReturnController`, and `Payment` turned out to already be wired via `PaymentController` since `HR-60` without this doc ever reflecting it — §3.2/§8/§10 updated, and gaps in both flows (no `Payment`/`DeliveryRecord`/`ReturnRecord` persistence, no customer-scoping on `BookingController`'s reads despite `BookingRepository` already having the query methods for it) called out inline. Also fixed a long-standing, unrelated error: this doc said `ddl-auto=create-drop` in four places; the project has run `ddl-auto=update` since `SPEC-seed-data.md` was written (confirmed against `application.properties`) — §4/§7/§10/§11.2 corrected. New companion index: [`SPEC-api-index.md`](./SPEC-api-index.md), which lists every route (including these) with client ownership and branch status. No entity/repository/relationship content changed beyond what's listed above — per this doc's own convention of updating alongside code changes it diverged from. |
+| 1.3.0 | 2026-08-13 | Moved from `specification/SPEC-spring-entity-repository.md` into OpenSpec. Spring remains write-SoT; this file is the haystack read reference. Environment links now point at `openspec/specs/project-setup/`. |
 | 1.2.0 | 2026-08-09 | Trimmed the `Booking`/`Payment` REST-layer commentary added in 1.1.0 (§3.2, §8's `BookingRepository`/`DeliveryRecordRepository`/`ReturnRecordRepository` rows, §10.7) down to short pointers now that [`SPEC-booking-delivery-return-api.md`](./SPEC-booking-delivery-return-api.md) exists as the actual contract for those routes — full behavioral detail (reproduction steps, recommended fixes) lives there now, not here. This doc's job stays data-model reference only, per its own stated scope (§ purpose: "does not define REST endpoints"). No entity/repository/relationship facts changed. |
