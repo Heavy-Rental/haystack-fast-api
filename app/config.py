@@ -105,6 +105,11 @@ class Settings(BaseSettings):
         alias="RECOMMEND_VIA_AGENT_GRAPH",
     )
 
+    # S4 / Phase 4: fleet tool data source for recommend catalog.
+    # fake (default, CI) = seed / injected DTOs
+    # sql = LiveSqlFleetBackend against Postgres-Haystack (allowlisted ORM)
+    fleet_backend: str = Field(default="fake", alias="FLEET_BACKEND")
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:

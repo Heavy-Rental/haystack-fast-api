@@ -23,7 +23,7 @@ These apply across studies unless a study explicitly narrows scope:
 
 | Study | Topic | Version |
 |-------|--------|---------|
-| [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane + Spring multi-call: Call 1 ingest · Call 2 recommend · Call 3 chatbot Q&A. **I0+I1 DocumentStore cutover as-built** (factory wire, tenant filters, TTL). **S7.2 fake Neo4j tools as-built**. | **2.7.8** |
+| [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane + Spring multi-call: Call 1 ingest · Call 2 recommend · Call 3 chatbot Q&A. **I0+I1 DocumentStore cutover as-built**. **S4 T0–T2 + app live SQL as-built**. **S7.2 fake Neo4j tools as-built**. | **2.8.0** |
 | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) | Spring ↔ FastAPI wire; Call 1/2/3 saga; resilience C1–C3. | **1.3.2** |
 | [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) | ML pricing as **in-process** agent tool; pricing **Worker** fan-out per need; **S6 tool as-built**; **S7.3 Workers [7]×N as-built**; **S7.5 HTTP flag**. | **1.2.4** |
 | [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) | Synthesis **[8]** → assets + prices (**HTTP Call 2** recommend path). **S7.4 stub [8] as-built**; **S7.5 HTTP enrich as-built**; **S7.7 A–L prompts as-built**; **S7.2 fake Neo4j tools as-built**. | **1.4.7** |
@@ -35,11 +35,15 @@ These apply across studies unless a study explicitly narrows scope:
 
 | Document | Topic | Version |
 |----------|--------|---------|
-| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. **S3 as-built**; **S5-I0+I1 as-built**; **S6 as-built**; **S7.0–S7.7 as-built** (state, tools, Neo4j fake tools, LangGraph DAG, stub synthesis, Call 2 flag, traces, A–L prompts + tool DI); **§7.0 default pytest isolation** (mock dim 384). | **3.10.0** |
+| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. **S3 as-built**; **S4 as-built** (app live SQL + config T0–T2); **S5-I0+I1 as-built**; **S6 as-built**; **S7.0–S7.7 as-built**; **§7.0 default pytest isolation** (mock dim 384). | **3.12.0** |
 | [`phase2-s2a-haystack-implementation-plan.md`](./phase2-s2a-haystack-implementation-plan.md) | **Phase 2 / S2a only** — haystack-fast-api: `Idempotency-Key`, correlation logging, docs. **Implemented** (FR-IX-024/025; §7 test runbook + conftest isolation). | **1.1.3** |
 | [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) | **S2b** Spring client + portal Call 1→2 recommend. Export: [`../Feasibility_Study_Spring/`](../Feasibility_Study_Spring/). | **2.0.0** |
 
 **Stage S3 (haystack, as-built):** `run_indexing_from_request` + forced `START→index_gate→END` behind `INDEXING_VIA_AGENT_GATE` (default off). OpenSpec FR-IX-026 · archive `openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/`.
+
+**Stage S4 (haystack app, as-built):** `FLEET_BACKEND=sql` → `LiveSqlFleetBackend` / `FleetRepository` (allowlisted ORM; `asset_id` = `assets.name`; live-hold bookings). Default `fake` for CI. D0: `openspec/specs/spring-entity-repository/fleet-read-contract.md`. Archive `openspec/changes/archive/2026-08-13-s4-live-sql-fleet-backend/`.
+
+**Stage S4 (config pack, as-built):** [Haystack-Fast-API devcontainer](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API) — T0 skip when primary down; T1 60s `postgres-haystack-sync` + METRICS; T2 `SYNC_TABLE_ALLOWLIST`. Follow-up: align pack singular table names (`asset,booking,category`) with haystack plural ORM tables.
 
 **Stage S5-I0 (haystack, as-built):** `INDEXING_DOCUMENT_STORE` + `build_document_store()` (`memory` default \| `pgvector`). OpenSpec FR-IX-027 · archive `openspec/changes/archive/2026-08-12-s5-i0-document-store-factory/`.
 

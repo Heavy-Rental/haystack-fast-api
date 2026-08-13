@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Changed (S4 / Phase 4 config T0–T2 — 2026-08-13)
+
+- Documented config-repo T0–T2 as **as-built** on [Haystack-Fast-API pack `develop`](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API): 60s `postgres-haystack-sync`, `SYNC_TABLE_ALLOWLIST`, per-cycle METRICS.
+- Recorded table-name alignment follow-up: pack D0 `asset,booking,category` vs haystack ORM `assets` / `bookings` / `booking_items` / `asset_categories`.
+- Feasibility_Study implementation-plan **3.12.0**; dual-plane **2.8.0**.
+
+### Added (S4 / Phase 4 app — 2026-08-13)
+
+- Live SQL fleet backend: `FleetRepository` + `LiveSqlFleetBackend` behind `FLEET_BACKEND=sql` (default **fake**). `asset_id` is `assets.name`; live-hold bookings only; empty/unknown category → `[]`.
+- D0 contract: `openspec/specs/spring-entity-repository/fleet-read-contract.md`.
+- `run_recommend_graph` opens a `SessionLocal` when the flag is `sql` and no catalog is injected. Config-repo T0–T2 sync is unchanged.
+- Tests: `tests/test_fleet_repository.py`.
+- OpenSpec archive: `openspec/changes/archive/2026-08-13-s4-live-sql-fleet-backend/`.
+
 ### Added (S7.2 / Phase 7 — 2026-08-13)
 
 - Allowlisted in-process KG-2 tools in `app/agents/neo4j_tools.py`: `neo4j_cypher_read` (templates only) and `trigger_neo4j_populate` (non-blocking `job_id` / no-op).

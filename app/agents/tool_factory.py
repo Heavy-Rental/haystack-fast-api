@@ -13,6 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
 
+from sqlalchemy.orm import Session
+
 from app.agents.fleet_tools import (
     RECOMMEND_FLEET_TOOL_NAMES,
     TOOL_CHECK_BOOKING_AVAILABILITY,
@@ -22,6 +24,7 @@ from app.agents.fleet_tools import (
     TOOL_RETRIEVE_FLEET_ASSETS,
     FakeFleetBackend,
     FleetBackend,
+    LiveSqlFleetBackend,
     SqlFleetBackend,
     UnknownToolError,
     check_booking_availability,
@@ -136,11 +139,14 @@ def build_fleet_backend(
     *,
     assets: list[dict[str, Any]] | None = None,
     bookings: list[dict[str, Any]] | None = None,
+    session: Session | None = None,
 ) -> FleetBackend:
-    """Construct a read-only fleet backend (fake seed or injected SQL DTOs)."""
+    """Construct a read-only fleet backend (fake seed, DTO sql, or live ORM)."""
     if kind == "fake":
         return FakeFleetBackend(assets=assets, bookings=bookings)
     if kind == "sql":
+        if session is not None:
+            return LiveSqlFleetBackend(session)
         return SqlFleetBackend(assets=assets, bookings=bookings)
     raise ValueError(f"unknown fleet backend kind: {kind!r}")
 
@@ -162,21 +168,25 @@ def build_recommend_tool_catalog(
     include_pricing_tool: bool = True,
     neo4j: Neo4jBackend | None = None,
     include_neo4j_tools: bool = True,
+    session: Session | None = None,
 ) -> RecommendToolCatalog:
     """Build the in-process recommend tool map (DI-friendly).
 
     Args:
-        backend: ``"fake"`` (seed), ``"sql"`` (injected DTOs), or a custom
-            ``FleetBackend`` instance.
-        assets / bookings: optional row overrides for fake/sql backends.
+        backend: ``"fake"`` (seed), ``"sql"`` (injected DTOs or live ORM when
+            ``session`` is passed), or a custom ``FleetBackend`` instance.
+        assets / bookings: optional row overrides for fake/sql DTO backends.
         decomposer: optional NeedDecomposer (default stub).
         include_pricing_tool: register ``predict_asset_price`` (S6).
         neo4j: optional KG-2 backend (default empty fake).
         include_neo4j_tools: register ``neo4j_cypher_read`` / populate (S7.2).
+        session: live SQLAlchemy session for ``backend="sql"`` (S4).
     """
     if isinstance(backend, str):
         kind: BackendKind = backend
-        be = build_fleet_backend(kind, assets=assets, bookings=bookings)
+        be = build_fleet_backend(
+            kind, assets=assets, bookings=bookings, session=session
+        )
     else:
         kind = "fake" if isinstance(backend, FakeFleetBackend) else "sql"
         be = backend
@@ -289,6 +299,7 @@ def build_recommend_runtime(
     include_neo4j_tools: bool = True,
     catalog: RecommendToolCatalog | None = None,
     agent_mode: AgentMode | str = "stub",
+    session: Session | None = None,
 ) -> RecommendRuntime:
     """Build a DI-friendly recommend runtime (fake catalog by default)."""
     mode = str(agent_mode or "stub").strip().lower()
@@ -302,5 +313,6 @@ def build_recommend_runtime(
         include_pricing_tool=include_pricing_tool,
         neo4j=neo4j,
         include_neo4j_tools=include_neo4j_tools,
+        session=session,
     )
     return RecommendRuntime(catalog=tools, agent_mode=mode)  # type: ignore[arg-type]

@@ -10,7 +10,7 @@
 | **Document type** | Architecture vocabulary / agent role mapping (study only) |
 | **Status** | Complete (docs only — no runtime rename required) |
 | **Date** | 2026-08-11 |
-| **Version** | 2.1.6 |
+| **Version** | 2.1.7 |
 | **Application** | `haystack-fast-api` Multi-Agent Orchestrator (LangGraph) |
 | **Question** | How do **Coordinator**, **Worker**, and **Delegator** map onto the existing Orchestrator + domain agents + in-process tools design? |
 | **Authority** | **Authoritative for role vocabulary.** Dual-plane study remains authoritative for data planes, tool catalog, and sync. Implementation plan Phase 7 is authoritative for rollout steps. |
@@ -2836,6 +2836,7 @@ Indexing gate checklist: validate `user_id` + sources + MIME → run index servi
 |--------------|--------------|--------|
 | **S7.0** state + F-2 | STM partitions; illegal writes rejected | **As-built** |
 | **S7.1** fleet/needs tools | Execution layer; allowlist; fake/SQL DI | **As-built** |
+| **S4** live SQL fleet | `FLEET_BACKEND=sql` reads `postgres_haystack` via allowlisted ORM | **As-built** (app + config T0–T2) |
 | **S7.2** Neo4j tools | Optional graph templates; K-3 skip; populate no-op | **As-built** (`app/agents/neo4j_tools.py`; live client S8) |
 | **S7.3** recommend LangGraph | DAG §10.0.10–§10.0.11: **seq** gate→[5]→plan; **par** across needs (capped); **seq** [6]→[7] within need; barrier [8] | **As-built** |
 | **S7.4** tool-free synthesis | Coordinator **[8]** sequential barrier — A–L; merge tool-backed partitions only | **As-built** (stub merge; A–L prompts **as-built S7.7**) |
@@ -2908,6 +2909,7 @@ Indexing gate checklist: validate `user_id` + sources + MIME → run index servi
 | **1.8.0** | 2026-08-11 | **§10 I Context management** (hierarchy global/session/task + switching preserve/restore/merge); §10.0.8 |
 | **1.9.0** | 2026-08-11 | **§10 J Decision integration** (retrieval + patterns + optimization); §10.0.9; role decision authority |
 | **2.0.0** | 2026-08-11 | **§10 K Workflow optimization** (DAG, fan-out caps, resources, dynamic adjustment); §10.0.10 |
+| **2.1.7** | 2026-08-13 | **S4 app as-built:** live SQL fleet (`FLEET_BACKEND=sql`); `asset_id` = `assets.name` |
 | **2.1.6** | 2026-08-13 | **S7.2 as-built:** `neo4j_cypher_read` templates + `trigger_neo4j_populate` no-op; K-3 skip (`app/agents/neo4j_tools.py`) |
 | **2.1.5** | 2026-08-13 | **S7.7 as-built:** A–L recommend prompts + tool DI + Delegator `worker_kind` allowlist (`app/agents/recommend_prompts.py`) |
 | **2.1.4** | 2026-08-12 | **S7.5 + S7.6 as-built:** Call 2 graph enrich behind flag; `tool_traces` duration contract; §11 status table |

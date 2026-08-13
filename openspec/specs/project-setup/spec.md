@@ -114,6 +114,8 @@ As-built isolation (autouse fixture):
 | `INDEXING_EMBEDDER` | `mock` | No OpenAI / sentence-transformers at test time |
 | `INDEXING_EMBEDDING_DIM` | `384` | Match mock default; avoid host dim (e.g. 768) breaking retrieval |
 | `INDEXING_DOCUMENT_STORE` | `memory` (runtime default; I0+I1) | Default suite never opens Pgvector; host `pgvector` only when tests opt in |
+| `RECOMMEND_VIA_AGENT_GRAPH` | `false` | Call 2 stays on MVP unless a test opts in |
+| `FLEET_BACKEND` | `fake` | Default suite never opens live fleet SQL |
 
 **As-built:** default suite needs no live Pgvector/Neo4j/LLM. `@pytest.mark.pgvector` is registered for optional live tests (skip unless `RUN_PGVECTOR_TESTS=1`). Neo4j/integration markers remain TARGET.  
 (Trace: design.md Test runbook; knowledge-graph vector tool dim match; FR-IX-028)

@@ -5,10 +5,10 @@
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
 | **Date** | 2026-08-13 |
-| **Version** | 3.10.0 |
+| **Version** | 3.12.0 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.10.0** Phase 7 / **S7.2 as-built** (Neo4j template tools + populate no-op; K-3 skip); **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
+| **Revision notes** | **3.12.0** Phase 4 / **S4 T0–T2 as-built (config repo)**; **3.11.0** S4 app live SQL; **3.10.0** S7.2; **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -76,8 +76,8 @@ DocumentStore: InMemory per-ingest session (default)
   S5-I0 as-built: INDEXING_DOCUMENT_STORE + build_document_store()
   S5-I1 as-built: create_session_document_store wire + tenant filters + TTL
     (memory default | pgvector flag; I2 production default TARGET)
-Fleet: seed in app; D1 merge-sync in devcontainer config
-  (postgres_haystack_sync, ~60s poll on develop)
+Fleet: seed in app (default); **S4 app as-built:** `FLEET_BACKEND=sql` → LiveSqlFleetBackend
+  D1 merge-sync in devcontainer config (postgres_haystack_sync, ~60s poll on develop)
 Neo4j: compose service may exist; no populate-from-db job (S8); agent Neo4j tools **as-built S7.2** (fake / no-op)
 Pricing: pricing_client → app.services.pricing.model.predict_price (production)
   Phase 1e (repository util/lead-time + adapter wiring) — **as-built**
@@ -101,6 +101,7 @@ Default pytest (as-built):
   → tests/conftest.py autouse forces:
        INDEXING_EMBEDDER=mock, INDEXING_EMBEDDING_DIM=384,
        INDEXING_DOCUMENT_STORE=memory, RECOMMEND_VIA_AGENT_GRAPH=false,
+       FLEET_BACKEND=fake,
        PROJECT_AGENT_MODE=stub, KG_ARTIFACT_DIR=tmp
   → host .env (e.g. dim 768 for OpenAI) MUST NOT break CI
   → project_vector_search: query embedder mode/dim MUST match session store
@@ -413,7 +414,7 @@ Use **stage IDs** in PRs and test names. Every stage below that ships code has a
 | **S2b** | Resilience C1 — Spring client (timeouts, CB, saga) | 2 | Spring | WireMock | Spring CI |
 | **S3** | Agent indexing tool R1 + Coordinator gate **[4]** | 3 | app | — | **yes** (**as-built**) |
 | **S3.3** | Indexing SuperComponent (optional) | 3 | app | S3 | **yes** (deferred) |
-| **S4** | Fleet sync T0–T2 (`postgres_haystack` ← primary) | 4 | config | S0/D0 | config CI |
+| **S4** | Fleet sync T0–T2 + app live SQL reads | 4 | config+app | S0/D0 | **as-built** (config T0–T2 + app SQL) |
 | **S5-I0** | DocumentStore factory (memory default) | 5 | app | — | **yes** |
 | **S5-I1** | Pgvector cutover + isolation | 5 | app+config | S5-I0 | optional job |
 | **S6** | Pricing 2a + `predict_asset_price` tool (1e largely as-built) | 6 | app | fixtures OK | **yes** |
@@ -598,19 +599,22 @@ Maps to dual-plane §10 Track D + §11 T-phases. **Primary work in config repo.*
 | **4.3 T2** | Table allowlist (Asset, Booking, Category, …); metrics | Config | Deterministic table set |
 | **4.4 D0** | Freeze schema contract from Phase 0.2 into versioned doc | Shared | Contract tests or snapshot |
 
-**App work later:** SQLAlchemy read models against Postgres-Haystack (`postgres_haystack`), not primary.
+**App (as-built 2026-08-13):** `FleetRepository` + `LiveSqlFleetBackend` behind `FLEET_BACKEND=sql` (default **fake**). D0: `openspec/specs/spring-entity-repository/fleet-read-contract.md`. `asset_id` = `assets.name`.
+
+**Config (as-built on pack `develop`):** [Haystack-Fast-API devcontainer pack](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API) — T0 skip/sleep when primary down; T1 `SYNC_INTERVAL_SECONDS=60` + `postgres-haystack-sync` `unless-stopped` + per-cycle `METRICS`/`duration_ms`; T2 `SYNC_TABLE_ALLOWLIST` (default `asset,booking,category`). **Alignment follow-up (config):** pack D0 uses singular table names; haystack ORM reads plural `assets` / `bookings` / `booking_items` / `asset_categories`.
 
 #### Test implementation — Stage S4
 
 | Attribute | Detail |
 |-----------|--------|
-| **Independently testable?** | **Yes — config/devcontainer harness** |
-| **Does not need** | App recommend, Neo4j populate, multi-agent |
-| **Test implementation** | (1) `postgres_haystack` healthy; (2) seed primary → after sync cycle row on haystack; (3) primary down → no wipe of haystack; (4) lag logged; (5) allowlist tables only (Asset, Booking, …) |
-| **Harness** | Two Postgres containers + `postgres_haystack_sync` script |
-| **CI job** | **config-sync** (config repo) |
-| **Stubs** | Fixture primary schema from S0/D0 |
-| **Note** | Proves fleet LTM mirror path: **primary → sync → haystack** |
+| **Independently testable?** | **Yes — app pack in default CI (mocked session); config pack has its own verification.md** |
+| **Does not need** | Neo4j populate, Spring saga |
+| **App test implementation (as-built)** | (1) `assets.name` → `asset_id`; (2) empty → []; (3) live-hold overlap; (4) CANCELLED ignored; (5) free-form SQL reject; (6) default fake |
+| **Config test implementation (as-built in pack)** | Pack README + `specs/001-haystack-postgres-merge-sync/verification.md`: healthy `postgres-haystack`; skip when primary down; allowlist + METRICS logs |
+| **App modules** | `app/repositories/fleet_repository.py`; `tests/test_fleet_repository.py` |
+| **CI job** | app **default** (fake); config pack verification (not this repo) |
+| **Stubs** | Mocked SQLAlchemy session; D0 contract |
+| **Note** | App reads the mirror; config repo owns primary → haystack poll |
 
 ---
 
@@ -725,7 +729,7 @@ Maps to dual-plane §4.1 [5]–[8], [`multi-agent-synthesis-recommend-output.md`
 | **CI job** | **default** (fake); optional haystack SQL when S4 |
 | **C/W/D** | E, H-2 (fleet LTM via tools), J-1 |
 | **OpenSpec** | archive `openspec/changes/archive/2026-08-12-s7-1-fleet-tool-catalog/` · equipment-recommendation FR notes |
-| **Not in S7.1** | LangGraph DAG (S7.3); HTTP Call 2 multi-agent enrich (S7.5). Neo4j tools **as-built S7.2**. |
+| **Not in S7.1** | LangGraph DAG (S7.3); HTTP Call 2 multi-agent enrich (S7.5). Live ORM SQL **as-built S4**. Neo4j tools **as-built S7.2**. |
 
 ---
 
@@ -953,6 +957,8 @@ Every code-bearing PR **must** use the **PR description template** below (bare m
 | **PR-H** | S7.5–7.6 | Call 2 multi-agent enrich + traces | **Shipped** — same quote DTO behind flag; role/`need_id`/`duration_ms` traces; **BDD** Call 2 quote happy path |
 | **PR-I** | S7.7 | Prompts A–L + tool DI | **Shipped** — recommend prompts isolated from Stage-1; Delegator allowlist; **TDD** stub LLM |
 | **PR-J** | S7.2 | Neo4j tools (fake / no-op) | **Shipped** — templates only; free-form Cypher reject; populate non-blocking; K-3 skip; **BDD** recommend not blocked |
+| **PR-K** | S4 | Live SQL fleet backend (app) | **Shipped** — D0 map; `FLEET_BACKEND=sql`; `asset_id`=`assets.name`; fake default; **BDD** empty / live-hold |
+| **PR-K2** | S4 | Config T0–T2 as-built stamp | **Docs** — pack already ships 60s sync + allowlist + METRICS; alignment note on table names |
 
 ### PR description template (required bare minimum)
 
@@ -1041,7 +1047,7 @@ Normative OpenSpec companions: [`../openspec/specs/project-setup/`](../openspec/
 | **Command** | `uv run pytest` or `uv run pytest tests/ -q` from app root |
 | **Markers / skips** | `@pytest.mark.pgvector` registered; live tests skip unless `RUN_PGVECTOR_TESTS=1` |
 | **External prereqs** | **None** for default green (no live LLM, Neo4j, Pgvector required) |
-| **`tests/conftest.py` autouse** | Forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `INDEXING_DOCUMENT_STORE=memory`, `RECOMMEND_VIA_AGENT_GRAPH=false`, `PROJECT_AGENT_MODE=stub`, temp `KG_ARTIFACT_DIR`; clears settings cache; resets session + idempotency stores |
+| **`tests/conftest.py` autouse** | Forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `INDEXING_DOCUMENT_STORE=memory`, `RECOMMEND_VIA_AGENT_GRAPH=false`, `FLEET_BACKEND=fake`, `PROJECT_AGENT_MODE=stub`, temp `KG_ARTIFACT_DIR`; clears settings cache; resets session + idempotency stores |
 | **Embed dim rule** | Query embedder for `project_vector_search` **must** use same mode/dim as documents in the session store (mismatch → Haystack embedding-size error) |
 | **Tenant filters** | Vector tools filter session `user_id` + `ingest_id` (FR-IX-028) |
 | **Health tests** | Do not skip if Postgres is down — accept `database=up\|down` |
@@ -1160,6 +1166,8 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | Phase 6 / S6 `predict_asset_price` | **As-built** — tool → `pricing_client` (single SoT); Phase 7 Workers not wired |
 | Phase 7 / S7.0 `RecommendAgentState` | **As-built** — F-2 partition validation; illegal writes rejected |
 | Phase 7 / S7.1 fleet tool catalog | **As-built** — allowlisted in-process tools + fake/SQL DI factory |
+| Phase 4 / S4 app live SQL fleet | **As-built** — `FleetRepository` + `FLEET_BACKEND=sql` |
+| Phase 4 / S4 config T0–T2 | **As-built** — pack `develop` 60s poll + allowlist + METRICS; table-name alignment follow-up |
 | Phase 7 / S7.2 Neo4j tools | **As-built** — templates + populate no-op; K-3 skip; live populate S8 |
 | Phase 7 / S7.3 recommend LangGraph DAG | **As-built** — gate → [5] → Delegator → ([6]→[7])×N; `RECOMMEND_FANOUT_CAP` |
 | Phase 7 / S7.4 tool-free synthesis | **As-built** — stub Coordinator [8]; empty fleet → `item: null`; no invent |

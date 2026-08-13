@@ -263,7 +263,7 @@ Routers MUST stay thin; pipeline construction and SQL live in services/pipelines
 - **FR-018b**: Empty candidate/document lists → predictable empty outputs, no unhandled exceptions.
 - **FR-019**: Ranking generation MUST use Haystack LLM generation + `PromptBuilder` (or equivalent).
 - **FR-019a**: (Target) SuperComponents for recurring subgraphs.
-- **FR-019b**: (Target) Tools with short unique name + NL description. **As-built (S7.1):** allowlisted in-process tools `decompose_project_needs`, `retrieve_fleet_assets`, `filter_fleet_candidates`, `check_booking_availability` (+ S6 `predict_asset_price`) via `app/agents/fleet_tools.py` + `tool_factory.py`. Free-form SQL/Cypher rejected. **As-built (S7.2):** `neo4j_cypher_read` (templates only) + `trigger_neo4j_populate` (non-blocking no-op) via `app/agents/neo4j_tools.py`; empty graph → `[]`; recommend not blocked (K-3 skip). **As-built (S7.3):** tools are invoked from the recommend LangGraph DAG. **As-built (S7.5):** Call 2 HTTP may run that DAG behind `RECOMMEND_VIA_AGENT_GRAPH`.
+- **FR-019b**: (Target) Tools with short unique name + NL description. **As-built (S7.1):** allowlisted in-process tools `decompose_project_needs`, `retrieve_fleet_assets`, `filter_fleet_candidates`, `check_booking_availability` (+ S6 `predict_asset_price`) via `app/agents/fleet_tools.py` + `tool_factory.py`. Free-form SQL/Cypher rejected. **As-built (S4):** `FLEET_BACKEND=sql` uses `LiveSqlFleetBackend` / `FleetRepository` (allowlisted ORM; `asset_id` = `assets.name`). Default remains `fake`. **As-built (S7.2):** `neo4j_cypher_read` (templates only) + `trigger_neo4j_populate` (non-blocking no-op) via `app/agents/neo4j_tools.py`; empty graph → `[]`; recommend not blocked (K-3 skip). **As-built (S7.3):** tools are invoked from the recommend LangGraph DAG. **As-built (S7.5):** Call 2 HTTP may run that DAG behind `RECOMMEND_VIA_AGENT_GRAPH`.
 - **FR-019c**: Pipelines assembled with explicit `.add_component` / `.connect` / `.run`.
 - **FR-019d**: (Target) File ingest branch by media type.
 - **FR-019e**: (Target) Hybrid retrieval when catalog knowledge exists.
@@ -394,6 +394,27 @@ Recommend-mode agents SHALL use isolated A–L prompt contracts in `app/agents/r
 - **GIVEN** a work_plan item with `worker_kind="invent_stock"`
 - **WHEN** `validate_work_plan` or `execute_needs` runs
 - **THEN** `UnknownWorkerKindError` is raised and the item is not scheduled
+
+### Requirement: Live SQL fleet backend (S4 as-built)
+
+When `FLEET_BACKEND=sql`, recommend fleet tools SHALL read Postgres-Haystack via allowlisted SQLAlchemy selects (`app/repositories/fleet_repository.py`). `asset_id` MUST be `assets.name` (UNIQUE) — MUST NOT invent ids. Bookings SHALL join `booking_items` and count only live-hold statuses (`PENDING_DEPOSIT`, `PENDING_CONFIRMED`, `CONFIRMED`, `MOBILISED`). Empty / unknown category / blank name → skip or `[]`. `FLEET_BACKEND=fake` (default) MUST keep seed/injected DTOs so unmarked CI needs no Postgres. Free-form SQL kwargs remain rejected. Config-repo T0–T2 sync is out of this requirement. D0 map: [`../spring-entity-repository/fleet-read-contract.md`](../spring-entity-repository/fleet-read-contract.md).
+
+**Status:** **as-built (S4 app)**. Tests: `tests/test_fleet_repository.py`.
+
+#### Scenario: Asset.name is asset_id
+- **GIVEN** a mirror row with `assets.name=AST-SL-001` and category `Scissors Lift`
+- **WHEN** `list_assets` runs
+- **THEN** the DTO `asset_id` is `AST-SL-001` and `category` is `scissor lift`
+
+#### Scenario: Empty mirror
+- **GIVEN** no fleet rows
+- **WHEN** retrieve / list_bookings run
+- **THEN** results are `[]`
+
+#### Scenario: Default CI stays fake
+- **GIVEN** unset / `fake` `FLEET_BACKEND`
+- **WHEN** the recommend catalog is built
+- **THEN** the backend is the seed fake, not a live session
 
 ### Requirement: Neo4j KG-2 tools (S7.2 as-built)
 
@@ -705,6 +726,7 @@ Architecture, Ragas pattern, deps, and offline pipeline sketch: [`design.md`](./
 | 0.9.2 | 2026-08-07 | KG as-built pointer; sequential map |
 | 1.0.0 | 2026-08-10 | Migrated to OpenSpec under `openspec/specs/equipment-recommendation/`; architecture/day plan/deployment → design.md |
 | 1.1.0 | 2026-08-12 | **S7.0 + S7.1 as-built:** `RecommendAgentState` + F-2 partition validation; allowlisted fleet/needs tools + DI factory (FR-019b note). Graph (S7.3+) still TARGET. Archives `changes/archive/2026-08-12-s7-0-recommend-agent-state/`, `.../s7-1-fleet-tool-catalog/`. |
+| 1.6.0 | 2026-08-13 | **S4 as-built (app):** live SQL fleet backend (`FLEET_BACKEND=sql`); D0 `fleet-read-contract.md`. Config T0–T2 remain config-repo. Archive `changes/archive/2026-08-13-s4-live-sql-fleet-backend/`. |
 | 1.5.0 | 2026-08-13 | **S7.2 as-built:** `neo4j_cypher_read` (templates only) + `trigger_neo4j_populate` (non-blocking no-op); K-3 skip when graph empty. Live populate remains S8. Archive `changes/archive/2026-08-13-s7-2-neo4j-tools/`. |
 | 1.4.0 | 2026-08-13 | **S7.7 as-built:** isolated A–L recommend prompts + tool DI runtime + Delegator `worker_kind` allowlist. Archive `changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/`. |
 | 1.3.0 | 2026-08-12 | **S7.5 + S7.6 as-built:** Call 2 graph enrich behind `RECOMMEND_VIA_AGENT_GRAPH` (same quote DTO; gate 400); G-1 `tool_traces` duration contract. Archive `changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/`. |
