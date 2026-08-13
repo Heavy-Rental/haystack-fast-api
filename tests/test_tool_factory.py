@@ -140,6 +140,20 @@ def test_catalog_exposes_neo4j_tools() -> None:
     assert str(job["job_id"]).startswith("neo4j_pop_")
 
 
+def test_sql_backend_with_session_is_live() -> None:
+    from unittest.mock import MagicMock
+
+    from app.agents.fleet_tools import LiveSqlFleetBackend
+
+    session = MagicMock()
+    result = MagicMock()
+    result.all.return_value = []
+    session.execute.return_value = result
+    catalog = build_recommend_tool_catalog(backend="sql", session=session)
+    assert isinstance(catalog.backend, LiveSqlFleetBackend)
+    assert catalog.get(TOOL_RETRIEVE_FLEET_ASSETS)() == []
+
+
 def test_catalog_without_neo4j_tools() -> None:
     catalog = build_recommend_tool_catalog(
         backend="fake", include_neo4j_tools=False

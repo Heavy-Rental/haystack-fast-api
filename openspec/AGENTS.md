@@ -76,6 +76,8 @@ Spring Boot (RestClient / WebClient saga)
         ─ ─ ─ ─ multi-agent recommend building blocks ─ ─ ─ ─
 S7.0 as-built: RecommendAgentState + F-2 partition validation
 S7.1 as-built: fleet/needs allowlisted tools + DI factory (fake/SQL)
+S4 as-built (app): FLEET_BACKEND=sql → LiveSqlFleetBackend / FleetRepository (D0); fake default
+S4 as-built (config): T0–T2 60s postgres-haystack-sync + SYNC_TABLE_ALLOWLIST + METRICS (pack develop)
 S7.2 as-built: neo4j_cypher_read (templates) + trigger_neo4j_populate (fake / no-op); K-3 skip
 S7.3 as-built: recommend LangGraph DAG (gate → [5] → Delegator → ([6]→[7])×N)
 S7.4 as-built: tool-free stub Coordinator synthesis [8]
@@ -102,7 +104,7 @@ KG-2 equipment stockpile persist (Stage 2 / S8)
 | **4** | [`specs/project-setup/spec.md`](./specs/project-setup/spec.md) | Stack, env, layering (behaviour); **default pytest isolation** |
 | **5** | [`specs/project-setup/design.md`](./specs/project-setup/design.md) | Layout, uv runbooks, `conftest` isolation table |
 
-**Pytest (as-built):** `uv run pytest` / `uv run pytest tests/ -q` is the full default suite — **no** optional markers or external prereqs. `tests/conftest.py` forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `INDEXING_DOCUMENT_STORE=memory`, `RECOMMEND_VIA_AGENT_GRAPH=false`, `PROJECT_AGENT_MODE=stub`, and a temp `KG_ARTIFACT_DIR`. Query embedders for vector tools must match the session store dimension (see knowledge-graph + indexing specs).
+**Pytest (as-built):** `uv run pytest` / `uv run pytest tests/ -q` is the full default suite — **no** optional markers or external prereqs. `tests/conftest.py` forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `INDEXING_DOCUMENT_STORE=memory`, `RECOMMEND_VIA_AGENT_GRAPH=false`, `FLEET_BACKEND=fake`, `PROJECT_AGENT_MODE=stub`, and a temp `KG_ARTIFACT_DIR`. Query embedders for vector tools must match the session store dimension (see knowledge-graph + indexing specs).
 
 ---
 

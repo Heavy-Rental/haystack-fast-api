@@ -1,7 +1,8 @@
 """In-process recommend tool catalog for fleet / needs (S7.1 / Phase 7).
 
 Allowlisted tools only — no free-form SQL/Cypher, no MCP server.
-Fake backend uses seed fleet; SQL backend reads injected row DTOs (or empty).
+Fake backend uses seed fleet; ``sql`` is either injected DTOs or
+``LiveSqlFleetBackend`` (S4 allowlisted ORM reads).
 
 Tool names are stable contracts for LangGraph traces and Delegator allowlists.
 """
@@ -12,9 +13,13 @@ from copy import deepcopy
 from datetime import date
 from typing import Any, Protocol, runtime_checkable
 
+from sqlalchemy.orm import Session
+
 from app.pipelines.catalog import infer_model_categories, is_approved_display_type
 from app.pipelines.seed_fleet import get_seed_assets, get_seed_bookings
+from app.repositories.fleet_repository import FleetRepository
 from app.services.need_decomposer import NeedDecomposer, StubNeedDecomposer
+from app.services.pricing.read_resilience import PricingSchemaResolution
 
 # ---------------------------------------------------------------------------
 # Stable tool names (Delegator allowlist / traces)
@@ -98,6 +103,27 @@ class FakeFleetBackend:
 
     def list_bookings(self) -> list[dict[str, Any]]:
         return deepcopy(self._bookings)
+
+
+class LiveSqlFleetBackend:
+    """Read-only fleet from Postgres-Haystack via allowlisted ORM selects."""
+
+    def __init__(
+        self,
+        session: Session,
+        *,
+        repository: FleetRepository | None = None,
+        resolution: PricingSchemaResolution | None = None,
+    ) -> None:
+        self._session = session
+        self._repo = repository if repository is not None else FleetRepository()
+        self._resolution = resolution
+
+    def list_assets(self) -> list[dict[str, Any]]:
+        return self._repo.list_assets(self._session, resolution=self._resolution)
+
+    def list_bookings(self) -> list[dict[str, Any]]:
+        return self._repo.list_bookings(self._session, resolution=self._resolution)
 
 
 class SqlFleetBackend:

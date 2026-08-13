@@ -64,3 +64,9 @@ def test_recommend_via_agent_graph_defaults_to_false() -> None:
     """Phase 7 / S7.5: RECOMMEND_VIA_AGENT_GRAPH defaults off (MVP Call 2)."""
     settings = Settings()
     assert settings.recommend_via_agent_graph is False
+
+
+def test_fleet_backend_defaults_to_fake() -> None:
+    """Phase 4 / S4: FLEET_BACKEND defaults to fake (CI-safe seed)."""
+    settings = Settings()
+    assert settings.fleet_backend == "fake"

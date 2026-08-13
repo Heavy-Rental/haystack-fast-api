@@ -115,10 +115,24 @@ def run_recommend_graph(
     cap = int(fanout_cap) if fanout_cap is not None else int(cfg.recommend_fanout_cap)
     cap = max(1, cap)
 
+    owned_session = None
+    tools_catalog = catalog
+    if runtime is None and tools_catalog is None:
+        kind = str(getattr(cfg, "fleet_backend", None) or "fake").strip().lower()
+        if kind == "sql":
+            from app.core.db import SessionLocal
+
+            owned_session = SessionLocal()
+            tools_catalog = build_recommend_tool_catalog(
+                backend="sql",
+                session=owned_session,
+                decomposer=decomposer,
+            )
+
     injected = runtime
     if injected is None:
         injected = build_recommend_runtime(
-            catalog=catalog,
+            catalog=tools_catalog,
             decomposer=decomposer,
             agent_mode=agent_mode
             if agent_mode is not None
@@ -126,6 +140,45 @@ def run_recommend_graph(
         )
     tools = injected.catalog
 
+    try:
+        return _invoke_recommend_graph(
+            user_id=user_id,
+            ingest_id=ingest_id,
+            indexing_ok=indexing_ok,
+            source_text=source_text,
+            start_date=start_date,
+            end_date=end_date,
+            include_pricing=include_pricing,
+            tools=tools,
+            injected=injected,
+            decomposer=decomposer,
+            cap=cap,
+            price_fn=price_fn,
+            agent_mode=agent_mode,
+            rationale_fn=rationale_fn,
+        )
+    finally:
+        if owned_session is not None:
+            owned_session.close()
+
+
+def _invoke_recommend_graph(
+    *,
+    user_id: str,
+    ingest_id: str,
+    indexing_ok: bool,
+    source_text: str,
+    start_date: str | None,
+    end_date: str | None,
+    include_pricing: bool,
+    tools: RecommendToolCatalog,
+    injected: RecommendRuntime,
+    decomposer: NeedDecomposer | None,
+    cap: int,
+    price_fn: Callable[..., dict[str, Any]] | None,
+    agent_mode: str | None,
+    rationale_fn: Callable[..., Any] | None,
+) -> RecommendAgentState:
     graph = build_recommend_graph(
         source_text=source_text,
         catalog=tools,

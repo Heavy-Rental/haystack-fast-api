@@ -24,6 +24,7 @@ class Asset(Base):
     __table_args__: ClassVar[dict] = {"schema": "primary_snapshot"}
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column()
     category_id: Mapped[int] = mapped_column(
         ForeignKey("primary_snapshot.asset_categories.id")
     )
