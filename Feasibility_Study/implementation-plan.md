@@ -5,10 +5,10 @@
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
 | **Date** | 2026-08-13 |
-| **Version** | 3.17.0 |
+| **Version** | 3.17.1 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.17.0** **S7.8** Worker [5] live KG-1 tools; **3.16.0** S8.3 live Neo4j; **3.15.0** S8.2 T4 config; **3.14.0** S2b Spring; **3.13.0** S8.1 T3; **3.12.0** S4 T0–T2 config; **3.11.0** S4 app live SQL; **3.10.0** S7.2; **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
+| **Revision notes** | **3.17.1** Call 2 `items[].mlPredictedPrice` as-built; **3.17.0** S7.8; **3.16.0** S8.3 live Neo4j; **3.15.0** S8.2 T4 config; **3.14.0** S2b Spring; **3.13.0** S8.1 T3; **3.12.0** S4 T0–T2 config; **3.11.0** S4 app live SQL; **3.10.0** S7.2; **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -140,7 +140,7 @@ Contract: [`../openspec/specs/recommendation-pipeline/contracts/get-asset-recomm
 ### 1.2.1 Call 2 request contract — `getassetrecommendations` (**recommend**)
 
 **Route:** `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations`  
-**Behaviour (as-built MVP):** Session-backed **equipment recommend / quote** via `RecommendationService` (seed fleet + pricing). Response: `quoteRef`, `items[].equipment`, rates, `estimatedTotal`, etc.  
+**Behaviour (as-built MVP):** Session-backed **equipment recommend / quote** via `RecommendationService` (seed fleet + pricing). Response: `quoteRef`, `items[]` (`equipment.id`, **`mlPredictedPrice`**, `equipment.baseDailyRate` = same daily rate, `lineTotal`), `estimatedTotal`, etc. Rates come from `pricing_client` / `predict_price` only.  
 **Not chatbot Q&A** — that is Call 3 `.../project-knowledge/query`.
 
 #### As-built request body

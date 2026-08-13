@@ -38,6 +38,13 @@ class RecommendQuoteItem(BaseModel):
     lineTotal: float | None = None
     quantity: int = 1
     needId: str | None = None
+    mlPredictedPrice: float | None = Field(
+        default=None,
+        description=(
+            "Predicted daily rate from pricing_client / predict_price "
+            "(same value as equipment.baseDailyRate). Never invented."
+        ),
+    )
     equipment: EquipmentQuote = Field(default_factory=EquipmentQuote)
 
 

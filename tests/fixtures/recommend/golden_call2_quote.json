@@ -2,6 +2,7 @@
   "items": [
     {
       "needId": "need_access",
+      "mlPredictedPrice": 185.0,
       "equipment": {
         "id": "AST-SL-001",
         "name": "Scissors Lift",
@@ -10,6 +11,7 @@
     },
     {
       "needId": "need_earthwork",
+      "mlPredictedPrice": 185.0,
       "equipment": {
         "id": "AST-EX-001",
         "name": "Excavator",

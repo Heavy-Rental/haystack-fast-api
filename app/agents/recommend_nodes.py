@@ -539,6 +539,7 @@ def run_pricing_worker(
         asset_id = cand.get("asset_id")
         tool_started = now()
         try:
+            db = getattr(getattr(catalog, "backend", None), "_session", None)
             price = _call_price(
                 price_fn=price_fn,
                 catalog=catalog,
@@ -553,6 +554,7 @@ def run_pricing_worker(
                 asset_id=asset_id,
                 start_date=start,
                 end_date=end,
+                db=db,
             )
             working["tool_traces"] = _append_trace(
                 working,

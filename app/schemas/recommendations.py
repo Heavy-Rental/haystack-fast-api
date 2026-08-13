@@ -103,6 +103,10 @@ class PricingPayload(BaseModel):
     deposit_rate: float = 0.30
     model_version: str | None = None
     explanation: str | None = None
+    was_clamped: bool | None = Field(
+        default=None,
+        description="True when predict_price clamped to per-asset min/max",
+    )
 
 
 class RecommendationItem(BaseModel):
