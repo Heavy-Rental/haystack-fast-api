@@ -1,7 +1,8 @@
-"""Factory for recommend-mode in-process tools (S7.1 + S7.7 / Phase 7).
+"""Factory for recommend-mode in-process tools (S7.1 + S7.2 + S7.7 / Phase 7).
 
 Builds an allowlisted name → callable map. Fake backend is the default for CI;
 SQL backend accepts pre-projected row DTOs only (no free-form SQL execution).
+S7.2 adds fake Neo4j / KG-2 tools (templates only; no-op until S8).
 
 S7.7 adds role-scoped DI: worker_kind allowlists, work_plan validation,
 and ``build_recommend_runtime`` so tests inject fake tools.
@@ -9,7 +10,7 @@ and ``build_recommend_runtime`` so tests inject fake tools.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
 
 from app.agents.fleet_tools import (
@@ -28,6 +29,16 @@ from app.agents.fleet_tools import (
     filter_fleet_candidates,
     retrieve_fleet_assets,
 )
+from app.agents.neo4j_tools import (
+    RECOMMEND_NEO4J_TOOL_NAMES,
+    TOOL_NEO4J_CYPHER_READ,
+    TOOL_TRIGGER_NEO4J_POPULATE,
+    FakeNeo4jBackend,
+    Neo4jBackend,
+    neo4j_cypher_read,
+    trigger_neo4j_populate,
+)
+from app.agents.neo4j_tools import TOOL_DESCRIPTIONS as NEO4J_TOOL_DESCRIPTIONS
 from app.agents.tools import (
     TOOL_PREDICT_ASSET_PRICE,
     TOOL_PROJECT_KG_QUERY,
@@ -64,6 +75,7 @@ class UnknownWorkerKindError(ValueError):
 # Full recommend-mode allowlist (fleet tools + already-shipped tools).
 RECOMMEND_TOOL_ALLOWLIST: frozenset[str] = frozenset(
     RECOMMEND_FLEET_TOOL_NAMES
+    | RECOMMEND_NEO4J_TOOL_NAMES
     | {
         TOOL_PREDICT_ASSET_PRICE,
         TOOL_PROJECT_VECTOR_SEARCH,
@@ -80,6 +92,7 @@ class RecommendToolCatalog:
     tools: dict[str, ProjectTool]
     backend_kind: BackendKind
     backend: FleetBackend
+    neo4j: Neo4jBackend = field(default_factory=FakeNeo4jBackend)
 
     def get(self, name: str) -> ProjectTool:
         """Return a tool by stable name; reject unknown names."""
@@ -106,7 +119,9 @@ def _wrap(
     func: Callable[..., Any],
     description: str | None = None,
 ) -> ProjectTool:
-    desc = description or TOOL_DESCRIPTIONS.get(name, name)
+    desc = description or TOOL_DESCRIPTIONS.get(name) or NEO4J_TOOL_DESCRIPTIONS.get(
+        name, name
+    )
 
     def _run(*args: Any, **kwargs: Any) -> Any:
         return func(*args, **kwargs)
@@ -130,6 +145,14 @@ def build_fleet_backend(
     raise ValueError(f"unknown fleet backend kind: {kind!r}")
 
 
+def neo4j_available(catalog: RecommendToolCatalog | None) -> bool:
+    """K-3: skip Neo4j tools when the backend is missing or empty."""
+    if catalog is None:
+        return False
+    graph = catalog.neo4j
+    return not graph.is_empty
+
+
 def build_recommend_tool_catalog(
     *,
     backend: BackendKind | FleetBackend = "fake",
@@ -137,6 +160,8 @@ def build_recommend_tool_catalog(
     bookings: list[dict[str, Any]] | None = None,
     decomposer: NeedDecomposer | None = None,
     include_pricing_tool: bool = True,
+    neo4j: Neo4jBackend | None = None,
+    include_neo4j_tools: bool = True,
 ) -> RecommendToolCatalog:
     """Build the in-process recommend tool map (DI-friendly).
 
@@ -146,6 +171,8 @@ def build_recommend_tool_catalog(
         assets / bookings: optional row overrides for fake/sql backends.
         decomposer: optional NeedDecomposer (default stub).
         include_pricing_tool: register ``predict_asset_price`` (S6).
+        neo4j: optional KG-2 backend (default empty fake).
+        include_neo4j_tools: register ``neo4j_cypher_read`` / populate (S7.2).
     """
     if isinstance(backend, str):
         kind: BackendKind = backend
@@ -191,7 +218,20 @@ def build_recommend_tool_catalog(
             func=predict_asset_price,  # type: ignore[arg-type]
         )
 
-    return RecommendToolCatalog(tools=tools, backend_kind=kind, backend=be)
+    graph = neo4j if neo4j is not None else FakeNeo4jBackend()
+    if include_neo4j_tools:
+        tools[TOOL_NEO4J_CYPHER_READ] = _wrap(
+            TOOL_NEO4J_CYPHER_READ,
+            lambda **kw: neo4j_cypher_read(backend=graph, **kw),
+        )
+        tools[TOOL_TRIGGER_NEO4J_POPULATE] = _wrap(
+            TOOL_TRIGGER_NEO4J_POPULATE,
+            lambda **kw: trigger_neo4j_populate(backend=graph, **kw),
+        )
+
+    return RecommendToolCatalog(
+        tools=tools, backend_kind=kind, backend=be, neo4j=graph
+    )
 
 
 def get_recommend_tool(
@@ -245,6 +285,8 @@ def build_recommend_runtime(
     bookings: list[dict[str, Any]] | None = None,
     decomposer: NeedDecomposer | None = None,
     include_pricing_tool: bool = True,
+    neo4j: Neo4jBackend | None = None,
+    include_neo4j_tools: bool = True,
     catalog: RecommendToolCatalog | None = None,
     agent_mode: AgentMode | str = "stub",
 ) -> RecommendRuntime:
@@ -258,5 +300,7 @@ def build_recommend_runtime(
         bookings=bookings,
         decomposer=decomposer,
         include_pricing_tool=include_pricing_tool,
+        neo4j=neo4j,
+        include_neo4j_tools=include_neo4j_tools,
     )
     return RecommendRuntime(catalog=tools, agent_mode=mode)  # type: ignore[arg-type]

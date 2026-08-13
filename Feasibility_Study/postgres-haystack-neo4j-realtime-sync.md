@@ -9,7 +9,7 @@
 | **Document type** | Architecture / infrastructure feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | **2.7.7** |
+| **Version** | **2.7.8** |
 | **Application** | `haystack-fast-api` |
 | **Related specs** | `openspec/specs/project-setup/`, `indexing/`, `knowledge-graph/`, `recommendation-pipeline/`, `dynamic-pricing/`, `equipment-recommendation/` |
 | **Related studies** | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) · [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) · [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) · [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) · [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) · [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) |
@@ -497,8 +497,8 @@ Tools the **Multi-Agent Orchestrator** invokes **after [4]**. Orchestrator **syn
 | `retrieve_fleet_assets` | Candidate equipment | **Postgres-Haystack** SQL (read-only allowlist) |
 | `filter_fleet_candidates` | Category/size filter | Postgres-Haystack |
 | `check_booking_availability` | Availability window | **Postgres-Haystack** bookings |
-| `neo4j_cypher_read` | Fleet graph context | **Neo4j KG-2** (templates) |
-| `trigger_neo4j_populate` | Refresh fleet graph | Async job from Haystack PG |
+| `neo4j_cypher_read` | Fleet graph context | **Neo4j KG-2** (templates) — **S7.2 as-built** fake; live S8 |
+| `trigger_neo4j_populate` | Refresh fleet graph | Async job from Haystack PG — **S7.2 as-built** no-op `job_id`; live S8 |
 | `predict_asset_price` | **ML pricing** | In-process model — [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) |
 | `generate_rank_rationale` | Explain ranks | LLM (optional) |
 
@@ -580,7 +580,7 @@ Neo4j available to multi-agent fleet tools
 | Tool host | In-process `ProjectTool` | Expanded **in-process** tool module (fleet, Neo4j, pricing) |
 | When do agents run? | **After** ingest, Q&A route | After **[4]** for Q&A **and** recommend (**[5]–[8]**) |
 | DocumentStore | InMemory session | **Pgvector** (I1) on Postgres-Haystack |
-| Fleet / Neo4j / price | Seed fleet; service pricing path | In-process tools: SQL + Neo4j + **`predict_asset_price`** |
+| Fleet / Neo4j / price | Seed fleet; service pricing path; **S7.2 fake Neo4j tools** | In-process tools: SQL + live Neo4j (S8) + **`predict_asset_price`** |
 | Observability | Basic tool_traces | tool_traces + **`role`** + **`need_id`** on fan-out |
 | Spring caller | HTTP multi-call | Same REST; call 2 = recommend graph; call 3 = chatbot Q&A |
 
@@ -597,7 +597,7 @@ Neo4j available to multi-agent fleet tools
 | Tool packaging | In-process Stage-1 tools | Expand tool module (no separate MCP server) |
 | Pricing | Service / seed path | In-process `predict_asset_price` for recommend agents |
 | Asset/Booking | Seed fleet | Needs Track D for production accuracy |
-| Neo4j / KG-2 | Stage 2 backlog | Track D3 + T3; Neo4j tools for recommend context |
+| Neo4j / KG-2 | S7.2 fake tools as-built; persist/populate Stage 2 / S8 | Track D3 + T3 for live graph; recommend uses K-3 skip when empty |
 
 ---
 
@@ -1088,6 +1088,7 @@ SOURCE_HOST: postgres-primary
 | **2.7.4** | 2026-08-12 | Call numbering: Call 2 = recommend/quote; Call 3 = chatbot Q&A |
 | **2.7.5** | 2026-08-12 | §4.5 embedder: query/store dim must match; as-built pytest conftest mock dim 384; optional markers remain TARGET |
 | **2.7.6** | 2026-08-12 | **I0 as-built:** `INDEXING_DOCUMENT_STORE` + `build_document_store()`; ingest still InMemory; I1/I2 remain TARGET |
+| **2.7.8** | 2026-08-13 | **S7.2 as-built:** `neo4j_cypher_read` + `trigger_neo4j_populate` fake/no-op; K-3 skip; live populate S8 |
 | **2.7.7** | 2026-08-12 | **I1 as-built (5.3–5.6):** factory wire + tenant filters + TTL/delete; optional `@pytest.mark.pgvector`; I2 production default still TARGET |
 
 ---

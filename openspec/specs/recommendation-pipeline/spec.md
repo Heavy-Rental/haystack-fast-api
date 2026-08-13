@@ -405,6 +405,7 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | Unit loop vs one giant graph | Service loop for 4–8 | Matches parent architecture; easier testing |
 | Production pricing swap | Single `pricing_client` module | FR-022; agent tool `predict_asset_price` (S6) shares entrypoint |
 | Agent fleet tools (S7.1) | In-process allowlist via `fleet_tools` + `tool_factory` | Fake seed default; SQL DTO backend; free-form SQL rejected; invoked from S7.3 graph |
+| Agent Neo4j tools (S7.2) | `neo4j_cypher_read` templates + `trigger_neo4j_populate` no-op | Empty graph → []; K-3 skip; live populate S8 |
 | Recommend agent state (S7.0) | `RecommendAgentState` + F-2 validation | Partition ownership used by S7.3 nodes |
 | Recommend LangGraph + stub synthesis (S7.3/S7.4) | Isolated DAG + tool-free [8] | Invoked from Call 2 when `RECOMMEND_VIA_AGENT_GRAPH` (S7.5) |
 | Call 2 multi-agent enrich (S7.5) | Same quote DTO; flag default off | Gate refuse → 400; traces stay off the body (S7.6) |
@@ -432,6 +433,7 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | **1.2.0** | 2026-08-07 | Spec reconcile: live HTTP indexing vs service FR-010 |
 | **1.2.1** | 2026-08-07 | Sequential README; live path notes user_id + mandatory KG |
 | **2.0.0** | 2026-08-10 | Migrated to OpenSpec Requirement/Scenario + design REASONS under `openspec/specs/recommendation-pipeline/` |
+| **2.4.0** | 2026-08-13 | S7.2 as-built: Neo4j template tools + populate no-op; recommend not blocked when graph empty |
 | **2.1.0** | 2026-08-12 | Key decisions: S7.0 RecommendAgentState + S7.1 fleet tool catalog as-built (agent path building blocks; Call 2 MVP unchanged) |
 | **2.3.0** | 2026-08-12 | S7.5/S7.6 as-built: Call 2 graph enrich behind `RECOMMEND_VIA_AGENT_GRAPH`; traces stay off quote DTO |
 | **2.2.0** | 2026-08-12 | S7.3/S7.4 as-built: recommend DAG + stub synthesis; Call 2 HTTP still service MVP |

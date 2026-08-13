@@ -5,10 +5,10 @@
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
 | **Date** | 2026-08-13 |
-| **Version** | 3.9.0 |
+| **Version** | 3.10.0 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.9.0** Phase 7 / **S7.7 as-built** (A–L recommend prompts + tool DI + Delegator `worker_kind` allowlist); **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
+| **Revision notes** | **3.10.0** Phase 7 / **S7.2 as-built** (Neo4j template tools + populate no-op; K-3 skip); **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -78,7 +78,7 @@ DocumentStore: InMemory per-ingest session (default)
     (memory default | pgvector flag; I2 production default TARGET)
 Fleet: seed in app; D1 merge-sync in devcontainer config
   (postgres_haystack_sync, ~60s poll on develop)
-Neo4j: compose service may exist; no populate-from-db job; no agent Neo4j tools
+Neo4j: compose service may exist; no populate-from-db job (S8); agent Neo4j tools **as-built S7.2** (fake / no-op)
 Pricing: pricing_client → app.services.pricing.model.predict_price (production)
   Phase 1e (repository util/lead-time + adapter wiring) — **as-built**
   Phase 2a (app/services/pricing/ + per-asset clamp) — **as-built**
@@ -90,7 +90,7 @@ Pricing: pricing_client → app.services.pricing.model.predict_price (production
   HTTP Call 2 multi-agent enrich (S7.5) — **as-built** (`RECOMMEND_VIA_AGENT_GRAPH`, default off)
   tool_traces duration contract (S7.6) — **as-built**
   Prompts A–L + tool DI (S7.7) — **as-built** (`recommend_prompts.py`; Delegator allowlist)
-  Neo4j tools (S7.2) — **not wired**
+  Neo4j tools (S7.2) — **as-built** (`neo4j_tools.py`; fake backend; K-3 skip; live populate S8)
 Error JSON: {"error","message"} handlers already as-built
 Idempotency-Key / ingest correlation headers — **as-built S2a** (process-local store + middleware)
 Agent indexing tool + Coordinator gate [4] — **as-built S3** (flag default off)
@@ -419,7 +419,7 @@ Use **stage IDs** in PRs and test names. Every stage below that ships code has a
 | **S6** | Pricing 2a + `predict_asset_price` tool (1e largely as-built) | 6 | app | fixtures OK | **yes** |
 | **S7.0** | `RecommendAgentState` + partition validation | 7 | app | — | **yes** (**as-built**) |
 | **S7.1** | Fleet/project tool catalog (in-process) | 7 | app | S7.0 interfaces | **yes** (**as-built**) |
-| **S7.2** | Neo4j tools (no-op until S8) | 7 | app | S7.1 | **yes** (fake) |
+| **S7.2** | Neo4j tools (no-op until S8) | 7 | app | S7.1 | **yes** (fake) (**as-built**) |
 | **S7.3** | Recommend LangGraph DAG (seq/par C/W/D) | 7 | app | S7.0–S7.1 | **yes** (**as-built**) |
 | **S7.4** | Tool-free synthesis + F-2 validation | 7 | app | S7.3 | **yes** (**as-built**) |
 | **S7.5** | HTTP Call 2 multi-agent enrich (same quote DTO) | 7 | app | S7.4 | **yes** (**as-built**) |
@@ -687,7 +687,7 @@ Maps to dual-plane §4.1 [5]–[8], [`multi-agent-synthesis-recommend-output.md`
 |-------|------|-------|--------|
 | `RecommendAgentState` + partition validation | STM / F-2 | **S7.0** | **As-built** |
 | Fleet/project tools | Worker backends | **S7.1** | **As-built** |
-| Neo4j tools (fake then real) | optional | **S7.2** / S8 | Todo |
+| Neo4j tools (fake then real) | optional | **S7.2** / S8 | **As-built** (fake); S8 live |
 | LangGraph DAG seq/par | Coordinator + Delegator + Workers | **S7.3** | **As-built** |
 | Tool-free synthesis | Coordinator [8] | **S7.4** | **As-built** |
 | HTTP Call 2 multi-agent enrich | API | **S7.5** | **As-built** |
@@ -725,20 +725,24 @@ Maps to dual-plane §4.1 [5]–[8], [`multi-agent-synthesis-recommend-output.md`
 | **CI job** | **default** (fake); optional haystack SQL when S4 |
 | **C/W/D** | E, H-2 (fleet LTM via tools), J-1 |
 | **OpenSpec** | archive `openspec/changes/archive/2026-08-12-s7-1-fleet-tool-catalog/` · equipment-recommendation FR notes |
-| **Not in S7.1** | LangGraph DAG (S7.3); Neo4j tools (S7.2); HTTP Call 2 multi-agent enrich (S7.5) |
+| **Not in S7.1** | LangGraph DAG (S7.3); HTTP Call 2 multi-agent enrich (S7.5). Neo4j tools **as-built S7.2**. |
 
 ---
 
-#### Stage S7.2 — Neo4j tools (no-op until S8)
+#### Stage S7.2 — Neo4j tools (no-op until S8) — **as-built**
 
 | Field | Content |
 |-------|---------|
+| **Status** | **As-built (2026-08-13)** |
 | **Work** | `neo4j_cypher_read` (templates only), `trigger_neo4j_populate` (returns job_id / no-op) |
-| **Exit criteria** | Empty graph OK; free-form Cypher rejected; recommend not blocked |
-| **Test implementation** | (1) empty backend → []; (2) free-form Cypher → error; (3) template query with fixture graph (optional); (4) populate trigger non-blocking |
-| **Suggested modules** | `tests/test_neo4j_tools.py` |
-| **CI job** | **default** fake; **neo4j** optional |
+| **Exit criteria** | Empty graph OK; free-form Cypher rejected; recommend not blocked — **met** |
+| **Test implementation** | (1) empty backend → []; (2) free-form Cypher → error; (3) template query with fixture graph; (4) populate trigger non-blocking; (5) K-3 skip when empty |
+| **Modules** | `app/agents/neo4j_tools.py`; `tests/test_neo4j_tools.py` |
+| **Fixtures** | `tests/fixtures/recommend/neo4j_graph.json` |
+| **CI job** | **default** fake; **neo4j** optional (S8) |
 | **C/W/D** | E, K-3 skip path |
+| **OpenSpec** | archive `openspec/changes/archive/2026-08-13-s7-2-neo4j-tools/` |
+| **Not in S7.2** | Live Neo4j driver / populate job (S8); FR-KG-011 persist |
 
 ---
 
@@ -755,7 +759,7 @@ Maps to dual-plane §4.1 [5]–[8], [`multi-agent-synthesis-recommend-output.md`
 | **CI job** | **default** |
 | **C/W/D** | K, L (must-seq / may-par), F-1 |
 | **OpenSpec** | archive `openspec/changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/` |
-| **Not in S7.3** | HTTP Call 2 enrich (S7.5); Neo4j tools (S7.2); prompts A–L (S7.7) |
+| **Not in S7.3** | HTTP Call 2 enrich (S7.5); prompts A–L (S7.7). Neo4j tools **as-built S7.2**. |
 
 ---
 
@@ -789,7 +793,7 @@ Maps to dual-plane §4.1 [5]–[8], [`multi-agent-synthesis-recommend-output.md`
 | **CI job** | **default** |
 | **C/W/D** | Coordinator handoff; I session |
 | **OpenSpec** | archive `openspec/changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/` |
-| **Not in S7.5** | Neo4j tools (S7.2); prompts A–L (S7.7); production default flip |
+| **Not in S7.5** | prompts A–L (S7.7); production default flip. Neo4j tools **as-built S7.2**. |
 
 ---
 
@@ -820,7 +824,7 @@ Maps to dual-plane §4.1 [5]–[8], [`multi-agent-synthesis-recommend-output.md`
 | **CI job** | **default** |
 | **C/W/D** | A–L full contracts |
 | **OpenSpec** | archive `openspec/changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/` |
-| **Not in S7.7** | Neo4j tools (S7.2); production default flip; Worker [5] live vector/KG |
+| **Not in S7.7** | production default flip; Worker [5] live vector/KG. Neo4j tools **as-built S7.2**. |
 
 ---
 
@@ -948,6 +952,7 @@ Every code-bearing PR **must** use the **PR description template** below (bare m
 | **PR-G** | S7.3–7.4 | Recommend graph + synthesis | **Shipped** — order, fan-out, golden results_by_need; **BDD** no invent / empty fleet |
 | **PR-H** | S7.5–7.6 | Call 2 multi-agent enrich + traces | **Shipped** — same quote DTO behind flag; role/`need_id`/`duration_ms` traces; **BDD** Call 2 quote happy path |
 | **PR-I** | S7.7 | Prompts A–L + tool DI | **Shipped** — recommend prompts isolated from Stage-1; Delegator allowlist; **TDD** stub LLM |
+| **PR-J** | S7.2 | Neo4j tools (fake / no-op) | **Shipped** — templates only; free-form Cypher reject; populate non-blocking; K-3 skip; **BDD** recommend not blocked |
 
 ### PR description template (required bare minimum)
 
@@ -1155,11 +1160,12 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | Phase 6 / S6 `predict_asset_price` | **As-built** — tool → `pricing_client` (single SoT); Phase 7 Workers not wired |
 | Phase 7 / S7.0 `RecommendAgentState` | **As-built** — F-2 partition validation; illegal writes rejected |
 | Phase 7 / S7.1 fleet tool catalog | **As-built** — allowlisted in-process tools + fake/SQL DI factory |
+| Phase 7 / S7.2 Neo4j tools | **As-built** — templates + populate no-op; K-3 skip; live populate S8 |
 | Phase 7 / S7.3 recommend LangGraph DAG | **As-built** — gate → [5] → Delegator → ([6]→[7])×N; `RECOMMEND_FANOUT_CAP` |
 | Phase 7 / S7.4 tool-free synthesis | **As-built** — stub Coordinator [8]; empty fleet → `item: null`; no invent |
 | FR-010 service recommend (seed) | **As-built Call 2 MVP** via SessionRecommendService; S7.5 wires graph behind same DTO (`RECOMMEND_VIA_AGENT_GRAPH`) |
 | Phase 7 / S7.7 prompts A–L + tool DI | **As-built** — isolated recommend prompts; Delegator `worker_kind` allowlist; fake catalog inject |
-| Full recommend multi-agent path | S7.0–S7.1 + S7.3–S7.7 **as-built**; S7.2 remains (Neo4j tools) |
+| Full recommend multi-agent path | S7.0–S7.7 **as-built** (S7.2 fake Neo4j tools); S8 live populate remains |
 | Pgvector / Neo4j populate | Not in app path |
 | Idempotency-Key on ingest | **As-built S2a** (process-local; multi-replica later) |
 | Stage catalog | **Specified** (§3.1) |

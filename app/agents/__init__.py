@@ -1,4 +1,4 @@
-"""LangGraph multi-agent orchestration (Stage 1 + S3 + S6 + S7.0–S7.7)."""
+"""LangGraph multi-agent orchestration (Stage 1 + S3 + S6 + S7.0–S7.7 + S7.2)."""
 
 from app.agents.fleet_tools import (
     TOOL_CHECK_BOOKING_AVAILABILITY,
@@ -29,6 +29,14 @@ from app.agents.recommend_state import (
     empty_recommend_state,
     validate_state_transition,
 )
+from app.agents.neo4j_tools import (
+    TOOL_NEO4J_CYPHER_READ,
+    TOOL_TRIGGER_NEO4J_POPULATE,
+    FreeFormCypherRejected,
+    UnknownNeo4jTemplateError,
+    neo4j_cypher_read,
+    trigger_neo4j_populate,
+)
 from app.agents.tool_factory import (
     ALLOWED_WORKER_KINDS,
     UnknownWorkerKindError,
@@ -54,12 +62,16 @@ __all__ = [
     "RecommendAgentState",
     "StateTransitionError",
     "UnknownWorkerKindError",
+    "FreeFormCypherRejected",
+    "UnknownNeo4jTemplateError",
     "TOOL_CHECK_BOOKING_AVAILABILITY",
     "TOOL_DECOMPOSE_PROJECT_NEEDS",
     "TOOL_FILTER_FLEET_CANDIDATES",
+    "TOOL_NEO4J_CYPHER_READ",
     "TOOL_PREDICT_ASSET_PRICE",
     "TOOL_RETRIEVE_FLEET_ASSETS",
     "TOOL_RUN_INDEXING",
+    "TOOL_TRIGGER_NEO4J_POPULATE",
     "apply_partition_write",
     "SynthesisSchemaError",
     "build_indexing_gate_graph",
@@ -69,8 +81,10 @@ __all__ = [
     "build_recommend_tool_catalog",
     "empty_recommend_state",
     "get_recommend_tool",
+    "neo4j_cypher_read",
     "predict_asset_price",
     "run_indexing_from_request",
+    "trigger_neo4j_populate",
     "run_indexing_gate",
     "run_project_knowledge_agents",
     "run_recommend_graph",

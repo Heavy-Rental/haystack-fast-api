@@ -34,6 +34,7 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | — (S7.3 + S7.4 new) | `openspec/changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/` | Phase 7 recommend LangGraph DAG + tool-free stub synthesis |
 | — (S7.5 + S7.6 new) | `openspec/changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/` | Phase 7 Call 2 graph enrich + tool_traces duration |
 | — (S7.7 new) | `openspec/changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/` | Phase 7 recommend prompts A–L + tool DI / Delegator allowlist |
+| — (S7.2 new) | `openspec/changes/archive/2026-08-13-s7-2-neo4j-tools/` | Phase 7 Neo4j tools (templates + populate no-op; K-3 skip) |
 | `app/agents/prompts.py` | `openspec/spdd/prompts/project-knowledge-agents.md` (index) | OpenSPDD first-class Stage-1 Q&A prompts |
 | `app/agents/recommend_prompts.py` | `openspec/spdd/prompts/recommend-agents.md` (index) | OpenSPDD first-class recommend A–L prompts (S7.7) |
 
@@ -83,6 +84,8 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | S7.5/S7.6 change archive | Call 2 enrich + traces tasks | `changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/` |
 | S7.7 (as-built) | Equipment recommendation — A–L prompt contracts + tool DI + Delegator `worker_kind` allowlist | `specs/equipment-recommendation/spec.md` + design; `app/agents/recommend_prompts.py` · `tool_factory.py`; `tests/test_recommend_prompts.py` · `test_agent_tool_di.py`; impl-plan **Phase 7 / S7.7** · archive `changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/` |
 | S7.7 change archive | Prompts A–L + tool DI tasks | `changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/` |
+| S7.2 (as-built) | Equipment recommendation — KG-2 tools `neo4j_cypher_read` (templates) + `trigger_neo4j_populate` (non-blocking no-op); K-3 skip when empty | `specs/equipment-recommendation/spec.md` + design; `app/agents/neo4j_tools.py` · `tool_factory.py`; `tests/test_neo4j_tools.py`; impl-plan **Phase 7 / S7.2** · archive `changes/archive/2026-08-13-s7-2-neo4j-tools/` |
+| S7.2 change archive | Neo4j tool catalog tasks | `changes/archive/2026-08-13-s7-2-neo4j-tools/` |
 | FR-001 … FR-053 (+ NFR, demo) | Equipment recommendation parent | `specs/equipment-recommendation/spec.md` |
 | Domain invariants | Domain | `specs/domain/spec.md` |
 | Setup / layering / stack | Project setup | `specs/project-setup/spec.md` |

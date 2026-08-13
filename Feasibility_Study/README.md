@@ -23,11 +23,11 @@ These apply across studies unless a study explicitly narrows scope:
 
 | Study | Topic | Version |
 |-------|--------|---------|
-| [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane + Spring multi-call: Call 1 ingest · Call 2 recommend · Call 3 chatbot Q&A. **I0+I1 DocumentStore cutover as-built** (factory wire, tenant filters, TTL). | **2.7.7** |
+| [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane + Spring multi-call: Call 1 ingest · Call 2 recommend · Call 3 chatbot Q&A. **I0+I1 DocumentStore cutover as-built** (factory wire, tenant filters, TTL). **S7.2 fake Neo4j tools as-built**. | **2.7.8** |
 | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) | Spring ↔ FastAPI wire; Call 1/2/3 saga; resilience C1–C3. | **1.3.2** |
 | [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) | ML pricing as **in-process** agent tool; pricing **Worker** fan-out per need; **S6 tool as-built**; **S7.3 Workers [7]×N as-built**; **S7.5 HTTP flag**. | **1.2.4** |
-| [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) | Synthesis **[8]** → assets + prices (**HTTP Call 2** recommend path). **S7.4 stub [8] as-built**; **S7.5 HTTP enrich as-built**; **S7.7 A–L prompts as-built**. | **1.4.6** |
-| [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) | C/W/D roles; Call 2 recommend / Call 3 Q&A numbering aligned. **S7.0–S7.1 + S7.3–S7.7 as-built**. | **2.1.5** |
+| [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) | Synthesis **[8]** → assets + prices (**HTTP Call 2** recommend path). **S7.4 stub [8] as-built**; **S7.5 HTTP enrich as-built**; **S7.7 A–L prompts as-built**; **S7.2 fake Neo4j tools as-built**. | **1.4.7** |
+| [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) | C/W/D roles; Call 2 recommend / Call 3 Q&A numbering aligned. **S7.0–S7.7 as-built** (incl. S7.2 fake Neo4j tools). | **2.1.6** |
 | [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) | Indexing Pipeline → Haystack SuperComponent (optional packaging for Coordinator gate **[4]**). | **1.2.1** |
 | [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) | Call 1 lean body; FR-IX-023 **as-built** S1a–S1e; not Call 2 recommend quote. | **1.2.2** |
 
@@ -35,7 +35,7 @@ These apply across studies unless a study explicitly narrows scope:
 
 | Document | Topic | Version |
 |----------|--------|---------|
-| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. **S3 as-built**; **S5-I0+I1 as-built**; **S6 as-built**; **S7.0+S7.1+S7.3–S7.7 as-built** (state, tools, LangGraph DAG, stub synthesis, Call 2 flag, traces, A–L prompts + tool DI); **§7.0 default pytest isolation** (mock dim 384). | **3.9.0** |
+| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. **S3 as-built**; **S5-I0+I1 as-built**; **S6 as-built**; **S7.0–S7.7 as-built** (state, tools, Neo4j fake tools, LangGraph DAG, stub synthesis, Call 2 flag, traces, A–L prompts + tool DI); **§7.0 default pytest isolation** (mock dim 384). | **3.10.0** |
 | [`phase2-s2a-haystack-implementation-plan.md`](./phase2-s2a-haystack-implementation-plan.md) | **Phase 2 / S2a only** — haystack-fast-api: `Idempotency-Key`, correlation logging, docs. **Implemented** (FR-IX-024/025; §7 test runbook + conftest isolation). | **1.1.3** |
 | [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) | **S2b** Spring client + portal Call 1→2 recommend. Export: [`../Feasibility_Study_Spring/`](../Feasibility_Study_Spring/). | **2.0.0** |
 
@@ -60,6 +60,8 @@ These apply across studies unless a study explicitly narrows scope:
 **Stage S7.6 (haystack, as-built):** recommend `tool_traces` include `role`, `node`, `need_id` on fan-out, and `duration_ms >= 0` on terminal spans. Traces stay off the public quote body. Same archive as S7.5.
 
 **Stage S7.7 (haystack, as-built):** isolated A–L recommend prompts (`app/agents/recommend_prompts.py`) + `build_recommend_runtime` tool DI + Delegator `worker_kind` allowlist (`validate_work_plan`). Stage-1 Q&A prompts unchanged. OpenSpec archive `openspec/changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/`.
+
+**Stage S7.2 (haystack, as-built):** allowlisted `neo4j_cypher_read` (templates only) + `trigger_neo4j_populate` (non-blocking no-op) via `app/agents/neo4j_tools.py`. Empty graph → `[]`; free-form Cypher rejected; Delegator K-3 skips Neo4j so recommend is not blocked. Live populate remains **S8**. OpenSpec archive `openspec/changes/archive/2026-08-13-s7-2-neo4j-tools/`.
 
 ### Spring Boot handoff package
 
