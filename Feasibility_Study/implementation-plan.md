@@ -5,10 +5,10 @@
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
 | **Date** | 2026-08-13 |
-| **Version** | 3.13.0 |
+| **Version** | 3.15.0 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.13.0** Phase 8 / **S8.1 T3 as-built (config pack)** `neo4j-populate` SQL→Cypher MERGE; **3.12.0** S4 T0–T2 config; **3.11.0** S4 app live SQL; **3.10.0** S7.2; **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
+| **Revision notes** | **3.15.0** Phase 8 / **S8.2 T4 as-built (config)** post-sync + admin HTTP populate; **3.14.0** S2b Spring; **3.13.0** S8.1 T3; **3.12.0** S4 T0–T2 config; **3.11.0** S4 app live SQL; **3.10.0** S7.2; **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -411,7 +411,7 @@ Use **stage IDs** in PRs and test names. Every stage below that ships code has a
 | **S0** | Spec freeze & D0 schema contract | 0 | shared | — | checklist |
 | **S1** | Call 1 lean body + FR-IX-023 increments (**S1a–S1e**) | 1 | app | — | **yes** |
 | **S2a** | Resilience C1 — FastAPI (idempotency, errors, correlation) | 2 | app | — | **yes** |
-| **S2b** | Resilience C1 — Spring client (timeouts, CB, saga) | 2 | Spring | WireMock | Spring CI |
+| **S2b** | Resilience C1 — Spring client (timeouts, CB, saga) | 2 | Spring | WireMock | Spring CI (**as-built**) |
 | **S3** | Agent indexing tool R1 + Coordinator gate **[4]** | 3 | app | — | **yes** (**as-built**) |
 | **S3.3** | Indexing SuperComponent (optional) | 3 | app | S3 | **yes** (deferred) |
 | **S4** | Fleet sync T0–T2 + app live SQL reads | 4 | config+app | S0/D0 | **as-built** (config T0–T2 + app SQL) |
@@ -426,7 +426,7 @@ Use **stage IDs** in PRs and test names. Every stage below that ships code has a
 | **S7.5** | HTTP Call 2 multi-agent enrich (same quote DTO) | 7 | app | S7.4 | **yes** (**as-built**) |
 | **S7.6** | `tool_traces` / metrics (role, need_id, duration) | 7 | app | S7.3 | **yes** (**as-built**) |
 | **S7.7** | Prompts A–L + tool DI factory | 7 | app | S7.3–7.4 | **yes** (**as-built**) |
-| **S8** | Neo4j populate + real graph tools | 8 | config+app | seed SQL | optional (**8.1 T3 as-built** config; 8.2–8.3 remain) |
+| **S8** | Neo4j populate + real graph tools | 8 | config+app | seed SQL | optional (**8.1+8.2 as-built** config; **8.3** app remains) |
 | **S9.1** | C2 202 jobs / SSE | 9 | app (+ Spring) | HTTP surface | **yes** (fake worker) |
 | **S9.2–S9.5** | Object storage / I2 default / D2 / C3 | 9 | split | metrics-driven | per sub-item |
 
@@ -536,12 +536,13 @@ Maps to `spring-boot-fastapi-integration-resilience.md` Phase C1.
 | **2.1** | WebClient (or RestClient) with **per-operation timeouts** (ingest ≫ Q&A ≫ health) | Spring | Config documented |
 | **2.2** | Circuit breaker + bulkhead (Resilience4j) on recommender client | Spring | CB opens on forced 5xx; recovers |
 | **2.3** | `Idempotency-Key` on ingest POST; FastAPI stores key → same `ingest_id` on retry | Spring + **App** | Double POST same key → one logical ingest — **app as-built (S2a)** |
-| **2.4** | Correlation: `X-Correlation-Id` / `traceparent` on every call; log both sides | Both | Trace id visible end-to-end — **app as-built (S2a)**; Spring half → S2b |
-| **2.5** | Spring **saga** orchestrator: ingest → persist ingest_id → Q&A (0..N) → (later) recommend | Spring | No re-ingest on Q&A failure |
-| **2.6** | Document max file size, expected p95; **error contract already as-built** (`{"error","message"}`) — document in ops runbook | Both | Runbook + regression tests — **app docs as-built (S2a)** |
+| **2.4** | Correlation: `X-Correlation-Id` / `traceparent` on every call; log both sides | Both | Trace id visible end-to-end — **app as-built (S2a)**; **Spring as-built (S2b)** `X-Correlation-Id` (`traceparent` deferred) |
+| **2.5** | Spring **saga** orchestrator: ingest → persist ingest_id → Call 2 recommend → React; optional Call 3 | Spring | No re-ingest on Call 2 fail — **as-built (Spring)** |
+| **2.6** | Document max file size, expected p95; **error contract already as-built** (`{"error","message"}`) — document in ops runbook | Both | Runbook + regression tests — **app docs as-built (S2a)**; Spring SPEC §12 |
 
 **As-built (app / S2a):** shared error JSON via `app/core/errors.py`; `run_in_threadpool` on ingest/Q&A; process-local `Idempotency-Key` store (`app/services/ingest_idempotency.py`); correlation middleware (`app/middleware/correlation.py`); OpenSpec FR-IX-024/025 + Postman headers.  
-**App remaining (out of S2a):** multi-replica shared idempotency store; Spring client half → **S2b**.
+**As-built (Spring / S2b):** [heavy-rental-spring-rest-api `develop`](https://github.com/Heavy-Rental/heavy-rental-spring-rest-api) — `HaystackRecommenderClient`, Resilience4j CB/bulkhead/retry, `RecommenderSagaService`, portal `POST /api/recommendations/project-spec`, WireMock pack. Canonical plan **v2.1.1**. Prod ingest retry still `haystack.retry.ingest-enabled=false`.  
+**App remaining (out of S2a):** multi-replica shared idempotency store.
 
 **Defer C2 (202 + poll/SSE)** until measured gateway timeouts force it (Phase 9).
 
@@ -552,9 +553,9 @@ Maps to `spring-boot-fastapi-integration-resilience.md` Phase C1.
 | **Independently testable?** | **Yes — split by repo** |
 | **S2a App test implementation** | (1) Same `Idempotency-Key` → same `ingest_id`; (2) different keys → two ingests; (3) missing key → current behavior; (4) correlation header logged; (5) **regression:** error body `{"error","message"}` still holds |
 | **S2a modules** | `tests/test_ingest_idempotency.py`, middleware logging tests; error-shape regression (existing or thin) |
-| **S2b Spring test implementation** | (1) Timeout on delayed stub; (2) CB opens after N 500s; (3) bulkhead rejects excess concurrency; (4) saga: ingest OK then Q&A 500 → no second ingest; (5) idempotency key on retry |
-| **S2b harness** | WireMock / MockWebServer |
-| **CI job** | app **default**; Spring repo CI |
+| **S2b Spring test implementation (as-built)** | WireMock: timeout retry + same key; CB; bulkhead; saga Call 2 500 → one ingest; dual-hop quote; correlation. Classes: `HaystackRecommenderClientTest`, `HaystackRetryIdempotencyTest`, `HaystackCircuitBreakerTest`, `HaystackBulkheadTest`, `RecommenderSagaServiceTest`, `RecommenderSagaWireMockTest` |
+| **S2b harness** | WireMock (Spring repo) |
+| **CI job** | app **default**; Spring repo CI **as-built** |
 | **Stubs** | In-memory idempotency map; HTTP stubs |
 
 ---
@@ -849,8 +850,8 @@ Can partially overlap Phase 7 (SQL fleet tools first; Neo4j tools after populate
 | Step | Work | Where | Exit criteria |
 |------|------|-------|---------------|
 | **8.1 T3** | Job/script `populate-neo4j-from-haystack` — SQL → Cypher MERGE; label namespace vs DocumentStore | Config | **As-built** on pack `develop`: Compose `neo4j-populate` + `populate_neo4j.py`; MERGE by `id`; `:Asset`/`:Booking`/`:Category` isolated from `:Document` |
-| **8.2 T4** | Trigger on successful merge or admin HTTP; never drop DocumentStore labels | Config | Incremental or scoped delete — **remaining** (pack polls every 60s; not hook-on-sync) |
-| **8.3** | Wire real `neo4j_cypher_read` + populate trigger into tool module | App | Agents get graph context when available — **remaining** (S7.2 fake/no-op) |
+| **8.2 T4** | Trigger on successful merge or admin HTTP; never drop DocumentStore labels | Config | **As-built:** post-sync POST to populate URL; admin `POST /v1/populate` on host **8089**; scoped fleet delete; `:Document` never dropped. 60s poll remains T3 safety-net |
+| **8.3** | Wire real `neo4j_cypher_read` + populate trigger into tool module | App | Agents get graph context when available — **remaining** (S7.2 fake/no-op; may call pack HTTP) |
 
 #### Test implementation — Stage S8
 
@@ -961,6 +962,7 @@ Every code-bearing PR **must** use the **PR description template** below (bare m
 | **PR-K** | S4 | Live SQL fleet backend (app) | **Shipped** — D0 map; `FLEET_BACKEND=sql`; `asset_id`=`assets.name`; fake default; **BDD** empty / live-hold |
 | **PR-K2** | S4 | Config T0–T2 as-built stamp | **Docs** — pack already ships 60s sync + allowlist + METRICS; alignment note on table names |
 | **PR-L** | S8.1 T3 | Config `neo4j-populate` | **As-built (config pack)** — SQL→Cypher MERGE; fleet labels isolated; this repo docs stamp only |
+| **PR-M** | S8.2 T4 | Config populate trigger | **As-built (config pack)** — post-sync HTTP + admin `POST /v1/populate` :8089; scoped delete; KG-1 preserved |
 
 ### PR description template (required bare minimum)
 
@@ -1078,7 +1080,7 @@ Normative OpenSpec companions: [`../openspec/specs/project-setup/`](../openspec/
 | **pgvector** | Main / nightly / labeled | S5-I1 live (`RUN_PGVECTOR_TESTS=1`) | **Optional pack as-built** |
 | **neo4j** | Nightly / labeled | S8 | **TARGET** |
 | **config-sync** | Config repo PR | S4 | **TARGET** |
-| **spring-client** | Spring repo PR | S2b | **TARGET** (Spring repo) |
+| **spring-client** | Spring repo CI | S2b | **as-built** (Spring repo) |
 
 ---
 
@@ -1175,10 +1177,12 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | Phase 7 / S7.4 tool-free synthesis | **As-built** — stub Coordinator [8]; empty fleet → `item: null`; no invent |
 | FR-010 service recommend (seed) | **As-built Call 2 MVP** via SessionRecommendService; S7.5 wires graph behind same DTO (`RECOMMEND_VIA_AGENT_GRAPH`) |
 | Phase 7 / S7.7 prompts A–L + tool DI | **As-built** — isolated recommend prompts; Delegator `worker_kind` allowlist; fake catalog inject |
-| Full recommend multi-agent path | S7.0–S7.7 **as-built** (S7.2 fake Neo4j tools); S8.1 T3 populate **as-built (config)**; 8.2–8.3 remain |
+| Full recommend multi-agent path | S7.0–S7.7 **as-built** (S7.2 fake Neo4j tools); S8.1–S8.2 **as-built (config)**; **S8.3** app live tools remain |
+| Phase 8 / S8.2 T4 populate trigger | **As-built (config pack)** — post-sync HTTP + admin `:8089`; scoped delete; KG-1 preserved |
 | Phase 8 / S8.1 T3 Neo4j populate | **As-built (config pack)** — `neo4j-populate` SQL→Cypher MERGE; fleet labels isolated |
 | Pgvector / Neo4j populate | Not in app path |
 | Idempotency-Key on ingest | **As-built S2a** (process-local; multi-replica later) |
+| Phase 2 / S2b Spring client | **As-built** — [heavy-rental-spring-rest-api](https://github.com/Heavy-Rental/heavy-rental-spring-rest-api) client + Resilience4j + saga; plan v2.1.1 |
 | Stage catalog | **Specified** (§3.1) |
 | Per-stage test implementation | **Specified** (§4 each stage + §5–§7) |
 | Default pytest isolation | **As-built** — §7.0; conftest mock embedder dim 384; optional `@pytest.mark.pgvector` only |

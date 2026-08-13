@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Changed (S8.2 / T4 config — 2026-08-13)
+
+- Stamped Phase 8 **8.2 T4** as-built from the [Haystack-Fast-API pack](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API): post-sync populate trigger, admin HTTP `:8089` (`POST /v1/populate`), scoped fleet delete, KG-1 `:Document` never dropped.
+- 60s populate poll remains the T3 safety-net. **S8.3** app live Neo4j tools remain.
+- Feasibility_Study implementation-plan **3.15.0**; dual-plane **2.8.2**. Archive `openspec/changes/archive/2026-08-13-s8-2-t4-neo4j-populate-trigger/`.
+
+### Changed (S2b / Phase 2 Spring — 2026-08-13)
+
+- Stamped **S2b as-built** from [heavy-rental-spring-rest-api `develop`](https://github.com/Heavy-Rental/heavy-rental-spring-rest-api): `HaystackRecommenderClient`, Resilience4j, `RecommenderSagaService`, WireMock pack (canonical plan **v2.1.1**).
+- Haystack Feasibility_Study implementation-plan **3.14.0**. Archive `openspec/changes/archive/2026-08-13-s2b-spring-resilience-stamp/`.
+- Still open: multi-replica S2a store; Spring prod ingest retry flag; C2 `202`/SSE.
+
 ### Changed (S8.1 / T3 config — 2026-08-13)
 
 - Stamped Phase 8 **8.1 T3** as-built from the [Haystack-Fast-API pack](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API): Compose `neo4j-populate`, SQL → Cypher MERGE, fleet labels isolated from DocumentStore.

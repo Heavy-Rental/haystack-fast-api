@@ -8,7 +8,7 @@
 | **Phase** | Phase 2 (main plan) · Track **C1** (resilience study) |
 | **Version** | **2.0.1** |
 | **Date** | 2026-08-12 |
-| **Status** | **Ready to implement** |
+| **Status** | **As-built** in Spring repo — see [heavy-rental-spring-rest-api](https://github.com/Heavy-Rental/heavy-rental-spring-rest-api) plan **v2.1.1** (this export copy may lag) |
 | **Sibling** | S2a haystack — **as-built** (see [`s2a-haystack-dependency.md`](./s2a-haystack-dependency.md)) |
 | **Study** | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) |
 | **Wire** | [`wire-contract-call1-call2.md`](./wire-contract-call1-call2.md) |

@@ -37,6 +37,8 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | — (S7.2 new) | `openspec/changes/archive/2026-08-13-s7-2-neo4j-tools/` | Phase 7 Neo4j tools (templates + populate no-op; K-3 skip) |
 | — (S4 new) | `openspec/changes/archive/2026-08-13-s4-live-sql-fleet-backend/` | Phase 4 app: D0 fleet-read contract + live SQL fleet backend |
 | — (S8.1 new) | `openspec/changes/archive/2026-08-13-s8-1-t3-neo4j-populate/` | Phase 8.1 T3 config pack neo4j-populate as-built stamp |
+| — (S2b new) | `openspec/changes/archive/2026-08-13-s2b-spring-resilience-stamp/` | Phase 2 S2b Spring client/saga as-built stamp |
+| — (S8.2 new) | `openspec/changes/archive/2026-08-13-s8-2-t4-neo4j-populate-trigger/` | Phase 8.2 T4 config post-sync + admin HTTP as-built stamp |
 | `app/agents/prompts.py` | `openspec/spdd/prompts/project-knowledge-agents.md` (index) | OpenSPDD first-class Stage-1 Q&A prompts |
 | `app/agents/recommend_prompts.py` | `openspec/spdd/prompts/recommend-agents.md` (index) | OpenSPDD first-class recommend A–L prompts (S7.7) |
 
@@ -61,6 +63,7 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | S5-I1 pipeline wire (as-built) | Same as FR-IX-028 | `changes/archive/2026-08-12-s5-i1-document-store-pipeline-wire/` |
 | Portal dual-hop (docs) | React project-spec → Call 1 → **Call 2 recommend quote** → React; Call 3 = chatbot Q&A | `AGENTS.md` · recommend + KG contracts · `portal-to-haystack-mapping.md` v2 · impl-plan §1.2.0 |
 | S2a change archive | Idempotency + correlation tasks | `changes/archive/2026-08-12-s2a-ingest-idempotency-correlation/` |
+| S2b (as-built Spring) | Resilience C1 client + saga in heavy-rental-spring-rest-api | Spring plan v2.1.1; impl-plan **3.14.0**; archive `changes/archive/2026-08-13-s2b-spring-resilience-stamp/` |
 | S3 change archive | Agent indexing tool + Coordinator gate | `changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/` |
 | Portal dual-hop (superseded) | Earlier Call 2 = Q&A wording | `changes/2026-08-12-portal-dual-hop-docs/` (**superseded**) |
 | Call 2 recommend + Call 3 Q&A | Breaking renumber | `changes/2026-08-12-call2-recommend-call3-qa/` |
@@ -91,6 +94,7 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | S4 (as-built app) | Fleet LTM read — `FLEET_BACKEND=sql` + `FleetRepository`; D0 map | `specs/spring-entity-repository/fleet-read-contract.md`; `app/repositories/fleet_repository.py`; `tests/test_fleet_repository.py`; impl-plan **Phase 4 / S4 app**; archive `changes/archive/2026-08-13-s4-live-sql-fleet-backend/` |
 | S4 (as-built config T0–T2) | Pack `develop`: 60s poll, `SYNC_TABLE_ALLOWLIST`, METRICS; table-name alignment follow-up | Config repo `Haystack-Fast-API/`; impl-plan **3.12.0**; dual-plane **2.8.0** |
 | S8.1 T3 (as-built config) | `neo4j-populate` SQL→Cypher MERGE; `:Asset`/`:Booking`/`:Category` isolated from `:Document` | Pack spec `005-haystack-neo4j-populate`; impl-plan **3.13.0**; archive `changes/archive/2026-08-13-s8-1-t3-neo4j-populate/` |
+| S8.2 T4 (as-built config) | Post-sync populate trigger + admin HTTP `:8089`; scoped delete; never drop KG-1 | Pack spec 005 T4; impl-plan **3.15.0**; archive `changes/archive/2026-08-13-s8-2-t4-neo4j-populate-trigger/` |
 | FR-001 … FR-053 (+ NFR, demo) | Equipment recommendation parent | `specs/equipment-recommendation/spec.md` |
 | Domain invariants | Domain | `specs/domain/spec.md` |
 | Setup / layering / stack | Project setup | `specs/project-setup/spec.md` |

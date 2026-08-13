@@ -45,7 +45,7 @@ Use **REST multipart/JSON** for uploads and recommender RPCs; orchestrate **mult
 | Stage | Owner | Status |
 |-------|--------|--------|
 | **S2a** | haystack-fast-api | **As-built** — server `Idempotency-Key` + correlation ([`s2a-haystack-dependency.md`](./s2a-haystack-dependency.md)) |
-| **S2b** | Spring Boot | **Ready to implement** — client timeouts, Resilience4j, saga, headers |
+| **S2b** | Spring Boot | **As-built** — client, Resilience4j, saga, headers ([heavy-rental-spring-rest-api](https://github.com/Heavy-Rental/heavy-rental-spring-rest-api)) |
 
 ---
 
