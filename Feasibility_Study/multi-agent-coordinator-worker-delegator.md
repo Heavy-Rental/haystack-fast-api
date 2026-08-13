@@ -2839,6 +2839,7 @@ Indexing gate checklist: validate `user_id` + sources + MIME → run index servi
 | **S4** live SQL fleet | `FLEET_BACKEND=sql` reads `postgres_haystack` via allowlisted ORM | **As-built** (app + config T0–T2) |
 | **S7.2** Neo4j tools | Optional graph templates; K-3 skip; populate no-op | **As-built** (`app/agents/neo4j_tools.py`; live client **S8.3**) |
 | **S8.1 T3** Neo4j populate | Config `neo4j-populate` SQL → Cypher MERGE; fleet labels isolated | **As-built** (config pack `develop`) |
+| **S8.2 T4** populate trigger | Post-sync HTTP + admin `POST /v1/populate` :8089; scoped delete; never drop KG-1 | **As-built** (config pack `develop`) |
 | **S7.3** recommend LangGraph | DAG §10.0.10–§10.0.11: **seq** gate→[5]→plan; **par** across needs (capped); **seq** [6]→[7] within need; barrier [8] | **As-built** |
 | **S7.4** tool-free synthesis | Coordinator **[8]** sequential barrier — A–L; merge tool-backed partitions only | **As-built** (stub merge; A–L prompts **as-built S7.7**) |
 | **S7.5** HTTP Call 2 enrich | Same quote DTO; multi-agent behind `RECOMMEND_VIA_AGENT_GRAPH` (default off) | **As-built** |

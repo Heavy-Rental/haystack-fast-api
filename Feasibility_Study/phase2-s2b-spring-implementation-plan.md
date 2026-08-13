@@ -13,9 +13,9 @@
 | **Stage** | **S2b** — Resilience C1, Spring Boot client half |
 | **Repo** | Spring Boot REST API (portal / domain SoT) |
 | **Canonical implementer doc** | [`../Feasibility_Study_Spring/phase2-s2b-spring-implementation-plan.md`](../Feasibility_Study_Spring/phase2-s2b-spring-implementation-plan.md) |
-| **Version** | **2.0.0** (aligned with Spring export) |
-| **Date** | 2026-08-12 |
-| **Status** | **Ready to implement** (in Spring repo) |
+| **Version** | **2.0.1** (pointer; Spring canonical **2.1.1**) |
+| **Date** | 2026-08-13 |
+| **Status** | **As-built** in [heavy-rental-spring-rest-api `develop`](https://github.com/Heavy-Rental/heavy-rental-spring-rest-api) |
 | **Sibling** | [`phase2-s2a-haystack-implementation-plan.md`](./phase2-s2a-haystack-implementation-plan.md) — **as-built** |
 | **Parent** | [`implementation-plan.md`](./implementation-plan.md) Phase 2 |
 | **Study (haystack copy)** | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) |
@@ -61,15 +61,17 @@ Never re-ingest on Call 2 failure. Full table: [`../Feasibility_Study_Spring/por
 | S2b-4 | Saga + persist `ingest_id` |
 | S2b-5 | Runbook |
 
-## Exit criteria (unchecked until Spring implements)
+## Exit criteria (as-built in Spring — 2026-08-13 verify)
 
-- [ ] Per-op timeouts tested  
-- [ ] CB opens on forced 5xx and recovers  
-- [ ] Bulkhead limits concurrency  
-- [ ] Ingest always sends `Idempotency-Key`; retries reuse key  
-- [ ] Correlation on every call  
-- [ ] Saga does not re-ingest after Q&A failure  
-- [ ] Runbook + WireMock suite green  
+- [x] Per-op timeouts tested  
+- [x] CB opens on forced 5xx and recovers  
+- [x] Bulkhead limits concurrency  
+- [x] Ingest always sends `Idempotency-Key`; retries reuse key  
+- [x] Correlation on every call (`X-Correlation-Id`; `traceparent` deferred)  
+- [x] Saga does not re-ingest after Call 2 recommend failure  
+- [x] Runbook + WireMock suite green  
+
+Canonical checklist + artifact map: Spring `Feasibility_Study_Spring/phase2-s2b-spring-implementation-plan.md` **v2.1.1**. Prod ingest retry remains `haystack.retry.ingest-enabled=false`.  
 
 ---
 
@@ -77,6 +79,7 @@ Never re-ingest on Call 2 failure. Full table: [`../Feasibility_Study_Spring/por
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **2.0.1** | 2026-08-13 | Status → **As-built** (verified Spring `develop` plan v2.1.1 + client/Resilience4j/saga) |
 | **1.2.1** | 2026-08-12 | Pointer version matches Spring export v1.2.1 |
 | **1.2.0** | 2026-08-12 | Portal dual-hop saga summary (Call 1 then Call 2 → React) |
 | **1.1.0** | 2026-08-12 | Pointer to `Feasibility_Study_Spring/` export (full plan + runbook) |

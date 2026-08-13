@@ -63,6 +63,8 @@ Spring Boot (RestClient / WebClient saga)
            → run_recommend_graph → same quote DTO (gate refuse → 400)
        → quote envelope: quoteRef, items[].equipment, rates, estimatedTotal
        → Spring maps Call 2 body back to React as primary response
+       → S2b as-built (Spring): HaystackRecommenderClient + Resilience4j + saga
+         (no re-ingest on Call 2 fail)
        → MUST NOT invent asset_id or rates
        → MUST NOT put tool_traces on this body (S7.6 stays on graph state)
 
@@ -85,7 +87,7 @@ S7.5 as-built: Call 2 HTTP enrich behind RECOMMEND_VIA_AGENT_GRAPH (default off)
 S7.6 as-built: tool_traces role / need_id / duration_ms (not on quote DTO)
 S7.7 as-built: A–L recommend prompts (`app/agents/recommend_prompts.py`) + tool DI / Delegator allowlist
 S8.1 T3 as-built (config): neo4j-populate SQL→Cypher MERGE; fleet labels isolated
-S8.2 T4 TARGET: populate on successful sync / admin HTTP
+S8.2 T4 as-built (config): post-sync POST + admin HTTP :8089; scoped delete; KG-1 preserved
 S8.3 TARGET: live neo4j_cypher_read + trigger_neo4j_populate in this app
 KG-2 equipment stockpile persist tools (Stage 2 / S8.3)
 ```

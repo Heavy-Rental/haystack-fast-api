@@ -22,7 +22,7 @@
 | Call 2 recommend | OpenSpec recommend contract | [`wire-contract-call1-call2.md`](./wire-contract-call1-call2.md) **2.0** |
 | Call 3 Q&A | KG contract `project-knowledge-query.md` | Same wire doc § Call 3 |
 | S2a | `phase2-s2a-*.md` v1.1.2 | [`s2a-haystack-dependency.md`](./s2a-haystack-dependency.md) |
-| S2b | pointer | [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) **2.0** |
+| S2b | pointer | [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) **2.0** — **as-built in Spring repo** (canonical **2.1.1**) |
 
 ```text
 React  POST /api/recommendations/project-spec

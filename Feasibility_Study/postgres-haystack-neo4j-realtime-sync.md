@@ -9,7 +9,7 @@
 | **Document type** | Architecture / infrastructure feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | **2.8.1** |
+| **Version** | **2.8.2** |
 | **Application** | `haystack-fast-api` |
 | **Related specs** | `openspec/specs/project-setup/`, `indexing/`, `knowledge-graph/`, `recommendation-pipeline/`, `dynamic-pricing/`, `equipment-recommendation/` |
 | **Related studies** | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) · [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) · [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) · [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) · [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) · [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) |
@@ -821,7 +821,7 @@ Docker network: heavy-rental-network  (external: true)
 |--------------|----------------------|-----|
 | **D1** Poll ETL primary → Haystack PG | **`postgres-haystack-sync` + FDW merge** | **As-built** (config pack `develop`) |
 | **D2** Near-real-time sync | Interval **60s**; `restart: unless-stopped`; T2 allowlist + METRICS | **As-built** (poll near-RT); true CDC/outbox still optional |
-| **D3** Neo4j projection from Haystack PG | Compose **`neo4j-populate`** + `populate_neo4j.py` (SQL → Cypher MERGE; fleet labels isolated) | **As-built T3**; T4 sync-hook + app 8.3 remain |
+| **D3** Neo4j projection from Haystack PG | Compose **`neo4j-populate`** + post-sync/admin HTTP (T4) | **As-built T3+T4**; app **S8.3** remains |
 | **D4 / I1** pgvector for indexing | Plain `postgres:17` | **No vector extension bootstrap** |
 | External primary | Assumed on `heavy-rental-network` | Ops: ensure REST API compose attaches primary |
 
@@ -856,7 +856,7 @@ heavy-rental-network
 | **T1** | Near-real-time domain sync | **As-built (config pack):** `SYNC_INTERVAL_SECONDS=60`, `postgres-haystack-sync` `restart: unless-stopped`; per-cycle `METRICS` / `duration_ms` / `expected_max_lag_seconds` | **D1→D2** | Changes visible on haystack within ~60s + cycle time |
 | **T2** | Sync hardening | **As-built (config pack):** `SYNC_TABLE_ALLOWLIST` default `asset,booking,category` (`all`/`*` full public). **Follow-up:** align singular pack names with haystack plural ORM tables | **D2** | Deterministic table set; METRICS logs |
 | **T3** | Neo4j populate from Haystack PG | **As-built (config pack):** `populate-neo4j-from-haystack.sh` + `populate_neo4j.py` + Compose `neo4j-populate`; MERGE by `id`; labels `:Asset`/`:Booking`/`:Category`; `:Document` isolated | **D3** | After seed + cycle, Neo4j shows fleet nodes; DocumentStore survives |
-| **T4** | Triggered populate | On **successful** `run_merge` in `sync-from-primary.sh`, invoke populate (or compose `depends_on` + shared volume signal); later: admin HTTP | **D3 continuous** | Each successful sync refreshes graph (or incremental upsert) |
+| **T4** | Triggered populate | **As-built (config pack):** after successful merge, sync POSTs populate URL; admin `POST /v1/populate` on host **8089**; scoped fleet delete; never drop `:Document` | **D3 continuous** | Successful sync refreshes graph; 60s poll is T3 safety-net |
 | **T5** | pgvector (parallel) | Switch `postgres_haystack` image to **`pgvector/pgvector:pg17`** (or init container `CREATE EXTENSION vector`); app env for `PgvectorDocumentStore` | **D4 / I1** | Extension present; indexing smoke write |
 
 ### 11.5 Real-time options ranked for *this* compose
@@ -940,7 +940,7 @@ SOURCE_HOST: postgres-primary
 |----------------------|-------------------------|
 | D1 poll ETL | **Already T0** (`postgres_haystack_sync` + script) |
 | D2 near-real-time | **T1 largely done** (60s + `unless-stopped` on `develop`); **T2** hardening |
-| D3 Neo4j from Haystack PG | **T3 as-built**; **T4** remains |
+| D3 Neo4j from Haystack PG | **T3+T4 as-built** |
 | D4 / I1 pgvector | **T5** (parallel once `postgres_haystack` stable) |
 | R1 agent indexing | App code; uses `postgres_haystack` when I1 done — independent of T3 |
 
@@ -1088,6 +1088,7 @@ SOURCE_HOST: postgres-primary
 | **2.7.4** | 2026-08-12 | Call numbering: Call 2 = recommend/quote; Call 3 = chatbot Q&A |
 | **2.7.5** | 2026-08-12 | §4.5 embedder: query/store dim must match; as-built pytest conftest mock dim 384; optional markers remain TARGET |
 | **2.7.6** | 2026-08-12 | **I0 as-built:** `INDEXING_DOCUMENT_STORE` + `build_document_store()`; ingest still InMemory; I1/I2 remain TARGET |
+| **2.8.2** | 2026-08-13 | **S8.2 T4 as-built (config pack):** post-sync HTTP trigger + admin `:8089`; scoped delete; KG-1 preserved |
 | **2.8.1** | 2026-08-13 | **S8.1 T3 as-built (config pack):** `neo4j-populate` SQL→Cypher MERGE; fleet labels isolated from DocumentStore |
 | **2.8.0** | 2026-08-13 | **S4 T0–T2 as-built (config pack `develop`):** 60s poll, allowlist, METRICS; table-name alignment follow-up |
 | **2.7.9** | 2026-08-13 | **S4 app as-built:** `FLEET_BACKEND=sql` + `FleetRepository`; D0 fleet-read contract |
@@ -1124,7 +1125,7 @@ SOURCE_HOST: postgres-primary
 | Neo4j populate | **Job trigger** after D3/T3 on new primary data; not per-request full rebuild by default |
 | DigitalOcean | **Suitable**; Neo4j self-managed or Aura; pgvector on Managed PG |
 | **Devcontainer today** | **D1 + ~60s poll** (`postgres_haystack_sync` FDW merge); Neo4j up but **no fleet populate from `postgres_haystack`** |
-| **Devcontainer next** | Align allowlist physical names with haystack ORM if needed; **T4** populate-on-sync / admin HTTP; app **S8.3** live Neo4j tools; CDC only if poll SLA insufficient |
+| **Devcontainer next** | Align allowlist physical names with haystack ORM if needed; app **S8.3** live Neo4j tools; CDC only if poll SLA insufficient |
 | Original phase spine | **Keep** as Track D; parallel **Track I** + Track R + **Track T** (§11) |
 | First ship | **R1 + D0–D1**, then **I1**; local: **T0→T1→T3→T4**; not Kafka + free ReAct all at once |
 | Avoid | Dual-write; Neo4j as SoT; SQL-only fleet “vector sync”; free agent MIME routing; blocking ingest on Neo4j; unfiltered multi-tenant retrieve; wiping DocumentStore graph on fleet reload; secondary ANN stores outside Pgvector |

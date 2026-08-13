@@ -420,7 +420,7 @@ When `FLEET_BACKEND=sql`, recommend fleet tools SHALL read Postgres-Haystack via
 
 Recommend-mode SHALL expose allowlisted in-process KG-2 tools `neo4j_cypher_read` and `trigger_neo4j_populate` via `app/agents/neo4j_tools.py` + `tool_factory.py`. `neo4j_cypher_read` MUST accept only named templates (`asset_neighbors`, `assets_by_category`, `compatible_attachments`) and MUST reject free-form `cypher` / `query` / `raw_cypher` / `sql`. An empty backend MUST return `[]`. `trigger_neo4j_populate` MUST return a `job_id` immediately with `blocking=false` and MUST NOT run on the recommend hot path. Delegator K-3: when the Neo4j backend is empty/unavailable, fleet `tool_allowlist` MUST omit `neo4j_cypher_read` and record `skip_tools`; required SQL fleet tools MUST still run. Recommend MUST NOT invent `asset_id` from graph neighbors. Live Neo4j populate remains **S8**. Default CI uses `FakeNeo4jBackend` (no `neo4j` package).
 
-**Status:** **as-built (S7.2)**. Runtime: `neo4j_tools.py`. Tests: `tests/test_neo4j_tools.py`. Config **S8.1 T3** populate job is as-built (`neo4j-populate`); app live client remains **S8.3**.
+**Status:** **as-built (S7.2)**. Runtime: `neo4j_tools.py`. Tests: `tests/test_neo4j_tools.py`. Config **S8.1–S8.2** populate job + post-sync/admin trigger as-built; app live client remains **S8.3**.
 
 #### Scenario: Empty graph returns empty list
 - **GIVEN** a `FakeNeo4jBackend` with no nodes
@@ -726,6 +726,7 @@ Architecture, Ragas pattern, deps, and offline pipeline sketch: [`design.md`](./
 | 0.9.2 | 2026-08-07 | KG as-built pointer; sequential map |
 | 1.0.0 | 2026-08-10 | Migrated to OpenSpec under `openspec/specs/equipment-recommendation/`; architecture/day plan/deployment → design.md |
 | 1.1.0 | 2026-08-12 | **S7.0 + S7.1 as-built:** `RecommendAgentState` + F-2 partition validation; allowlisted fleet/needs tools + DI factory (FR-019b note). Graph (S7.3+) still TARGET. Archives `changes/archive/2026-08-12-s7-0-recommend-agent-state/`, `.../s7-1-fleet-tool-catalog/`. |
+| 1.7.1 | 2026-08-13 | **S8.2 T4 as-built (config pack):** post-sync + admin HTTP populate; KG-1 preserved. Archive `changes/archive/2026-08-13-s8-2-t4-neo4j-populate-trigger/`. |
 | 1.7.0 | 2026-08-13 | **S8.1 T3 as-built (config pack):** `neo4j-populate` SQL→Cypher MERGE; fleet labels isolated. App tools still S7.2 fake (S8.3). Archive `changes/archive/2026-08-13-s8-1-t3-neo4j-populate/`. |
 | 1.6.0 | 2026-08-13 | **S4 as-built (app):** live SQL fleet backend (`FLEET_BACKEND=sql`); D0 `fleet-read-contract.md`. Config T0–T2 remain config-repo. Archive `changes/archive/2026-08-13-s4-live-sql-fleet-backend/`. |
 | 1.5.0 | 2026-08-13 | **S7.2 as-built:** `neo4j_cypher_read` (templates only) + `trigger_neo4j_populate` (non-blocking no-op); K-3 skip when graph empty. Live populate remains S8. Archive `changes/archive/2026-08-13-s7-2-neo4j-tools/`. |

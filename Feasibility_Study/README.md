@@ -23,7 +23,7 @@ These apply across studies unless a study explicitly narrows scope:
 
 | Study | Topic | Version |
 |-------|--------|---------|
-| [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane + Spring multi-call: Call 1 ingest · Call 2 recommend · Call 3 chatbot Q&A. **I0+I1 as-built**. **S4 T0–T2 + app live SQL as-built**. **S8.1 T3 neo4j-populate as-built (config)**. **S7.2 fake Neo4j tools as-built**. | **2.8.1** |
+| [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane + Spring multi-call: Call 1 ingest · Call 2 recommend · Call 3 chatbot Q&A. **I0+I1 as-built**. **S4 T0–T2 + app live SQL as-built**. **S8.1–S8.2 neo4j-populate as-built (config)**. **S7.2 fake Neo4j tools as-built**. | **2.8.2** |
 | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) | Spring ↔ FastAPI wire; Call 1/2/3 saga; resilience C1–C3. | **1.3.2** |
 | [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) | ML pricing as **in-process** agent tool; pricing **Worker** fan-out per need; **S6 tool as-built**; **S7.3 Workers [7]×N as-built**; **S7.5 HTTP flag**. | **1.2.4** |
 | [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) | Synthesis **[8]** → assets + prices (**HTTP Call 2** recommend path). **S7.4 stub [8] as-built**; **S7.5 HTTP enrich as-built**; **S7.7 A–L prompts as-built**; **S7.2 fake Neo4j tools as-built**. | **1.4.7** |
@@ -35,9 +35,9 @@ These apply across studies unless a study explicitly narrows scope:
 
 | Document | Topic | Version |
 |----------|--------|---------|
-| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. **S3 as-built**; **S4 as-built**; **S5-I0+I1 as-built**; **S6 as-built**; **S7.0–S7.7 as-built**; **S8.1 T3 as-built (config)**; **§7.0 default pytest isolation** (mock dim 384). | **3.13.0** |
+| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. **S2a+S2b as-built**; **S3 as-built**; **S4 as-built**; **S5-I0+I1 as-built**; **S6 as-built**; **S7.0–S7.7 as-built**; **S8.1–S8.2 as-built (config)**; **§7.0 default pytest isolation** (mock dim 384). | **3.15.0** |
 | [`phase2-s2a-haystack-implementation-plan.md`](./phase2-s2a-haystack-implementation-plan.md) | **Phase 2 / S2a only** — haystack-fast-api: `Idempotency-Key`, correlation logging, docs. **Implemented** (FR-IX-024/025; §7 test runbook + conftest isolation). | **1.1.3** |
-| [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) | **S2b** Spring client + portal Call 1→2 recommend. Export: [`../Feasibility_Study_Spring/`](../Feasibility_Study_Spring/). | **2.0.0** |
+| [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) | **S2b as-built (Spring repo)** — client, Resilience4j, saga. Pointer; canonical plan **v2.1.1** in Spring. | **2.0.1** |
 
 **Stage S3 (haystack, as-built):** `run_indexing_from_request` + forced `START→index_gate→END` behind `INDEXING_VIA_AGENT_GATE` (default off). OpenSpec FR-IX-026 · archive `openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/`.
 
@@ -67,13 +67,15 @@ These apply across studies unless a study explicitly narrows scope:
 
 **Stage S7.2 (haystack, as-built):** allowlisted `neo4j_cypher_read` (templates only) + `trigger_neo4j_populate` (non-blocking no-op) via `app/agents/neo4j_tools.py`. Empty graph → `[]`; free-form Cypher rejected; Delegator K-3 skips Neo4j so recommend is not blocked. Live populate job is **S8.1 (config)**; app real client remains **S8.3**. OpenSpec archive `openspec/changes/archive/2026-08-13-s7-2-neo4j-tools/`.
 
-**Stage S8.1 / T3 (config pack, as-built):** [Haystack-Fast-API `develop`](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API) Compose service `neo4j-populate` + `populate-neo4j-from-haystack.sh` / `populate_neo4j.py` — SQL → Cypher `MERGE` (`:Asset` / `:Booking` / `:Category`); DocumentStore `:Document` isolated. Spec Kit `specs/005-haystack-neo4j-populate/`. **S8.2 T4** (trigger-on-sync) and **S8.3** (app live tools) remain.
+**Stage S8.1 / T3 (config pack, as-built):** [Haystack-Fast-API `develop`](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API) Compose service `neo4j-populate` + `populate-neo4j-from-haystack.sh` / `populate_neo4j.py` — SQL → Cypher `MERGE` (`:Asset` / `:Booking` / `:Category`); DocumentStore `:Document` isolated. Spec Kit `specs/005-haystack-neo4j-populate/`.
+
+**Stage S8.2 / T4 (config pack, as-built):** After a **successful** merge, sync best-effort `POST`s the populate URL; admin HTTP host **8089** (`POST /v1/populate`, `GET /health`). Rebuild/scoped delete is fleet-label only — never drops KG-1 `:Document`. 60s poll remains a T3 safety-net. **S8.3** (app live tools) remains.
 
 ### Spring Boot handoff package
 
 | Package | Topic | Version |
 |---------|--------|---------|
-| [`../Feasibility_Study_Spring/`](../Feasibility_Study_Spring/) | **Copy into Spring Boot project** — portal mapping (React project-spec → Call 1 then Call 2) + S2b plan + wire + HANDOFF | **2.0.0** |
+| [`../Feasibility_Study_Spring/`](../Feasibility_Study_Spring/) | Spring handoff copy (may lag). **S2b as-built** in [heavy-rental-spring-rest-api](https://github.com/Heavy-Rental/heavy-rental-spring-rest-api) (`Feasibility_Study_Spring` **2.1.0** there). | **2.0.0** (local export) |
 | [`../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../Feasibility_Study_Spring/portal-to-haystack-mapping.md) | Portal → Call 1/2 recommend/3 Q&A | **2.0.0** |
 
 Normative product behaviour remains under [`../openspec/`](../openspec/). Pricing decision log: [`../docs/dynamic-pricing-masterplan.md`](../docs/dynamic-pricing-masterplan.md).
