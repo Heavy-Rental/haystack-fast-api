@@ -322,7 +322,7 @@ The recommend path SHALL run an isolated LangGraph DAG (not the Stage-1 Q&A grap
 
 ### Requirement: Tool-free recommend synthesis (S7.4 as-built)
 
-Coordinator synthesis [8] MUST be tool-free. It SHALL merge `fleet_by_need` + `prices_by_need` into `recommendation.results_by_need` (singular `item` per need). Empty fleet or missing tool-backed prices → `item: null` + warning. MUST NOT invent `asset_id` or write `daily_rate <= 0`. Output shape MUST validate before F-2 apply. Runtime: `app/agents/recommend_synthesis.py` (`synthesize_recommendation`). Stub mode is the CI default; LLM rationale is S7.7.
+Coordinator synthesis [8] MUST be tool-free. It SHALL merge `fleet_by_need` + `prices_by_need` into `recommendation.results_by_need` (singular `item` per need). Empty fleet or missing tool-backed prices → `item: null` + warning. MUST NOT invent `asset_id` or write `daily_rate <= 0`. Output shape MUST validate before F-2 apply. Runtime: `app/agents/recommend_synthesis.py` (`synthesize_recommendation`). Stub mode is the CI default; rationale text comes from `app/agents/recommend_prompts.py` (`stub_recommend_rationale`). Optional LLM rationale (S7.7) may rewrite text only via `apply_rationale_only` — never `asset_id` or rates.
 
 **Status:** **as-built (S7.4)**.
 
@@ -371,6 +371,29 @@ Recommend-graph `tool_traces` SHALL record `role` (`coordinator` \| `delegator` 
 - **WHEN** `run_recommend_graph` completes
 - **THEN** fleet and pricing traces include `need_id`
 - **AND** terminal spans include `duration_ms >= 0`
+
+### Requirement: Recommend prompts A–L + tool DI (S7.7 as-built)
+
+Recommend-mode agents SHALL use isolated A–L prompt contracts in `app/agents/recommend_prompts.py` (`RECOMMEND_SYNTHESIS_*`, `DELEGATOR_POLICY_*`, `PROJECT_WORKER_*`, `FLEET_WORKER_*`, `PRICING_WORKER_*`). Stage-1 Q&A prompts in `app/agents/prompts.py` MUST remain uncontaminated (still forbid invent fleet; MUST NOT name fleet/pricing tools). Coordinator synthesis prompt MUST declare **Tools: none**. Tool DI SHALL inject catalogs via `build_recommend_runtime` / `build_recommend_tool_catalog`. Delegator `worker_kind` MUST be allowlisted (`fleet_worker` \| `pricing_worker`); unknown kinds raise `UnknownWorkerKindError` and MUST NOT be scheduled. `PROJECT_AGENT_MODE=stub` MUST stay deterministic (golden `asset_id` / rates / rationale).
+
+**Status:** **as-built (S7.7)**. Runtime: `recommend_prompts.py`, `tool_factory.py` (`ALLOWED_WORKER_KINDS`, `validate_work_plan`). Tests: `tests/test_recommend_prompts.py`, `tests/test_agent_tool_di.py`. OpenSPDD index: `openspec/spdd/prompts/recommend-agents.md`.
+
+#### Scenario: Q&A prompts still forbid invent fleet
+- **GIVEN** Stage-1 `SYNTHESIS_AGENT_SYSTEM` / `RESEARCH_AGENT_SYSTEM`
+- **WHEN** the prompt contracts are inspected
+- **THEN** they still forbid inventing fleet inventory, rates, or bookings
+- **AND** they do not mention `retrieve_fleet_assets` or `predict_asset_price`
+
+#### Scenario: Recommend synthesis prompt has no tools
+- **GIVEN** `RECOMMEND_SYNTHESIS_SYSTEM`
+- **WHEN** the prompt contract is inspected
+- **THEN** it declares tools: none
+- **AND** it forbids inventing `asset_id` / `daily_rate`
+
+#### Scenario: Delegator rejects unknown worker_kind
+- **GIVEN** a work_plan item with `worker_kind="invent_stock"`
+- **WHEN** `validate_work_plan` or `execute_needs` runs
+- **THEN** `UnknownWorkerKindError` is raised and the item is not scheduled
 
 ### Requirement: Pricing integration (FR-020–FR-024)
 
@@ -655,6 +678,7 @@ Architecture, Ragas pattern, deps, and offline pipeline sketch: [`design.md`](./
 | 0.9.2 | 2026-08-07 | KG as-built pointer; sequential map |
 | 1.0.0 | 2026-08-10 | Migrated to OpenSpec under `openspec/specs/equipment-recommendation/`; architecture/day plan/deployment → design.md |
 | 1.1.0 | 2026-08-12 | **S7.0 + S7.1 as-built:** `RecommendAgentState` + F-2 partition validation; allowlisted fleet/needs tools + DI factory (FR-019b note). Graph (S7.3+) still TARGET. Archives `changes/archive/2026-08-12-s7-0-recommend-agent-state/`, `.../s7-1-fleet-tool-catalog/`. |
+| 1.4.0 | 2026-08-13 | **S7.7 as-built:** isolated A–L recommend prompts + tool DI runtime + Delegator `worker_kind` allowlist. Archive `changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/`. |
 | 1.3.0 | 2026-08-12 | **S7.5 + S7.6 as-built:** Call 2 graph enrich behind `RECOMMEND_VIA_AGENT_GRAPH` (same quote DTO; gate 400); G-1 `tool_traces` duration contract. Archive `changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/`. |
 | 1.2.0 | 2026-08-12 | **S7.3 + S7.4 as-built:** recommend LangGraph DAG (gate → [5] → Delegator → ([6]→[7])×N) + tool-free stub synthesis [8]. HTTP Call 2 still service MVP (S7.5). Archive `changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/`. |
 

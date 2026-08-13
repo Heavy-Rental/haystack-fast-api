@@ -9,7 +9,7 @@
 | **Document type** | Architecture / agent orchestration feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.4.5 |
+| **Version** | 1.4.6 |
 | **Application** | `haystack-fast-api` Multi-Agent Orchestrator (LangGraph) |
 | **Question** | Can the **synthesis** step under Multi-Agent Orchestrator output **recommended assets** and **predicted rent price** grounded in the **uploaded project specification**? |
 | **As-built** | `app/agents/nodes.py` (`make_synthesis_node`), `app/agents/prompts.py`, Stage-1 Q&A only |
@@ -78,7 +78,7 @@ From `SYNTHESIS_AGENT_SYSTEM` / prompts:
 
 **Role vocabulary:** synthesis **[8]** is **Coordinator**-owned and tool-free; **[5]–[7]** are **Workers** (fleet/pricing **fan-out per need**); routing is an **explicit Delegator**; **[4]** is a **forced non-agent gate** under the Coordinator — see [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md).
 
-**Building blocks as-built (S7.0–S7.6):** `RecommendAgentState` + F-2 validation (`app/agents/recommend_state.py`); allowlisted tools via `fleet_tools` + `tool_factory`; recommend DAG (`app/agents/recommend_graph.py` / `recommend_nodes.py`); **stub Coordinator [8]** (`app/agents/recommend_synthesis.py`); Call 2 HTTP enrich behind `RECOMMEND_VIA_AGENT_GRAPH` (`SessionRecommendService`); G-1 `tool_traces` (`recommend_traces.py`). Prompts A–L remain **S7.7**.
+**Building blocks as-built (S7.0–S7.7):** `RecommendAgentState` + F-2 validation (`app/agents/recommend_state.py`); allowlisted tools via `fleet_tools` + `tool_factory`; recommend DAG (`app/agents/recommend_graph.py` / `recommend_nodes.py`); **stub Coordinator [8]** (`app/agents/recommend_synthesis.py`); Call 2 HTTP enrich behind `RECOMMEND_VIA_AGENT_GRAPH` (`SessionRecommendService`); G-1 `tool_traces` (`recommend_traces.py`); **A–L prompts** (`app/agents/recommend_prompts.py`) + `build_recommend_runtime` tool DI. Neo4j tools remain **S7.2**.
 
 **Instruction template:** Coordinator synthesis behavior is defined in C/W/D **§10.2** (**A–L**). **L-1** sequential barrier after need pipelines; **L-2** does not parallel-invent. Multi-need **parallel** fan-out is Delegator/Workers; synthesis is **sequential** merge. **J-3** ranks only priced STM candidates. Fleet via Workers on **`postgres_haystack`←`postgres-primary`** (C/W/D §10.0.5–§10.0.11).
 
@@ -200,6 +200,7 @@ Upload project-spec
 | **1.3.8** | 2026-08-11 | Coordinator **I** context management: merge multi-need task contexts |
 | **1.3.9** | 2026-08-11 | Coordinator **J** decision integration: rank only tool-backed candidates |
 | **1.4.0** | 2026-08-11 | Coordinator **K** workflow: barrier synthesis after fan-out |
+| **1.4.6** | 2026-08-13 | **S7.7 as-built:** A–L Coordinator/Worker prompts + rationale helper; tool-free [8] unchanged |
 | **1.4.5** | 2026-08-12 | **S7.5 as-built:** Call 2 graph enrich behind `RECOMMEND_VIA_AGENT_GRAPH` (same quote DTO) |
 | **1.4.4** | 2026-08-12 | **S7.4 as-built:** stub Coordinator [8] + S7.3 DAG; HTTP Call 2 still MVP (S7.5) |
 | **1.4.3** | 2026-08-12 | Note S7.0/S7.1 as-built building blocks (state + fleet tools); synthesis graph still TARGET |

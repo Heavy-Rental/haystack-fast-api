@@ -1,4 +1,4 @@
-"""LangGraph multi-agent orchestration (Stage 1 + S3 + S6 + S7.0–S7.6)."""
+"""LangGraph multi-agent orchestration (Stage 1 + S3 + S6 + S7.0–S7.7)."""
 
 from app.agents.fleet_tools import (
     TOOL_CHECK_BOOKING_AVAILABILITY,
@@ -30,8 +30,12 @@ from app.agents.recommend_state import (
     validate_state_transition,
 )
 from app.agents.tool_factory import (
+    ALLOWED_WORKER_KINDS,
+    UnknownWorkerKindError,
+    build_recommend_runtime,
     build_recommend_tool_catalog,
     get_recommend_tool,
+    validate_work_plan,
 )
 from app.agents.tools import (
     TOOL_PREDICT_ASSET_PRICE,
@@ -41,6 +45,7 @@ from app.agents.tools import (
 )
 
 __all__ = [
+    "ALLOWED_WORKER_KINDS",
     "ROLE_COORDINATOR",
     "ROLE_DELEGATOR",
     "ROLE_FLEET_WORKER",
@@ -48,6 +53,7 @@ __all__ = [
     "ROLE_PROJECT_WORKER",
     "RecommendAgentState",
     "StateTransitionError",
+    "UnknownWorkerKindError",
     "TOOL_CHECK_BOOKING_AVAILABILITY",
     "TOOL_DECOMPOSE_PROJECT_NEEDS",
     "TOOL_FILTER_FLEET_CANDIDATES",
@@ -59,6 +65,7 @@ __all__ = [
     "build_indexing_gate_graph",
     "build_project_knowledge_graph",
     "build_recommend_graph",
+    "build_recommend_runtime",
     "build_recommend_tool_catalog",
     "empty_recommend_state",
     "get_recommend_tool",
@@ -70,4 +77,5 @@ __all__ = [
     "synthesize_recommendation",
     "validate_recommendation_shape",
     "validate_state_transition",
+    "validate_work_plan",
 ]

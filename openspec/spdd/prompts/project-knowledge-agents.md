@@ -11,6 +11,8 @@
 
 Stage 1 tools only: `project_vector_search`, `project_kg_query`. **No** equipment inventory / KG-2.
 
+Recommend-mode A–L prompts (S7.7) live separately: [`recommend-agents.md`](./recommend-agents.md).
+
 ---
 
 ## Intents & tool allowlists
