@@ -340,7 +340,7 @@ Coordinator synthesis [8] MUST be tool-free. It SHALL merge `fleet_by_need` + `p
 
 ### Requirement: Call 2 multi-agent enrich (S7.5 as-built)
 
-`POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` SHALL keep the as-built quote DTO (`quoteRef`, `items[]`). When `RECOMMEND_VIA_AGENT_GRAPH` is **false** (default), Call 2 uses `RecommendationService` MVP. When **true**, `SessionRecommendService` SHALL run `run_recommend_graph` and map `results_by_need` onto the same quote. A registered session implies `indexing_ok=true` unless `session.meta.indexing_ok` is false. Gate refuse MUST return **400** shared error JSON. Missing session remains **404**. MUST NOT invent `equipment.id` or rates. MUST NOT put `tool_traces` or Q&A `answer` on the quote body.
+`POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` SHALL keep the as-built quote DTO (`quoteRef`, `items[]`). Each returned item MUST include **`mlPredictedPrice`** (predicted daily rate from `pricing_client` / `predict_price`) and `equipment.baseDailyRate` MUST equal that value. When `RECOMMEND_VIA_AGENT_GRAPH` is **false** (default), Call 2 uses `RecommendationService` MVP. When **true**, `SessionRecommendService` SHALL run `run_recommend_graph` and map `results_by_need` onto the same quote. A registered session implies `indexing_ok=true` unless `session.meta.indexing_ok` is false. Gate refuse MUST return **400** shared error JSON. Missing session remains **404**. MUST NOT invent `equipment.id` or rates. MUST NOT put `tool_traces` or Q&A `answer` on the quote body.
 
 **Status:** **as-built (S7.5)**. Runtime: `app/services/session_recommend.py`. Config: `RECOMMEND_VIA_AGENT_GRAPH`.
 
@@ -769,6 +769,7 @@ Architecture, Ragas pattern, deps, and offline pipeline sketch: [`design.md`](./
 | 0.9.2 | 2026-08-07 | KG as-built pointer; sequential map |
 | 1.0.0 | 2026-08-10 | Migrated to OpenSpec under `openspec/specs/equipment-recommendation/`; architecture/day plan/deployment → design.md |
 | 1.1.0 | 2026-08-12 | **S7.0 + S7.1 as-built:** `RecommendAgentState` + F-2 partition validation; allowlisted fleet/needs tools + DI factory (FR-019b note). Graph (S7.3+) still TARGET. Archives `changes/archive/2026-08-12-s7-0-recommend-agent-state/`, `.../s7-1-fleet-tool-catalog/`. |
+| 1.9.1 | 2026-08-13 | Call 2 quote: `items[].mlPredictedPrice` as-built (same daily rate as `equipment.baseDailyRate`). |
 | 1.9.0 | 2026-08-13 | **S7.8 as-built:** Worker [5] live `project_vector_search` + `project_kg_query` before decompose; soft-fail notes. Archive `changes/archive/2026-08-13-s7-8-worker5-kg1-live/`. |
 | 1.8.0 | 2026-08-13 | **S8.3 as-built:** live `BoltNeo4jBackend` + populate HTTP enqueue behind `NEO4J_BACKEND=bolt` (default fake); K-3 on unavailable; `@pytest.mark.neo4j`. Archive `changes/archive/2026-08-13-s8-3-live-neo4j-tools/`. |
 | 1.7.1 | 2026-08-13 | **S8.2 T4 as-built (config pack):** post-sync + admin HTTP populate; KG-1 preserved. Archive `changes/archive/2026-08-13-s8-2-t4-neo4j-populate-trigger/`. |

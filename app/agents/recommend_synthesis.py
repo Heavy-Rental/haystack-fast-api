@@ -120,6 +120,8 @@ def _pick_item(
                 "total_price": price.get("total_price"),
                 "currency": price.get("currency") or "SGD",
                 "model_version": price.get("model_version"),
+                "explanation": price.get("explanation"),
+                "was_clamped": price.get("was_clamped"),
             },
             "availability": cand.get("availability") or "available",
         }

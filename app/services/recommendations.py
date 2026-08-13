@@ -186,6 +186,7 @@ class RecommendationService:
                 deposit_rate=float(pricing_raw.get("deposit_rate") or 0.30),
                 model_version=pricing_raw.get("model_version"),
                 explanation=pricing_raw.get("explanation"),
+                was_clamped=pricing_raw.get("was_clamped"),
             )
 
         item = RecommendationItem(

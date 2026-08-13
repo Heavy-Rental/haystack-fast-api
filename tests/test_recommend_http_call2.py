@@ -147,6 +147,12 @@ def test_flag_on_http_quote_shape(monkeypatch: pytest.MonkeyPatch) -> None:
         asset_id = item["equipment"]["id"]
         assert asset_id
         assert str(asset_id).startswith("AST-")
+        predicted = item.get("mlPredictedPrice")
+        assert predicted is not None and float(predicted) > 0
+        assert item["equipment"]["baseDailyRate"] == predicted
+        assert str(item["equipment"].get("extra", {}).get("model_version") or "").startswith(
+            "prod-"
+        )
 
 
 def test_flag_off_does_not_invoke_graph(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -208,6 +214,8 @@ def test_multi_need_golden_asset_ids_and_rates() -> None:
         assert item.equipment.id == row["equipment"]["id"]
         assert item.equipment.name == row["equipment"]["name"]
         assert item.equipment.baseDailyRate == row["equipment"]["baseDailyRate"]
+        assert item.mlPredictedPrice == row["equipment"]["baseDailyRate"]
+        assert item.mlPredictedPrice is not None and item.mlPredictedPrice > 0
 
 
 def test_missing_session_404_with_flag_on(monkeypatch: pytest.MonkeyPatch) -> None:

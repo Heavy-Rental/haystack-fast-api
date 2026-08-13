@@ -44,7 +44,8 @@ Chatbot Q&A is **Call 3**: `POST .../project-knowledge/query`.
 | `specSummary` | From Call 1 session `user_requirement_summary` |
 | `rationale` | Merged item rationales (tool-backed) |
 | `items[]` | Ranked equipment; `equipment.id` = catalog `asset_id` only |
-| `items[].equipment.baseDailyRate` | From `predict_price` path when available |
+| `items[].mlPredictedPrice` | Predicted **daily** rate from `pricing_client` / `predict_price` (required when item is returned) |
+| `items[].equipment.baseDailyRate` | Same value as `mlPredictedPrice` (compat) |
 | `warnings` | Soft issues / no-match |
 
 ### Example
@@ -68,6 +69,7 @@ Chatbot Q&A is **Call 3**: `POST .../project-knowledge/query`.
       "lineTotal": 2220.0,
       "quantity": 1,
       "needId": "need_1__u1",
+      "mlPredictedPrice": 185.0,
       "equipment": {
         "id": "AST-SL-001",
         "name": "Scissors Lift",

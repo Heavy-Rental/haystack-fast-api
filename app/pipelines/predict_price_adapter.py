@@ -71,6 +71,7 @@ class PredictPriceAdapter:
                     "deposit_rate": price.deposit_rate,
                     "model_version": price.model_version,
                     "explanation": price.explanation,
+                    "was_clamped": price.was_clamped,
                 }
             else:
                 candidate["pricing"] = None

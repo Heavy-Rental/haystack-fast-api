@@ -74,7 +74,7 @@ See lean FR-IX-023 fields in [`call1-ingest-response-for-spring.md`](./call1-ing
 | `quoteRef` | `QUO-…` |
 | `confidenceScore`, `days`, `estimatedTotal` | When known |
 | `specSummary`, `rationale` | From session / synthesis |
-| `items[]` | `rankOrder`, `equipment.id`, `baseDailyRate`, `lineTotal`, … |
+| `items[]` | `rankOrder`, `equipment.id`, `mlPredictedPrice`, `baseDailyRate`, `lineTotal`, … |
 | `warnings` | Soft issues |
 
 **Not on Call 2:** Q&A `answer` / tool_traces (use Call 3).

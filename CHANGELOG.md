@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed (Call 2 predicted price on each item)
+
+- Call 2 quote items now include `mlPredictedPrice` (production `pricing_client` / `predict_price` daily rate). Same value as `equipment.baseDailyRate`. `was_clamped` / `explanation` pass through `equipment.extra`.
+- Pricing Worker [7] forwards a live SQL session to `predict_asset_price` when `FLEET_BACKEND=sql`.
+- Docs stamp: OpenSpec Call 2 contract + equipment-recommendation 1.9.1; Feasibility_Study implementation-plan **3.17.1**.
+
 ### Added (S7.8 / Worker [5] KG-1 — 2026-08-13)
 
 - Project Worker [5] calls session-bound `project_vector_search` and `project_kg_query` before `decompose_project_needs`.

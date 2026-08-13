@@ -410,6 +410,7 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | Recommend agent state (S7.0) | `RecommendAgentState` + F-2 validation | Partition ownership used by S7.3 nodes |
 | Recommend LangGraph + stub synthesis (S7.3/S7.4) | Isolated DAG + tool-free [8] | Invoked from Call 2 when `RECOMMEND_VIA_AGENT_GRAPH` (S7.5) |
 | Call 2 multi-agent enrich (S7.5) | Same quote DTO; flag default off | Gate refuse → 400; traces stay off the body (S7.6) |
+| Call 2 predicted price | `items[].mlPredictedPrice` + `equipment.baseDailyRate` | Production `predict_price` daily rate; never invent |
 
 ---
 
@@ -434,6 +435,7 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | **1.2.0** | 2026-08-07 | Spec reconcile: live HTTP indexing vs service FR-010 |
 | **1.2.1** | 2026-08-07 | Sequential README; live path notes user_id + mandatory KG |
 | **2.0.0** | 2026-08-10 | Migrated to OpenSpec Requirement/Scenario + design REASONS under `openspec/specs/recommendation-pipeline/` |
+| **2.6.0** | 2026-08-13 | Call 2 quote: `items[].mlPredictedPrice` as-built (same daily rate as `equipment.baseDailyRate`) |
 | **2.5.0** | 2026-08-13 | S4 app: live SQL fleet backend (`FLEET_BACKEND=sql`); DTO sql path unchanged |
 | **2.4.0** | 2026-08-13 | S7.2 as-built: Neo4j template tools + populate no-op; recommend not blocked when graph empty |
 | **2.1.0** | 2026-08-12 | Key decisions: S7.0 RecommendAgentState + S7.1 fleet tool catalog as-built (agent path building blocks; Call 2 MVP unchanged) |

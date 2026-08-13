@@ -110,14 +110,34 @@ def map_recommend_to_quote(
         total = item.pricing.total_price if item.pricing else None
         if total is None and daily is not None and days is not None:
             total = float(daily) * float(days)
+        if daily is not None:
+            has_price = True
         if total is not None:
             estimated += float(total)
-            has_price = True
         if item.rationale:
             rationales.append(str(item.rationale))
         score = 1.0 / float(rank) if rank else None
         if item.rank is not None and item.rank > 0:
             score = 1.0 / float(item.rank)
+        extra = {
+            k: v
+            for k, v in {
+                "availability": item.availability,
+                "currency": (item.pricing.currency if item.pricing else None),
+                "model_version": (
+                    item.pricing.model_version if item.pricing else None
+                ),
+                "was_clamped": (
+                    item.pricing.was_clamped
+                    if item.pricing and item.pricing.was_clamped is not None
+                    else None
+                ),
+                "explanation": (
+                    item.pricing.explanation if item.pricing else None
+                ),
+            }.items()
+            if v is not None
+        }
         items.append(
             RecommendQuoteItem(
                 rankOrder=rank,
@@ -126,25 +146,14 @@ def map_recommend_to_quote(
                 lineTotal=total,
                 quantity=1,
                 needId=need_result.need_id,
+                mlPredictedPrice=daily,
                 equipment=EquipmentQuote(
                     id=item.asset_id,
                     name=item.equipment_type,
                     category=item.equipment_type,
                     baseDailyRate=daily,
                     weekly=None,
-                    extra={
-                        k: v
-                        for k, v in {
-                            "availability": item.availability,
-                            "currency": (
-                                item.pricing.currency if item.pricing else None
-                            ),
-                            "model_version": (
-                                item.pricing.model_version if item.pricing else None
-                            ),
-                        }.items()
-                        if v is not None
-                    },
+                    extra=extra,
                 ),
             )
         )
