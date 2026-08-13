@@ -9,4 +9,10 @@ from app.models.asset_category import AssetCategory
 from app.models.booking import Booking
 from app.models.booking_item import BookingItem
 
-__all__ = ["Asset", "AssetCategory", "Base", "Booking", "BookingItem"]
+__all__ = [
+    "Asset",
+    "AssetCategory",
+    "Base",
+    "Booking",
+    "BookingItem",
+]

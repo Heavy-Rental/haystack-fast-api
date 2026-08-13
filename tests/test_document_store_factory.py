@@ -12,8 +12,10 @@ from app.pipelines.indexing.document_store import (
     PGVECTOR_TABLE_NAME,
     build_document_store,
     create_session_document_store,
+    embedding_dimension_mismatch_message,
     get_document_store,
     normalize_document_store_mode,
+    parse_pgvector_type,
     reset_document_store,
 )
 
@@ -167,6 +169,49 @@ def test_create_session_document_store_memory_is_fresh() -> None:
     assert isinstance(a, InMemoryDocumentStore)
     assert isinstance(b, InMemoryDocumentStore)
     assert a is not b
+
+
+def test_parse_pgvector_type() -> None:
+    assert parse_pgvector_type("vector(384)") == 384
+    assert parse_pgvector_type("vector(768)") == 768
+    assert parse_pgvector_type("public.vector(768)") == 768
+    assert parse_pgvector_type("text") is None
+    assert parse_pgvector_type("") is None
+
+
+def test_embedding_dimension_mismatch_message_mentions_override() -> None:
+    msg = embedding_dimension_mismatch_message(existing=384, configured=768)
+    assert "vector(384)" in msg
+    assert "INDEXING_EMBEDDING_DIM=768" in msg
+    assert "INDEXING_EMBEDDING_DIM=384" in msg
+    assert PGVECTOR_TABLE_NAME in msg
+
+
+def test_build_document_store_pgvector_rejects_column_dim_mismatch() -> None:
+    fake_cls = MagicMock(name="PgvectorDocumentStore")
+    with (
+        patch(
+            "haystack_integrations.document_stores.pgvector.PgvectorDocumentStore",
+            fake_cls,
+            create=True,
+        ),
+        patch(
+            "app.pipelines.indexing.document_store.existing_pgvector_embedding_dim",
+            return_value=384,
+        ),
+    ):
+        with pytest.raises(ValueError, match="vector\\(384\\)"):
+            build_document_store(
+                mode="pgvector",
+                settings=Settings(
+                    indexing_document_store="pgvector",
+                    indexing_embedding_dim=768,
+                    database_url_override=(
+                        "postgresql+psycopg://user:pass@host:5432/heavy_rental"
+                    ),
+                ),
+            )
+    fake_cls.assert_not_called()
 
 
 def test_build_document_store_pgvector_uses_stable_table() -> None:

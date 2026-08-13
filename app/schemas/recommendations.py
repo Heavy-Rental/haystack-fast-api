@@ -114,10 +114,23 @@ class RecommendationItem(BaseModel):
 
     equipment_type: str | None = None
     asset_id: str | None = None
+    fleet_id: int | None = Field(
+        default=None,
+        description="assets.id (PK) when the row came from the assets table",
+    )
+    name: str | None = Field(
+        default=None,
+        description="assets.name when known; otherwise same as asset_id",
+    )
     rank: int | None = None
+    match_score: float | None = Field(
+        default=None,
+        description="0..1 evidence match (category, height, available, priced)",
+    )
     rationale: str | None = None
     pricing: PricingPayload | None = None
     availability: Literal["available", "unavailable", "unknown"] | str = "unknown"
+    platform_height: float | None = None
 
 
 class NeedResult(BaseModel):

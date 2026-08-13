@@ -17,7 +17,10 @@ from haystack.components.retrievers.in_memory import InMemoryEmbeddingRetriever
 from haystack.document_stores.in_memory import InMemoryDocumentStore
 from haystack.utils import Secret
 
-from app.pipelines.indexing.embedder_factory import EmbedderMode
+from app.pipelines.indexing.embedder_factory import (
+    EmbedderMode,
+    openai_embedding_dimensions,
+)
 
 
 def build_text_embedder(
@@ -39,6 +42,9 @@ def build_text_embedder(
             "model": openai_model,
             "progress_bar": False,
         }
+        dims = openai_embedding_dimensions(openai_model, dimension)
+        if dims is not None:
+            kwargs["dimensions"] = dims
         if openai_api_key:
             kwargs["api_key"] = Secret.from_token(openai_api_key)
         if openai_base_url:

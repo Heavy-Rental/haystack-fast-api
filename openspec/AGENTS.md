@@ -58,7 +58,9 @@ Spring Boot (RestClient / WebClient saga)
   └─ Call 2 RECOMMEND (portal project-spec submit second hop) ───────
      POST /internal/v1/recommendations/project-knowledge/getassetrecommendations
        body: user_id + ingest_id + optional query
-       SessionRecommendService → RecommendationService (seed fleet + pricing)
+       SessionRecommendService → RecommendationService
+         FLEET_BACKEND=sql: assets table (quote equipment.id = assets.id)
+         FLEET_BACKEND=fake (CI): seed catalog
          optional S7.5: RECOMMEND_VIA_AGENT_GRAPH=true
            → run_recommend_graph → same quote DTO (gate refuse → 400)
        → quote envelope: quoteRef, items[].equipment, rates, estimatedTotal
@@ -109,7 +111,7 @@ KG-2 FR-KG-011 as-built: persist = pack T3/T4; load = app S8.3
 | **4** | [`specs/project-setup/spec.md`](./specs/project-setup/spec.md) | Stack, env, layering (behaviour); **default pytest isolation** |
 | **5** | [`specs/project-setup/design.md`](./specs/project-setup/design.md) | Layout, uv runbooks, `conftest` isolation table |
 
-**Pytest (as-built):** `uv run pytest` / `uv run pytest tests/ -q` is the full default suite — **no** optional markers or external prereqs. `tests/conftest.py` forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `INDEXING_DOCUMENT_STORE=memory`, `RECOMMEND_VIA_AGENT_GRAPH=false`, `FLEET_BACKEND=fake`, `PROJECT_AGENT_MODE=stub`, and a temp `KG_ARTIFACT_DIR`. Query embedders for vector tools must match the session store dimension (see knowledge-graph + indexing specs).
+**Pytest (as-built):** `uv run pytest` / `uv run pytest tests/ -q` is the full default suite — **no** optional markers or external prereqs. `tests/conftest.py` forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `INDEXING_DOCUMENT_STORE=memory`, `RECOMMEND_VIA_AGENT_GRAPH=false`, `FLEET_BACKEND=fake`, `NEED_DECOMPOSER=stub`, `PRICING_SCHEMA=primary_snapshot`, `PROJECT_AGENT_MODE=stub`, `NEO4J_BACKEND=fake`, and a temp `KG_ARTIFACT_DIR`. Query embedders for vector tools must match the session store dimension (see knowledge-graph + indexing specs).
 
 ---
 

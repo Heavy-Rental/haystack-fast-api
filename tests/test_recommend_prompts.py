@@ -147,7 +147,8 @@ def test_stub_rationale_helper_matches_golden_prefix() -> None:
         description="Need scissor lift for 8m access",
         asset_id="AST-SL-001",
     )
-    assert rationale == "Stub merge: Need scissor lift for 8m access → AST-SL-001."
+    assert rationale.startswith("Matched")
+    assert "AST-SL-001" in rationale
 
 
 def test_llm_shaped_payload_cannot_inject_unknown_asset() -> None:
@@ -155,7 +156,7 @@ def test_llm_shaped_payload_cannot_inject_unknown_asset() -> None:
     item = {
         "asset_id": "AST-SL-001",
         "rank": 1,
-        "rationale": "Stub merge: Need scissor lift for 8m access → AST-SL-001.",
+        "rationale": "Matched need to AST-SL-001 (category unknown).",
         "pricing": {"daily_rate": 185.0, "total_price": 2590.0, "currency": "SGD"},
     }
     tainted = {

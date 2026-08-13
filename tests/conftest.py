@@ -23,7 +23,9 @@ def _isolate_kg_artifact_dir(
     monkeypatch.setenv("INDEXING_DOCUMENT_STORE", "memory")
     monkeypatch.setenv("RECOMMEND_VIA_AGENT_GRAPH", "false")
     monkeypatch.setenv("FLEET_BACKEND", "fake")
+    monkeypatch.setenv("PRICING_SCHEMA", "primary_snapshot")
     monkeypatch.setenv("NEO4J_BACKEND", "fake")
+    monkeypatch.setenv("NEED_DECOMPOSER", "stub")
     get_settings.cache_clear()
     from app.services.ingest_idempotency import reset_ingest_idempotency_store
     from app.services.project_knowledge_session import reset_project_knowledge_registry

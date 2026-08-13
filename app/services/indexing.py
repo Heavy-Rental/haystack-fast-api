@@ -43,6 +43,55 @@ logger = logging.getLogger(__name__)
 
 USER_REQUIREMENT_SUMMARY_MAX_CHARS = 1000
 
+# Spring/Postman file-caption placeholders — not project requirements.
+_PLACEHOLDER_PROJECT_TEXTS = frozenset(
+    {
+        "optional caption alongside file",
+    }
+)
+
+
+def is_placeholder_project_text(value: object) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return True
+    return text.lower() in _PLACEHOLDER_PROJECT_TEXTS
+
+
+def merge_ingest_source(
+    project_text: str | None,
+    file_text: str | None,
+    *,
+    separator: str = "\n\n",
+) -> str:
+    """File extract first, then real project_text (skip caption placeholders)."""
+    parts: list[str] = []
+    file_part = str(file_text or "").strip()
+    if file_part:
+        parts.append(file_part)
+    if not is_placeholder_project_text(project_text):
+        parts.append(str(project_text).strip())
+    return separator.join(parts)
+
+
+def _reraise_embedding_dimension_error(exc: BaseException) -> None:
+    """Map pgvector / Haystack dim mismatches to a client-visible 400."""
+    text = str(exc)
+    lowered = text.lower()
+    if "dimension" not in lowered:
+        return
+    if not any(token in lowered for token in ("expected", "vector(", "pgvector", "embedding")):
+        return
+    raise BadRequestError(
+        "Embedding dimension mismatch between the embedder and "
+        "PgvectorDocumentStore. "
+        f"{text} "
+        "INDEXING_EMBEDDING_DIM must match the existing "
+        "indexing_project_chunks.embedding column "
+        "(process env overrides .env; drop the table to recreate it "
+        "at a new dimension)."
+    ) from exc
+
 
 def byte_stream_from_upload(
     *,
@@ -152,11 +201,20 @@ def _build_user_requirement_summary(
     return truncated, warnings
 
 
+def _strip_placeholder_lines(text: str) -> str:
+    kept = [
+        line
+        for line in text.replace("\r\n", "\n").split("\n")
+        if not is_placeholder_project_text(line)
+    ]
+    return "\n".join(kept).strip()
+
+
 def _extract_text_from_documents(documents: list[Document]) -> str:
     parts: list[str] = []
     for doc in documents:
-        content = (doc.content or "").strip()
-        if content:
+        content = _strip_placeholder_lines(doc.content or "")
+        if content and not is_placeholder_project_text(content):
             parts.append(content)
     return "\n\n".join(parts)
 
@@ -246,18 +304,22 @@ class IndexingIngestService:
 
         # I1: factory-backed session store (memory = fresh InMemory; pgvector = shared).
         # When tests inject a pipeline/store, reuse so registry matches writes.
-        if self._document_store is not None:
-            session_store = self._document_store
-            pipeline = self._pipeline or _build_pipeline_for_store(session_store)
-        elif self._pipeline is not None:
-            pipeline = self._pipeline
-            session_store = (
-                _document_store_from_pipeline(pipeline)
-                or create_session_document_store(settings=settings)
-            )
-        else:
-            session_store = create_session_document_store(settings=settings)
-            pipeline = _build_pipeline_for_store(session_store)
+        try:
+            if self._document_store is not None:
+                session_store = self._document_store
+                pipeline = self._pipeline or _build_pipeline_for_store(session_store)
+            elif self._pipeline is not None:
+                pipeline = self._pipeline
+                session_store = (
+                    _document_store_from_pipeline(pipeline)
+                    or create_session_document_store(settings=settings)
+                )
+            else:
+                session_store = create_session_document_store(settings=settings)
+                pipeline = _build_pipeline_for_store(session_store)
+        except ValueError as exc:
+            _reraise_embedding_dimension_error(exc)
+            raise
 
         sources: list[ByteStream | str | Path] = []
         if file_sources:
@@ -294,7 +356,11 @@ class IndexingIngestService:
                 "project_text or file must provide at least one non-empty source"
             )
 
-        out = run_indexing_pipeline(pipeline, sources=sources)
+        try:
+            out = run_indexing_pipeline(pipeline, sources=sources)
+        except Exception as exc:  # noqa: BLE001
+            _reraise_embedding_dimension_error(exc)
+            raise
 
         unclassified_count = int(out.get("unclassified_count") or 0)
         structured_count = int(out.get("structured_count") or 0)
@@ -391,14 +457,10 @@ class IndexingIngestService:
         kg_transform_applied = kg_result.kg_transform_applied
         # KG soft warnings stay internal/log; hard-fail already handled above.
 
-        # Prefer request project_text; else extracted document content (not raw bytes).
-        summary_source = ""
-        if project_text is not None and str(project_text).strip():
-            summary_source = str(project_text)
-        else:
-            summary_source = _extract_text_from_documents(
-                joiner_docs or embedded_docs
-            )
+        # File extract first, then real project_text. Ignore caption placeholders
+        # such as "Optional caption alongside file" so needs_summary sees the brief.
+        file_extract = _extract_text_from_documents(joiner_docs or embedded_docs)
+        summary_source = merge_ingest_source(project_text, file_extract)
         user_requirement_summary, summary_warnings = _build_user_requirement_summary(
             summary_source
         )

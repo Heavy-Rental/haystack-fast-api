@@ -98,6 +98,8 @@ uv run pytest tests/ -q
 | `INDEXING_EMBEDDING_DIM` | `384` | Override host dims (e.g. 768); keep mock store/query aligned |
 | `RECOMMEND_VIA_AGENT_GRAPH` | `false` | Call 2 stays on MVP unless a test opts in |
 | `FLEET_BACKEND` | `fake` | No live fleet SQL |
+| `NEED_DECOMPOSER` | `stub` | No live LLM need split |
+| `PRICING_SCHEMA` | `primary_snapshot` | No live `public` schema translate |
 | `NEO4J_BACKEND` | `fake` | No live Bolt |
 
 Also resets process-local ingest idempotency store and project-knowledge session registry per test, and clears `get_settings` cache.

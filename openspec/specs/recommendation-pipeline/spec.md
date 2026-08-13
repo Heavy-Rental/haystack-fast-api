@@ -41,7 +41,7 @@ Define and record the **MVP recommendation pipeline** inside `haystack-fast-api`
 
 ## Outcomes
 
-- A valid free-text or file request can return **non-null** `item` values with equipment type, `asset_id`, `rank`, `rationale`, `pricing`, and `availability` when the seed catalog matches (service path).
+- A valid free-text or file request can return **non-null** `item` values with equipment type, `asset_id`, `rank`, `rationale`, `pricing`, and `availability` when the catalog matches (service path). CI uses the seed catalog; Call 2 HTTP with `FLEET_BACKEND=sql` reads live `assets` (no silent seed fallback).
 - No-match / empty availability paths return `item: null` with warnings (Scenario C style).
 - Responses only recommend **Boom Lift, Scissors Lift, Fork Lift, Excavator** (**FR-011**).
 - `RecommendationItem` has **no `quantity`**; multi-unit requests are multiple unit-need rows (**FR-006**).
@@ -397,7 +397,7 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Fleet source MVP | In-memory seed | No Spring models yet; SPEC allows seed subset |
+| Fleet source MVP | In-memory seed in **CI** (`FLEET_BACKEND=fake`) | Live Call 2 uses `FLEET_BACKEND=sql` + `assets` table; no silent seed fallback |
 | Pricing source | Production `app/services/pricing/` via `pricing_client` | FR-020/022 as-built (Phase 2b); ml-experiments prototype retired |
 | Public pricing fields | `daily_rate` + `total_price` (not `weekly_rate = daily × 7`) | Duration is a model input; fabricated weekly misquotes; mockup “Estimated total” |
 | Async route + sync service | `run_in_threadpool` at router | FR-P-012 / parent NFR-008; LLM sync httpx must not block ASGI loop |
@@ -405,7 +405,8 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | Unit loop vs one giant graph | Service loop for 4–8 | Matches parent architecture; easier testing |
 | Production pricing swap | Single `pricing_client` module | FR-022; agent tool `predict_asset_price` (S6) shares entrypoint |
 | Agent fleet tools (S7.1) | In-process allowlist via `fleet_tools` + `tool_factory` | Fake seed default; SQL DTO backend; free-form SQL rejected; invoked from S7.3 graph |
-| Live SQL fleet (S4 app) | `FLEET_BACKEND=sql` → `FleetRepository` | `asset_id` = `assets.name`; live-hold bookings; fake remains CI default |
+| Live SQL fleet (S4 app) | `FLEET_BACKEND=sql` → `FleetRepository` | DTO `asset_id` = `assets.name`; quote `equipment.id` = `assets.id`; live-hold bookings; fake remains CI default |
+| Fleet/pricing schema | `PRICING_SCHEMA` | `primary_snapshot` default / CI; `public` live via `schema_translate_map` (not KG-1 / pgvector) |
 | Agent Neo4j tools (S7.2 + S8.3) | Templates + `NEO4J_BACKEND=fake\|bolt`; populate HTTP | Empty/unavailable → []; K-3 skip; live POST `NEO4J_POPULATE_URL` |
 | Recommend agent state (S7.0) | `RecommendAgentState` + F-2 validation | Partition ownership used by S7.3 nodes |
 | Recommend LangGraph + stub synthesis (S7.3/S7.4) | Isolated DAG + tool-free [8] | Invoked from Call 2 when `RECOMMEND_VIA_AGENT_GRAPH` (S7.5) |
@@ -418,7 +419,7 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 
 | # | Question | Resolve by |
 |---|----------|------------|
-| 1 | Map seed assets to real Spring `Asset` tables | When ORM models land |
+| 1 | Map seed assets to real Spring `Asset` tables | **As-built** for Call 2 / `FLEET_BACKEND=sql` (quote `equipment.id` = `assets.id`). Seed catalog remains CI (`FLEET_BACKEND=fake`) only. |
 | 2 | Train/commit `model.pkl` for CI experimental pricing | Pricing team / artifact policy |
 | 3 | LLM-generated rank rationale | Optional follow-on; template is MVP |
 | 4 | AsyncPipeline for price ∥ availability | Parent open question; serial MVP is fine |
@@ -435,6 +436,7 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | **1.2.0** | 2026-08-07 | Spec reconcile: live HTTP indexing vs service FR-010 |
 | **1.2.1** | 2026-08-07 | Sequential README; live path notes user_id + mandatory KG |
 | **2.0.0** | 2026-08-10 | Migrated to OpenSpec Requirement/Scenario + design REASONS under `openspec/specs/recommendation-pipeline/` |
+| **2.7.0** | 2026-08-13 | Call 2 quote: `equipment.id` = `assets.id` (live SQL); extra catalog fields; `PRICING_SCHEMA`; seed remains CI only |
 | **2.6.0** | 2026-08-13 | Call 2 quote: `items[].mlPredictedPrice` as-built (same daily rate as `equipment.baseDailyRate`) |
 | **2.5.0** | 2026-08-13 | S4 app: live SQL fleet backend (`FLEET_BACKEND=sql`); DTO sql path unchanged |
 | **2.4.0** | 2026-08-13 | S7.2 as-built: Neo4j template tools + populate no-op; recommend not blocked when graph empty |

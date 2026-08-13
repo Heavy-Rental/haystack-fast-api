@@ -2,8 +2,8 @@
 
 | Field | Value |
 |-------|--------|
-| **Version** | **2.0.0** |
-| **Date** | 2026-08-12 |
+| **Version** | **2.1.0** |
+| **Date** | 2026-08-13 |
 | **Status** | As-built: Call 2 **recommend**, Call 3 **chatbot Q&A** |
 | **Base URL (local)** | `http://localhost:8000` |
 | **Auth** | None yet — private network only |
@@ -72,9 +72,12 @@ See lean FR-IX-023 fields in [`call1-ingest-response-for-spring.md`](./call1-ing
 |-------|--------|
 | `user_id`, `ingest_id`, `query` | Echo |
 | `quoteRef` | `QUO-…` |
-| `confidenceScore`, `days`, `estimatedTotal` | When known |
-| `specSummary`, `rationale` | From session / synthesis |
-| `items[]` | `rankOrder`, `equipment.id`, `mlPredictedPrice`, `baseDailyRate`, `lineTotal`, … |
+| `confidenceScore` | Evidence-based (see OpenSpec Call 2 contract); `null` when no items |
+| `days`, `estimatedTotal` | When rental dates / prices exist |
+| `specSummary`, `rationale` | From session / per-item evidence reasons |
+| `items[]` | `rankOrder`, `matchScore`, `reason`, `mlPredictedPrice`, `lineTotal`, `equipment.*` |
+| `items[].equipment.id` | Live SQL: `assets.id`. CI fake: seed `asset_id`. Never invent. Missing row → omit item |
+| `items[].equipment` | Also `name`, `category`, `baseDailyRate`, `weekly`, `capacity`, `purchaseYear`, `location`, `available`, `desc`, `platformHeight` (aerial only), `tags`. **No `img`.** Spring MAY drop `platformHeight` |
 | `warnings` | Soft issues |
 
 **Not on Call 2:** Q&A `answer` / tool_traces (use Call 3).
@@ -113,5 +116,6 @@ See lean FR-IX-023 fields in [`call1-ingest-response-for-spring.md`](./call1-ing
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **2.1.0** | 2026-08-13 | Quote identity + equipment fields + evidence scores aligned to OpenSpec |
 | **2.0.0** | 2026-08-12 | Call 2 recommend; Call 3 query; full path inventory |
 | **1.1.1** | 2026-08-12 | Prior Call 2 = Q&A (superseded) |

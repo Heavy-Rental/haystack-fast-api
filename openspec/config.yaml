@@ -28,7 +28,8 @@ context: |
     → Call 2 RECOMMEND POST .../project-knowledge/getassetrecommendations
       (user_id + ingest_id + optional query)
       quote envelope: quoteRef, items[].equipment, rates → primary body to React
-      MVP: RecommendationService seed fleet + pricing (no invent)
+      MVP: RecommendationService + pricing (no invent)
+      live FLEET_BACKEND=sql: equipment.id = assets.id; CI fake uses seed AST-*
     → Call 3 CHATBOT Q&A POST .../project-knowledge/query (optional follow-ups)
       (user_id + ingest_id + query required; answer + hits)
   Code: APIRouter prefix /internal/v1/recommendations

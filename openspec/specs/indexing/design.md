@@ -60,6 +60,8 @@ Aligned with Packt Ch. 4 indexing flowchart
        │  as-built S1a: ingest_id, user_id, user_requirement_summary, warnings
        │  as-built S1b: tentative_* echo request dates
        │  as-built S1c: needs_summary[] via need decomposer (stub/LLM)
+       │           file text before project_text; ignore placeholder caption
+       │           stub / LLM-empty: one need per approved type (hints)
        │  as-built S1d: expected_budget extract-only (never invent)
        │  as-built S1e: free-text/file dates if request omits (request preferred)
        │  FR-IX-023 Call 1 summary: as-built (Phase 1.7)

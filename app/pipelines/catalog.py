@@ -49,6 +49,20 @@ _KEYWORD_TO_MODEL: list[tuple[str, str]] = [
 ]
 
 
+def model_categories_in_text(text: str) -> list[str]:
+    """Approved model categories, ordered by first mention in ``text``."""
+    blob = str(text or "").lower()
+    first_at: dict[str, int] = {}
+    for keyword, category in _KEYWORD_TO_MODEL:
+        idx = blob.find(keyword)
+        if idx < 0:
+            continue
+        prev = first_at.get(category)
+        if prev is None or idx < prev:
+            first_at[category] = idx
+    return [cat for cat, _ in sorted(first_at.items(), key=lambda kv: kv[1])]
+
+
 def infer_model_categories(unit_need: dict) -> list[str]:
     """Infer ml model categories from hints + description (approved only)."""
     hints = unit_need.get("equipment_hints") or []

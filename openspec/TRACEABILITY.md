@@ -63,7 +63,9 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | S3 agent gate (as-built) | Same as FR-IX-026 | `changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/` |
 | S5-I0 store factory (as-built) | Same as FR-IX-027 | `changes/archive/2026-08-12-s5-i0-document-store-factory/` |
 | S5-I1 pipeline wire (as-built) | Same as FR-IX-028 | `changes/archive/2026-08-12-s5-i1-document-store-pipeline-wire/` |
-| Portal dual-hop (docs) | React project-spec → Call 1 → **Call 2 recommend quote** → React; Call 3 = chatbot Q&A | `AGENTS.md` · recommend + KG contracts · `portal-to-haystack-mapping.md` v2 · impl-plan §1.2.0 |
+| Portal dual-hop (docs) | React project-spec → Call 1 → **Call 2 recommend quote** → React; Call 3 = chatbot Q&A | `AGENTS.md` · recommend + KG contracts · `portal-to-haystack-mapping.md` v2.1 · impl-plan §1.2.0 |
+| Call 2 quote hydration (as-built) | Quote `equipment.id` = `assets.id` (live SQL); DTO `asset_id` = `assets.name`; extra catalog fields; evidence scores; `PRICING_SCHEMA` | `specs/recommendation-pipeline/contracts/get-asset-recommendations.md` · `fleet-read-contract.md` · impl-plan **3.18.0** |
+| Call 1 extract expansions (as-built) | File-before-text + ignore caption; multi-need hint split; expanded date/budget patterns | `specs/indexing/spec.md` + ingest contract; impl-plan **3.18.0** |
 | S2a change archive | Idempotency + correlation tasks | `changes/archive/2026-08-12-s2a-ingest-idempotency-correlation/` |
 | S2b (as-built Spring) | Resilience C1 client + saga in heavy-rental-spring-rest-api | Spring plan v2.1.1; impl-plan **3.14.0**; archive `changes/archive/2026-08-13-s2b-spring-resilience-stamp/` |
 | S3 change archive | Agent indexing tool + Coordinator gate | `changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/` |

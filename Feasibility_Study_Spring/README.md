@@ -2,8 +2,8 @@
 
 | Field | Value |
 |-------|--------|
-| **Version** | **2.0.2** |
-| **Date** | 2026-08-12 |
+| **Version** | **2.1.0** |
+| **Date** | 2026-08-13 |
 | **Audience** | Spring Boot engineers integrating with `haystack-fast-api` |
 
 **Behaviour SoT:** haystack OpenSpec + this package for Spring orchestration.
@@ -18,8 +18,8 @@
 
 | Topic | Haystack | This package |
 |-------|----------|--------------|
-| Portal saga | `implementation-plan.md` §1.2.0 (v3.5+) | [`portal-to-haystack-mapping.md`](./portal-to-haystack-mapping.md) **2.0** |
-| Call 2 recommend | OpenSpec recommend contract | [`wire-contract-call1-call2.md`](./wire-contract-call1-call2.md) **2.0** |
+| Portal saga | `implementation-plan.md` §1.2.0 (v3.18+) | [`portal-to-haystack-mapping.md`](./portal-to-haystack-mapping.md) **2.1** |
+| Call 2 recommend | OpenSpec recommend contract (`equipment.id` = `assets.id` live) | [`wire-contract-call1-call2.md`](./wire-contract-call1-call2.md) **2.1** |
 | Call 3 Q&A | KG contract `project-knowledge-query.md` | Same wire doc § Call 3 |
 | S2a | `phase2-s2a-*.md` v1.1.2 | [`s2a-haystack-dependency.md`](./s2a-haystack-dependency.md) |
 | S2b | pointer | [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) **2.0** — **as-built in Spring repo** (canonical **2.1.1**) |
@@ -43,13 +43,13 @@ React  POST /api/recommendations/project-spec
 
 | Document | Version |
 |----------|---------|
-| portal-to-haystack-mapping.md | **2.0.0** |
-| wire-contract-call1-call2.md | **2.0.0** |
-| call1-ingest-response-for-spring.md | **2.0.0** |
+| portal-to-haystack-mapping.md | **2.1.0** |
+| wire-contract-call1-call2.md | **2.1.0** |
+| call1-ingest-response-for-spring.md | **2.1.0** |
 | phase2-s2b-spring-implementation-plan.md | **2.0.1** |
 | spring-boot-fastapi-integration-resilience.md | **2.2.1** |
 | s2a-haystack-dependency.md | **1.2.0** |
-| HANDOFF.md | **2.0.0** |
+| HANDOFF.md | **2.1.0** |
 
 ## Copy into Spring repo
 

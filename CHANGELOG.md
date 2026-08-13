@@ -2,6 +2,66 @@
 
 ## Unreleased
 
+### Added (docs)
+
+- `QUICKSTART.md` at the uv project root: install, two `.env` profiles (fake vs live compose), pytest, Call 1 → Call 2 curl smoke.
+
+### Changed (docs — spec sync)
+
+- OpenSpec + `Feasibility_Study/` + `Feasibility_Study_Spring/` aligned to as-built Call 1 / Call 2.
+- Call 2 quote identity: live SQL `equipment.id` = `assets.id`; internal DTO `asset_id` remains `assets.name`. Seed `AST-*` is CI/`fake` only.
+- Quote fields (`capacity`, `purchaseYear`, `location`, `available`, `desc`, aerial-only `platformHeight`, no `img`) and evidence `confidenceScore` / `matchScore` / `reason` documented on the Call 2 contract and Spring mapping.
+- Call 1: file-before-text, ignore placeholder caption, multi-need hint split, expanded date/budget patterns.
+- `PRICING_SCHEMA` + pytest `NEED_DECOMPOSER=stub` / `PRICING_SCHEMA=primary_snapshot` documented in project-setup.
+
+### Changed (SQL read schema)
+
+- `PRICING_SCHEMA=public` | `primary_snapshot` selects which Postgres schema fleet and pricing agents read. ORM tables stay mapped to `primary_snapshot`; `public` is applied with `schema_translate_map`. Default remains `primary_snapshot`.
+
+### Changed (Call 2 equipment.platformHeight)
+
+- Quote `equipment.platformHeight` is `assets.platform_height` only for Scissors Lift / Boom Lift (`category_id` 2 or 3, or name/type containing scissor/boom). Omitted for forklift/excavator and when height is null. Also set from the selected candidate if the second assets lookup is skipped.
+
+### Changed (Call 1 expected_budget patterns)
+
+- Budget extract accepts `SGD8000`, `SGD 8k`, `1.5m SGD`, spoken currency, `RM`, yen, cue + bare number (`budget of 8000`), spaced thousands, and `$8000` / `$12,500` without a cue when the figure looks like money.
+- Still not a budget: words only (`tight budget`), `$10` room-size, `8m` / `20 ton`.
+
+### Changed (Call 2 matchScore + reason)
+
+- `matchScore` is a 0..1 evidence score (category, height cue, available, priced), not `1/rank`.
+- `reason` is a factual match sentence (hints, category, availability, daily_rate). Removed `Stub merge:`.
+- Fleet filter uses `equipment_hints` only when present so a forklift need cannot pick a scissor lift from a shared description.
+
+### Changed (Call 2 confidenceScore + Call 1 named dates)
+
+- `confidenceScore` is an evidence-weighted score (need coverage, matchScore, live `assets.id`, availability, priced lines, rental dates), not `0.55 + 0.08 × n`.
+- Call 1 date extract now accepts English months (`1 Sep 2026 to 30 Sep 2026`, `Sep 1, 2026`, `between 1 September 2026 and 30 September 2026`), ordinals (`1st of September 2026`), hyphenated names (`1-Sep-2026`), two-digit years (`1 Sep 26`), dotted/slashed numerics, ISO datetimes, compact `YYYYMMDD`, quarters (`Q3 2026`), month-only (`Sep 2026`), `end/start of September`, and `this/next month`. Heights like `8m` are not dates.
+
+### Changed (Call 2 quote: drop equipment.img)
+
+- Removed `equipment.img` from the Call 2 quote DTO and stopped reading `asset_images`.
+
+### Changed (Call 1 needs_summary multi-need)
+
+- Ingest source merges extracted file text **before** `project_text` and ignores the placeholder caption `"Optional caption alongside file"`.
+- Stub / LLM-empty fallback splits one need per approved type (`forklift`, `scissor lift`, …) with `equipment_hints`.
+- LLM prompt requires one JSON object per distinct equipment type. Local `.env` uses `NEED_DECOMPOSER=llm`; pytest forces stub.
+
+### Changed (Call 2 quote equipment catalog fields)
+
+- Quote `equipment` now exposes top-level `capacity`, `purchaseYear`, `location`, `available`, `desc`, `tags` from the assets table (Spring portal DTO). `capacity` is no longer extra-only.
+- `purchaseYear` / `desc` from `assets.purchase_year` / `assets.description`. `location` from `assets.location` when that column exists.
+- `available` is false when a live-hold booking (`booking_items` + `bookings`) overlaps the rental window; missing dates use today. Unreadable bookings → null, no invent.
+
+### Changed (Call 2 equipment from assets table)
+
+- Call 2 MVP (`RecommendationService`) honors `FLEET_BACKEND=sql` and reads candidates from the `assets` table via `FleetRepository` (no silent seed fallback).
+- Quote `equipment.id` is `assets.id` (PK) when the row resolves; `equipment.name` is `assets.name`. Seed-only picks still use the catalog `asset_id`.
+- Live SQL quotes omit the item (warning) instead of emitting seed `AST-*` ids when the assets row is missing.
+- `FLEET_BACKEND` normalizes `=sql` / `SQL` so a dotenv `FLEET_BACKEND==sql` typo still selects the live backend.
+- `FleetRepository.get_asset` looks up by numeric `assets.id` or `assets.name` so Spring can FK `recommendation_items.asset_id`.
+
 ### Changed (Call 2 predicted price on each item)
 
 - Call 2 quote items now include `mlPredictedPrice` (production `pricing_client` / `predict_price` daily rate). Same value as `equipment.baseDailyRate`. `was_clamped` / `explanation` pass through `equipment.extra`.

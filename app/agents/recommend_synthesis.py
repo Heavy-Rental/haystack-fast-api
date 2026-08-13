@@ -13,9 +13,11 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Callable
 
-from app.agents.recommend_prompts import (
-    apply_rationale_only,
-    stub_recommend_rationale,
+from app.agents.recommend_prompts import apply_rationale_only
+from app.pipelines.rank_rationale_generator import (
+    _tie_break,
+    build_evidence_rationale,
+    score_need_match,
 )
 from app.agents.recommend_state import (
     ROLE_COORDINATOR,
@@ -96,6 +98,7 @@ def _pick_item(
         return None, warnings
 
     priced = _price_index(price_rows)
+    scored: list[dict[str, Any]] = []
     for cand in candidates:
         availability = cand.get("availability")
         if availability not in (None, "available"):
@@ -106,32 +109,58 @@ def _pick_item(
         price = priced.get(str(asset_id))
         if price is None:
             continue
-        description = str(need.get("description") or "").strip()
-        rationale = stub_recommend_rationale(
-            description=description, asset_id=str(asset_id)
-        )
-        item = {
-            "equipment_type": cand.get("equipment_type"),
-            "asset_id": str(asset_id),
-            "rank": 1,
-            "rationale": rationale,
-            "pricing": {
-                "daily_rate": price.get("daily_rate"),
-                "total_price": price.get("total_price"),
-                "currency": price.get("currency") or "SGD",
-                "model_version": price.get("model_version"),
-                "explanation": price.get("explanation"),
-                "was_clamped": price.get("was_clamped"),
-            },
-            "availability": cand.get("availability") or "available",
+        row = dict(cand)
+        row["pricing"] = {
+            "daily_rate": price.get("daily_rate"),
+            "total_price": price.get("total_price"),
+            "currency": price.get("currency") or "SGD",
+            "model_version": price.get("model_version"),
+            "explanation": price.get("explanation"),
+            "was_clamped": price.get("was_clamped"),
         }
-        return item, warnings
+        row["match_score"] = score_need_match(need, row)
+        scored.append(row)
 
-    warnings.append(
-        f"pricing unavailable for need_id={need.get('need_id')!r}; "
-        "no item without a tool-backed rate"
+    if not scored:
+        warnings.append(
+            f"pricing unavailable for need_id={need.get('need_id')!r}; "
+            "no item without a tool-backed rate"
+        )
+        return None, warnings
+
+    scored.sort(
+        key=lambda c: (float(c.get("match_score") or 0.0), *_tie_break(c)),
+        reverse=True,
     )
-    return None, warnings
+    cand = scored[0]
+    asset_id = cand.get("asset_id")
+    price = cand.get("pricing") or {}
+    rationale = build_evidence_rationale(need, cand)
+    fleet_pk = cand.get("id")
+    try:
+        fleet_id = int(fleet_pk) if fleet_pk is not None else None
+    except (TypeError, ValueError):
+        fleet_id = None
+    item = {
+        "equipment_type": cand.get("equipment_type"),
+        "asset_id": str(asset_id),
+        "fleet_id": fleet_id,
+        "name": cand.get("name"),
+        "rank": 1,
+        "match_score": cand.get("match_score"),
+        "rationale": rationale,
+        "pricing": {
+            "daily_rate": price.get("daily_rate"),
+            "total_price": price.get("total_price"),
+            "currency": price.get("currency") or "SGD",
+            "model_version": price.get("model_version"),
+            "explanation": price.get("explanation"),
+            "was_clamped": price.get("was_clamped"),
+        },
+        "availability": cand.get("availability") or "available",
+        "platform_height": cand.get("platform_height"),
+    }
+    return item, warnings
 
 
 def synthesize_recommendation(

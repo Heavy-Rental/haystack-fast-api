@@ -165,9 +165,13 @@ Rules:
 
 
 def stub_recommend_rationale(*, description: str, asset_id: str) -> str:
-    """Deterministic Coordinator rationale for PROJECT_AGENT_MODE=stub."""
-    desc = (description or "").strip() or "need"
-    return f"Stub merge: {desc} → {asset_id}."
+    """Legacy helper; prefer ``build_evidence_rationale``."""
+    from app.pipelines.rank_rationale_generator import build_evidence_rationale
+
+    return build_evidence_rationale(
+        {"description": description},
+        {"asset_id": asset_id, "name": asset_id},
+    )
 
 
 def apply_rationale_only(

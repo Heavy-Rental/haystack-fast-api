@@ -14,12 +14,14 @@ from typing import Any
 from haystack import Pipeline
 from sqlalchemy.orm import Session
 
+from app.config import Settings, get_settings, is_sql_fleet_backend
 from app.core.exceptions import BadRequestError
 from app.pipelines.asset_candidate_filter import AssetCandidateFilter
 from app.pipelines.booking_availability_filter import BookingAvailabilityFilter
 from app.pipelines.intake_front import build_intake_front_pipeline, run_intake_front
 from app.pipelines.predict_price_adapter import PredictPriceAdapter
 from app.pipelines.rank_rationale_generator import RankRationaleGenerator
+from app.repositories.fleet_repository import load_live_fleet
 from app.schemas.recommendations import (
     NeedResult,
     PricingPayload,
@@ -39,6 +41,25 @@ NO_MATCH_WARNING = (
 )
 
 
+def _maybe_live_fleet(
+    db: Session | None,
+    settings: Settings | None,
+) -> tuple[list[dict[str, Any]] | None, list[dict[str, Any]] | None]:
+    """When ``FLEET_BACKEND=sql``, load assets/bookings from the assets table.
+
+    Fake / unset backend returns ``(None, None)`` so callers keep the seed
+    fleet. SQL failures return empty lists (no silent seed fallback).
+    """
+    cfg = settings or get_settings()
+    if not is_sql_fleet_backend(getattr(cfg, "fleet_backend", None)):
+        return None, None
+    try:
+        return load_live_fleet(db)
+    except Exception:
+        logger.exception("live fleet load failed; using empty fleet (no seed fallback)")
+        return [], []
+
+
 class RecommendationService:
     """Full FR-010 orchestration under pipelines/services (routers stay thin)."""
 
@@ -54,14 +75,27 @@ class RecommendationService:
         default_duration_days: float = 7.0,
         default_distance_km: float = 15.0,
         db: Session | None = None,
+        settings: Settings | None = None,
     ) -> None:
         self._db = db
         self._decomposer: NeedDecomposer = decomposer or create_need_decomposer()
         self._pipeline = pipeline or build_intake_front_pipeline(
             decomposer=self._decomposer
         )
-        self._asset_filter = asset_filter or AssetCandidateFilter()
-        self._availability_filter = availability_filter or BookingAvailabilityFilter()
+        live_assets, live_bookings = _maybe_live_fleet(db, settings)
+        if live_assets is not None:
+            self._asset_filter = asset_filter or AssetCandidateFilter(
+                assets=live_assets
+            )
+            self._availability_filter = (
+                availability_filter
+                or BookingAvailabilityFilter(bookings=live_bookings or [])
+            )
+        else:
+            self._asset_filter = asset_filter or AssetCandidateFilter()
+            self._availability_filter = (
+                availability_filter or BookingAvailabilityFilter()
+            )
         self._price_adapter = price_adapter or PredictPriceAdapter(
             default_distance_km=default_distance_km
         )
@@ -189,13 +223,22 @@ class RecommendationService:
                 was_clamped=pricing_raw.get("was_clamped"),
             )
 
+        fleet_pk = selected.get("id")
+        try:
+            fleet_id = int(fleet_pk) if fleet_pk is not None else None
+        except (TypeError, ValueError):
+            fleet_id = None
         item = RecommendationItem(
             equipment_type=selected.get("equipment_type"),
             asset_id=selected.get("asset_id"),
+            fleet_id=fleet_id,
+            name=selected.get("name"),
             rank=int(selected.get("rank") or 1),
+            match_score=selected.get("match_score"),
             rationale=rationale or None,
             pricing=pricing,
             availability=str(selected.get("availability") or "available"),
+            platform_height=selected.get("platform_height"),
         )
         return NeedResult(need_id=unit.need_id, item=item, warnings=[])
 

@@ -9,7 +9,7 @@
 | **Document type** | Architecture / infrastructure feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | **2.8.3** |
+| **Version** | **2.8.4** |
 | **Application** | `haystack-fast-api` |
 | **Related specs** | `openspec/specs/project-setup/`, `indexing/`, `knowledge-graph/`, `recommendation-pipeline/`, `dynamic-pricing/`, `equipment-recommendation/` |
 | **Related studies** | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) · [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) · [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) · [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) · [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) · [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) |
@@ -115,7 +115,7 @@ haystack-fast-api             (Haystack pipelines, agents, DocumentStore, KG)
 | Call | Typical route / payload | Latency profile (today / target) | Uses which plane? |
 |------|---------------------------|----------------------------------|-------------------|
 | **1. Ingest** | `POST /internal/v1/recommendations/submitprojectspecification` — multipart/JSON + `user_id` | Seconds–tens of seconds (index + KG) | **Plane B** (§4): DocumentStore + KG-1; lean FR-IX-023 body — see [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) |
-| **2. Recommend** | `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` — `user_id`, `ingest_id`, optional `query` → quote/`items[]` | Seconds–tens; multi unit-need | **Plane B after [4]** + fleet SQL/Neo4j tools + **ML pricing** + project session (MVP: seed fleet + pricing_client) |
+| **2. Recommend** | `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` — `user_id`, `ingest_id`, optional `query` → quote/`items[]` | Seconds–tens; multi unit-need | **Plane B after [4]** + fleet SQL (`FLEET_BACKEND=sql`; quote `equipment.id`=`assets.id`) / Neo4j tools + **ML pricing** + project session. Seed fleet is **CI** (`fake`) only. |
 | **3. Chatbot Q&A** | `POST /internal/v1/recommendations/project-knowledge/query` — `user_id`, `ingest_id`, `query` | Seconds if LLM; fast if stub | **Plane B** session tools over store + KG-1 from call 1 |
 | **Health** | `GET /health` | Milliseconds | Ops / resilience probes |
 
@@ -138,7 +138,7 @@ haystack-fast-api             (Haystack pipelines, agents, DocumentStore, KG)
 |-------------|----------|
 | One HTTP protocol for all four calls? | **No** — design **per interaction type** (see resilience study: REST for upload; SSE/poll for long ingest progress) |
 | Call 2 without call 1 | **Invalid** — needs `ingest_id` / session from successful ingest |
-| Call 2 without Track D mirror | Falls back to **seed fleet** today; production recommend needs **Plane A** Asset/Booking data |
+| Call 2 without Track D mirror | `FLEET_BACKEND=fake` seed (CI / no mirror). Live recommend uses `FLEET_BACKEND=sql` + Plane A Asset/Booking data (`PRICING_SCHEMA=public` or `primary_snapshot`). |
 | Sticky sessions | Required for process-local InMemory across call 1→2 (recommend) and call 1→3 (Q&A) **or** use **Pgvector I1** + shared session |
 
 **Wire robustness** (timeouts, idempotency, circuit breaker, 202 jobs, SSE progress):  
@@ -1088,6 +1088,7 @@ SOURCE_HOST: postgres-primary
 | **2.7.4** | 2026-08-12 | Call numbering: Call 2 = recommend/quote; Call 3 = chatbot Q&A |
 | **2.7.5** | 2026-08-12 | §4.5 embedder: query/store dim must match; as-built pytest conftest mock dim 384; optional markers remain TARGET |
 | **2.7.6** | 2026-08-12 | **I0 as-built:** `INDEXING_DOCUMENT_STORE` + `build_document_store()`; ingest still InMemory; I1/I2 remain TARGET |
+| **2.8.4** | 2026-08-13 | Call 2 live SQL quote: `equipment.id`=`assets.id`; seed is CI only; `PRICING_SCHEMA` remaps fleet/pricing |
 | **2.8.3** | 2026-08-13 | **S8.3 as-built (app):** live Bolt tools + populate HTTP; default `NEO4J_BACKEND=fake`; FR-KG-011 load |
 | **2.8.2** | 2026-08-13 | **S8.2 T4 as-built (config pack):** post-sync HTTP trigger + admin `:8089`; scoped delete; KG-1 preserved |
 | **2.8.1** | 2026-08-13 | **S8.1 T3 as-built (config pack):** `neo4j-populate` SQL→Cypher MERGE; fleet labels isolated from DocumentStore |

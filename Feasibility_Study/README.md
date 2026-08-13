@@ -23,25 +23,25 @@ These apply across studies unless a study explicitly narrows scope:
 
 | Study | Topic | Version |
 |-------|--------|---------|
-| [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane + Spring multi-call: Call 1 ingest · Call 2 recommend · Call 3 chatbot Q&A. **I0+I1 as-built**. **S4 T0–T2 + app live SQL as-built**. **S8.1–S8.3 neo4j-populate + live tools as-built**. **S7.2 fake default as-built**. | **2.8.3** |
+| [`postgres-haystack-neo4j-realtime-sync.md`](./postgres-haystack-neo4j-realtime-sync.md) | Dual plane + Spring multi-call: Call 1 ingest · Call 2 recommend · Call 3 chatbot Q&A. **I0+I1 as-built**. **S4 T0–T2 + app live SQL as-built** (quote PK + `PRICING_SCHEMA`). **S8.1–S8.3 neo4j-populate + live tools as-built**. **S7.2 fake default as-built**. | **2.8.4** |
 | [`spring-boot-fastapi-integration-resilience.md`](./spring-boot-fastapi-integration-resilience.md) | Spring ↔ FastAPI wire; Call 1/2/3 saga; resilience C1–C3. | **1.3.2** |
 | [`ml-pricing-multi-agent.md`](./ml-pricing-multi-agent.md) | ML pricing as **in-process** agent tool; pricing **Worker** fan-out per need; **S6 tool as-built**; **S7.3 Workers [7]×N as-built**; **S7.5 HTTP flag**. | **1.2.4** |
 | [`multi-agent-synthesis-recommend-output.md`](./multi-agent-synthesis-recommend-output.md) | Synthesis **[8]** → assets + prices (**HTTP Call 2** recommend path). **S7.4 stub [8] as-built**; **S7.5 HTTP enrich as-built**; **S7.7 A–L prompts as-built**; **S8.3 live Neo4j tools as-built**. | **1.4.8** |
-| [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) | C/W/D roles; Call 2 recommend / Call 3 Q&A numbering aligned. **S7.0–S7.8 as-built**; **S8.3 live Neo4j tools as-built**. | **2.1.9** |
+| [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) | C/W/D roles; Call 2 recommend / Call 3 Q&A numbering aligned. **S7.0–S7.8 as-built**; **S8.3 live Neo4j tools as-built**; quote `equipment.id` vs DTO `asset_id`. | **2.1.10** |
 | [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) | Indexing Pipeline → Haystack SuperComponent (optional packaging for Coordinator gate **[4]**). | **1.2.1** |
-| [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) | Call 1 lean body; FR-IX-023 **as-built** S1a–S1e; not Call 2 recommend quote. | **1.2.2** |
+| [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) | Call 1 lean body; FR-IX-023 **as-built** S1a–S1e + file-before-text / multi-need / expanded extract; not Call 2 recommend quote. | **1.3.0** |
 
 ### Implementation plan
 
 | Document | Topic | Version |
 |----------|--------|---------|
-| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. **S2a+S2b as-built**; **S3 as-built**; **S4 as-built**; **S5-I0+I1 as-built**; **S6 as-built**; **S7.0–S7.8 as-built**; **S8.1–S8.3 as-built**; Call 2 `mlPredictedPrice`; **§7.0 default pytest isolation** (mock dim 384). | **3.17.1** |
+| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. **S2a+S2b as-built**; **S3 as-built**; **S4 as-built**; **S5-I0+I1 as-built**; **S6 as-built**; **S7.0–S7.8 as-built**; **S8.1–S8.3 as-built**; Call 2 quote `equipment.id`=`assets.id` + scores; **§7.0 default pytest isolation** (mock dim 384). | **3.18.0** |
 | [`phase2-s2a-haystack-implementation-plan.md`](./phase2-s2a-haystack-implementation-plan.md) | **Phase 2 / S2a only** — haystack-fast-api: `Idempotency-Key`, correlation logging, docs. **Implemented** (FR-IX-024/025; §7 test runbook + conftest isolation). | **1.1.3** |
 | [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) | **S2b as-built (Spring repo)** — client, Resilience4j, saga. Pointer; canonical plan **v2.1.1** in Spring. | **2.0.1** |
 
 **Stage S3 (haystack, as-built):** `run_indexing_from_request` + forced `START→index_gate→END` behind `INDEXING_VIA_AGENT_GATE` (default off). OpenSpec FR-IX-026 · archive `openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/`.
 
-**Stage S4 (haystack app, as-built):** `FLEET_BACKEND=sql` → `LiveSqlFleetBackend` / `FleetRepository` (allowlisted ORM; `asset_id` = `assets.name`; live-hold bookings). Default `fake` for CI. D0: `openspec/specs/spring-entity-repository/fleet-read-contract.md`. Archive `openspec/changes/archive/2026-08-13-s4-live-sql-fleet-backend/`.
+**Stage S4 (haystack app, as-built):** `FLEET_BACKEND=sql` → `LiveSqlFleetBackend` / `FleetRepository` (allowlisted ORM; DTO `asset_id` = `assets.name`; Call 2 quote `equipment.id` = `assets.id`; live-hold bookings). `PRICING_SCHEMA=public` remaps fleet/pricing reads only. Default `fake` + `primary_snapshot` for CI. D0: `openspec/specs/spring-entity-repository/fleet-read-contract.md`. Archive `openspec/changes/archive/2026-08-13-s4-live-sql-fleet-backend/`.
 
 **Stage S4 (config pack, as-built):** [Haystack-Fast-API devcontainer](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API) — T0 skip when primary down; T1 60s `postgres-haystack-sync` + METRICS; T2 `SYNC_TABLE_ALLOWLIST`. Follow-up: align pack singular table names (`asset,booking,category`) with haystack plural ORM tables.
 
@@ -79,7 +79,7 @@ These apply across studies unless a study explicitly narrows scope:
 
 | Package | Topic | Version |
 |---------|--------|---------|
-| [`../Feasibility_Study_Spring/`](../Feasibility_Study_Spring/) | Spring handoff copy (may lag). **S2b as-built** in [heavy-rental-spring-rest-api](https://github.com/Heavy-Rental/heavy-rental-spring-rest-api) (`Feasibility_Study_Spring` **2.1.0** there). | **2.0.0** (local export) |
-| [`../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../Feasibility_Study_Spring/portal-to-haystack-mapping.md) | Portal → Call 1/2 recommend/3 Q&A | **2.0.0** |
+| [`../Feasibility_Study_Spring/`](../Feasibility_Study_Spring/) | Spring handoff copy. **S2b as-built** in [heavy-rental-spring-rest-api](https://github.com/Heavy-Rental/heavy-rental-spring-rest-api). Local export **2.1.0**. | **2.1.0** |
+| [`../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../Feasibility_Study_Spring/portal-to-haystack-mapping.md) | Portal → Call 1/2 recommend/3 Q&A; quote `equipment.id`=`assets.id` | **2.1.0** |
 
 Normative product behaviour remains under [`../openspec/`](../openspec/). Pricing decision log: [`../docs/dynamic-pricing-masterplan.md`](../docs/dynamic-pricing-masterplan.md).

@@ -23,6 +23,26 @@ def _undefined_table_error() -> ProgrammingError:
     return ProgrammingError("SELECT ...", {}, UndefinedTable("relation does not exist"))
 
 
+def test_resolve_pricing_schema_prefers_public(monkeypatch) -> None:
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("PRICING_SCHEMA", "public")
+    get_settings.cache_clear()
+    session = MagicMock()
+    session.execute.return_value = MagicMock()
+
+    resolution = resolve_pricing_schema(session)
+
+    assert resolution.schema == "public"
+    assert resolution.degraded is False
+    assert resolution.execution_options == {
+        "schema_translate_map": {"primary_snapshot": "public"}
+    }
+    session.execute.assert_called_once()
+    get_settings.cache_clear()
+
+
 def test_resolve_pricing_schema_healthy_primary() -> None:
     session = MagicMock()
     session.execute.return_value = MagicMock()

@@ -4,7 +4,7 @@
       "needId": "need_access",
       "mlPredictedPrice": 185.0,
       "equipment": {
-        "id": "AST-SL-001",
+        "id": "AST-SL-002",
         "name": "Scissors Lift",
         "baseDailyRate": 185.0
       }

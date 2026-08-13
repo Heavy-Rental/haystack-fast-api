@@ -60,7 +60,9 @@ When `DATABASE_URL` is set with a bare scheme (`postgresql://` or `postgres://`)
 - **AND** Docker Compose SHALL NOT be the primary Postgres provisioner for this workspace
 
 ### Requirement: Env-backed configuration
-Application settings SHALL come from environment variables (optional local `.env`; never commit production secrets). Baseline keys include `APP_NAME`, `APP_ENV`, `LOG_LEVEL`, `DATABASE_URL`, need-decomposer and LLM keys, `INDEXING_*`, and `KG_*`. Full defaults: [`.env.example`](../../../.env.example).
+Application settings SHALL come from environment variables (optional local `.env`; never commit production secrets). Baseline keys include `APP_NAME`, `APP_ENV`, `LOG_LEVEL`, `DATABASE_URL`, need-decomposer and LLM keys, `INDEXING_*`, `KG_*`, `FLEET_BACKEND`, `PRICING_SCHEMA`, and `NEO4J_*`. Full defaults: [`.env.example`](../../../.env.example).
+
+Live (non-pytest) profile MAY set `FLEET_BACKEND=sql`, `NEED_DECOMPOSER=llm`, `PRICING_SCHEMA=public`, `NEO4J_BACKEND=bolt`, `NEO4J_URI=bolt://neo4j:7687`. Those values MUST NOT leak into the default pytest suite (see isolation table). `PRICING_SCHEMA` remaps fleet + pricing ORM reads only (`schema_translate_map`); it does not change KG-1 / pgvector.
 
 #### Scenario: Secrets not in VCS
 - **WHEN** production secrets are required
@@ -116,6 +118,8 @@ As-built isolation (autouse fixture):
 | `INDEXING_DOCUMENT_STORE` | `memory` (runtime default; I0+I1) | Default suite never opens Pgvector; host `pgvector` only when tests opt in |
 | `RECOMMEND_VIA_AGENT_GRAPH` | `false` | Call 2 stays on MVP unless a test opts in |
 | `FLEET_BACKEND` | `fake` | Default suite never opens live fleet SQL |
+| `NEED_DECOMPOSER` | `stub` | Default suite never calls a live LLM decomposer |
+| `PRICING_SCHEMA` | `primary_snapshot` | Default suite never translates fleet/pricing to `public` |
 | `NEO4J_BACKEND` | `fake` | Default suite never opens live Bolt |
 
 **As-built:** default suite needs no live Pgvector/Neo4j/LLM. `@pytest.mark.pgvector` skips unless `RUN_PGVECTOR_TESTS=1`. `@pytest.mark.neo4j` skips unless `RUN_NEO4J_TESTS=1`.  
@@ -159,5 +163,6 @@ As-built isolation (autouse fixture):
 | 2.0.2 | 2026-08-10 | Corrected hostname throughout: **`postgres-haystack`** (hyphen), not `postgres_haystack` (underscore) — confirmed via DNS on `HR-87-ml-2-d-production-db-wiring-for-period-utilization` (legacy `specification/SPEC-project-setup.md`, before it was stubbed to point here); `db` is ambiguous on this network and MUST NOT be used. `.env.example`/`app/config.py` `POSTGRES_HOSTNAME` default updated to match. |
 | 2.1.0 | 2026-08-12 | **Pytest isolation as-built:** conftest forces mock embedder + dim 384 (+ stub agents / temp KG dir); default suite has no optional prereq markers; vector-tool tests must match query/store embedding dim |
 | 2.2.0 | 2026-08-12 | **S5-I0:** `INDEXING_DOCUMENT_STORE` default `memory`; `pgvector-haystack` on stack for factory; default suite still no live Pgvector |
+| 2.5.0 | 2026-08-13 | **Docs:** conftest also forces `NEED_DECOMPOSER=stub` + `PRICING_SCHEMA=primary_snapshot`; live `PRICING_SCHEMA=public` is host-only |
 | 2.4.0 | 2026-08-13 | **S8.3:** conftest forces `NEO4J_BACKEND=fake`; optional `@pytest.mark.neo4j` (`RUN_NEO4J_TESTS=1`) |
 | 2.3.0 | 2026-08-12 | **S5-I1:** optional `@pytest.mark.pgvector` + `INDEXING_CHUNK_TTL_SECONDS`; default suite still no live Pgvector |
