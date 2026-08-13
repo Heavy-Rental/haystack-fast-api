@@ -12,7 +12,7 @@
 | **Portal → haystack mapping** | [`Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../../Feasibility_Study_Spring/portal-to-haystack-mapping.md) |
 | **Internal reasoning (Haystack maintainers only, not required reading for integration)** | [`openspec/specs/dynamic-pricing/`](../../openspec/specs/dynamic-pricing/), [`openspec/specs/recommendation-intake/`](../../openspec/specs/recommendation-intake/), [`openspec/project.md`](../../openspec/project.md) |
 
-> **Path note:** Live Call 1 / Call 2 routes are under **`/internal/v1/recommendations/`** (see OpenSpec + Spring pack). Sections below that still show `/api/v1/...` are historical draft text — prefer [`Feasibility_Study_Spring/wire-contract-call1-call2.md`](../../Feasibility_Study_Spring/wire-contract-call1-call2.md) for Spring integration.
+> **Path note:** Live Call 1 / Call 2 / Call 3 routes are under **`/internal/v1/recommendations/`** (see OpenSpec + Spring pack). Sections below that still show `/api/v1/...` are historical draft text — prefer [`Feasibility_Study_Spring/wire-contract-call1-call2.md`](../../Feasibility_Study_Spring/wire-contract-call1-call2.md) for Spring integration.
 
 ### Portal project-spec submit saga (normative)
 
@@ -20,10 +20,10 @@
 React  POST /api/recommendations/project-spec
   → Spring Call 1  POST /internal/v1/recommendations/submitprojectspecification
   → Spring Call 2  POST /internal/v1/recommendations/project-knowledge/getassetrecommendations
-  → React  primary body = Call 2 Q&A (mapped)
+  → React  primary body = Call 2 quote envelope (mapped)
 ```
 
-Call 1 is required first (ingest + `ingest_id`). Call 2 is the required second hop for this portal UX.
+Call 1 is required first (ingest + `ingest_id`). Call 2 is the required second hop for this portal UX — it returns a **commercial quote envelope** (ranked equipment + rates), not Q&A. Free-form chatbot Q&A over the same ingest is a separate, optional third call — see Call 3 below.
 
 ---
 
@@ -33,7 +33,8 @@ Call 1 is required first (ingest + `ingest_id`). Call 2 is the required second h
 |---|---|---|---|
 | `/health` | GET | Liveness / readiness | Live |
 | `/internal/v1/recommendations/submitprojectspecification` | POST | Ingest a project spec (text and/or file), build a knowledge graph | Live |
-| `/internal/v1/recommendations/project-knowledge/getassetrecommendations` | POST | Multi-agent Q&A over a previously ingested project | Live |
+| `/internal/v1/recommendations/project-knowledge/getassetrecommendations` | POST | Call 2: fleet + pricing recommend/quote for a prior ingest | Live |
+| `/internal/v1/recommendations/project-knowledge/query` | POST | Call 3: multi-agent chatbot Q&A over a previously ingested project | Live |
 | `/internal/v1/pricing/quote` | POST | Authoritative, guardrail-clamped price per asset at checkout | Live |
 
 ---
@@ -80,7 +81,7 @@ Liveness/readiness check. No auth, no request body.
 
 ## `POST /internal/v1/recommendations/submitprojectspecification`
 
-Ingests a project description (free text and/or an uploaded file), always builds a knowledge graph on success (KG build failure fails the whole request), and returns an `ingest_id` used by the Q&A endpoint below.
+Ingests a project description (free text and/or an uploaded file), always builds a knowledge graph on success (KG build failure fails the whole request), and returns an `ingest_id` used by the Call 2 and Call 3 endpoints below.
 
 **Request — `application/json`**
 
@@ -131,13 +132,89 @@ Ingests a project description (free text and/or an uploaded file), always builds
 
 Not on this response: ranked assets, ML daily rates, `results_by_need` — those belong to a separate recommend/pricing flow, not this ingest call.
 
-**Caveat worth knowing**: `ingest_id` and its underlying session are **process-local, in-memory** — they do not survive a Haystack restart/redeploy. Call 2 accepts an optional `kg_artifact_path` to reload the knowledge graph after a restart, but **this response does not return that path** — it is computed internally at ingest time and not currently exposed on the lean body. Until that's exposed, Spring Boot cannot use it and should simply re-ingest rather than relying on a stale `ingest_id`. Flagged as an open item below.
+**Caveat worth knowing**: `ingest_id` and its underlying session are **process-local, in-memory** — they do not survive a Haystack restart/redeploy. Call 3 accepts an optional `kg_artifact_path` to reload the knowledge graph after a restart, but **this response does not return that path** — it is computed internally at ingest time and not currently exposed on the lean body. Until that's exposed, Spring Boot cannot use it and should simply re-ingest rather than relying on a stale `ingest_id`. Flagged as an open item below.
 
 ---
 
 ## `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations`
 
-Multi-agent Q&A (vector search + knowledge-graph query + synthesis) scoped to one prior ingest.
+**Call 2**: fleet + pricing recommend/quote for a prior ingest (portal dual-hop Call 2). Returns a commercial-style **quote envelope** — ranked equipment with rates — grounded on the Call 1 session (text/meta/needs). Does **not** invent asset ids or rates. This is **not** the Q&A endpoint — see Call 3 below for free-form chatbot Q&A.
+
+**Request**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `user_id` | string | yes | Must match the `user_id` used at ingest |
+| `ingest_id` | string | yes | From `/submitprojectspecification`'s response |
+| `query` | string | no | Optional focus / predefined prompt; not required for recommend |
+| `top_k` | int (1–50) | no | Optional cap on returned items (default: all unit-needs) |
+
+**Response `200`**
+
+```json
+{
+  "user_id": "user_demo",
+  "ingest_id": "ing_a1b2c3d4",
+  "query": null,
+  "quoteRef": "QUO-A1B2C3D4",
+  "confidenceScore": 0.82,
+  "days": 11,
+  "estimatedTotal": 4180.0,
+  "specSummary": "Indoor elevated work ~8m; need scissors lift on soft clay.",
+  "rationale": "Matched on platform height and soft-clay tire spec.",
+  "items": [
+    {
+      "rankOrder": 1,
+      "matchScore": 0.91,
+      "reason": "Meets 8m platform height and soft-clay requirement",
+      "lineTotal": 4180.0,
+      "quantity": 1,
+      "needId": "need_1",
+      "equipment": {
+        "id": "1",
+        "name": "Scissor Lift 8m",
+        "category": "aerial_work_platform",
+        "baseDailyRate": 380.0,
+        "weekly": null,
+        "extra": {}
+      }
+    }
+  ],
+  "warnings": [],
+  "recommendationId": "rec_a1b2c3d4"
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `quoteRef` | string | Opaque reference for this quote, format `QUO-<8 hex chars>` |
+| `confidenceScore` | float \| null | Overall confidence in the recommendation |
+| `days` | int \| null | Rental window length in days |
+| `estimatedTotal` | float \| null | Sum of `items[].lineTotal` |
+| `specSummary` | string \| null | Echo/derivative of the Call 1 requirement summary |
+| `rationale` | string \| null | Free-text explanation of the overall recommendation |
+| `items[].rankOrder` | int | 1-based rank, default `1` |
+| `items[].matchScore` | float \| null | Per-item match confidence |
+| `items[].reason` | string \| null | Why this item was picked |
+| `items[].lineTotal` | float \| null | Price for this line item |
+| `items[].quantity` | int | Default `1` |
+| `items[].needId` | string \| null | Correlates to a Call 1 `needs_summary[].need_id` |
+| `items[].equipment.id` | string \| null | `asset_id` from catalog/fleet — tool-backed, never invented |
+| `items[].equipment.name` | string \| null | Display name or equipment_type |
+| `items[].equipment.category` | string \| null | |
+| `items[].equipment.baseDailyRate` | float \| null | Predicted daily rate for the rental window |
+| `items[].equipment.weekly` | float \| null | Optional weekly rate if known |
+| `items[].equipment.extra` | object | Optional extra catalog fields (condition, capacity, …) |
+| `warnings` | string[] | Soft issues; empty when none |
+| `recommendationId` | string \| null | Internal `rec_…` id when produced by the MVP recommend service |
+
+**Error case**: `404 not_found` when `ingest_id` doesn't resolve to a live session (expired, wrong `user_id`, or lost to a restart — see caveat above).
+
+---
+
+## `POST /internal/v1/recommendations/project-knowledge/query`
+
+**Call 3** (optional, not part of the required portal saga): multi-agent chatbot Q&A (vector search + knowledge-graph query + synthesis) scoped to one prior ingest. Use this when the caller needs a free-form natural-language answer rather than a ranked equipment quote — for that, use Call 2 above.
 
 **Request**
 
@@ -147,7 +224,7 @@ Multi-agent Q&A (vector search + knowledge-graph query + synthesis) scoped to on
 | `ingest_id` | string | yes | From `/submitprojectspecification`'s response |
 | `query` | string | yes | Natural-language question |
 | `top_k` | int (1–50) | no | Retrieval depth override |
-| `kg_artifact_path` | string | no | Reload KG-1 if the in-memory session was lost (see caveat above) |
+| `kg_artifact_path` | string | no | Reload KG-1 if the in-memory session was lost (see caveat above); vector store stays empty until re-ingest |
 
 **Response `200`**
 
@@ -248,7 +325,7 @@ Synchronous, authoritative, guardrail-clamped price per asset for a proposed ren
 
 1. **Auth**: none of the routes above are authenticated yet. Confirm what network-level restriction (VPC, mTLS, IP allowlist, etc.) is protecting them in each environment until a real auth story lands.
 2. **`ingest_id` session lifetime**: currently process-local/in-memory, lost on Haystack restart. Flag if your integration needs this to survive restarts — the fix (persisting sessions) isn't built yet.
-3. **`kg_artifact_path` not returned by Call 1**: Call 2 accepts an optional `kg_artifact_path` to reload the knowledge graph after a Haystack restart, but the current `/submitprojectspecification` response doesn't include it (it's computed internally and never surfaced). Spring Boot cannot use this recovery path today — flag if you need it and we'll add the field to the lean response.
+3. **`kg_artifact_path` not returned by Call 1**: Call 3 accepts an optional `kg_artifact_path` to reload the knowledge graph after a Haystack restart, but the current `/submitprojectspecification` response doesn't include it (it's computed internally and never surfaced). Spring Boot cannot use this recovery path today — flag if you need it and we'll add the field to the lean response.
 
 **Resolved**: `results[].error` field on `/internal/v1/pricing/quote` — kept as specified (`error: string | null`, values `"asset_not_found"` / `"unrecognized_category: ..."`, every other pricing field `null` on that item). It exists to satisfy the "clear per-item error, no failed batch" requirement locked before this endpoint was built. Flag directly to us if this shape doesn't fit your DTO once you're integrating — not blocking in the meantime.
 
@@ -258,6 +335,7 @@ Synchronous, authoritative, guardrail-clamped price per asset for a proposed ren
 
 | Date | Note |
 |------|------|
+| 2026-08-13 | **Corrected Call 2/Call 3 mixup**: `getassetrecommendations` was documented with a Q&A response shape (`answer`, `sources_used`, `research_hits`, `graph_hits`, `tool_traces`, `research_notes`, `graph_notes`) — that shape actually belongs to a separate, previously undocumented route, `POST /internal/v1/recommendations/project-knowledge/query` (Call 3). Rewrote `getassetrecommendations` to document its real response: the `AssetRecommendResponse` quote envelope (`quoteRef`, `confidenceScore`, `days`, `estimatedTotal`, `items[].equipment`, etc.). Added Call 3 as its own documented endpoint. Moved `kg_artifact_path` off `getassetrecommendations`'s request table (it isn't accepted there) onto Call 3's, where it's actually read. Also corrected `getassetrecommendations`'s `query` field to optional (not required) per `AssetRecommendRequest`. Verified against `develop` HEAD `5ed6031`. |
 | 2026-08-12 (later) | Fixed endpoint paths (`/internal/v1/recommendations/submitprojectspecification`, `/internal/v1/recommendations/project-knowledge/getassetrecommendations` — table and headers previously said `/api/v1/...`) and rewrote the Call 1 response example/field table to match the live lean `IngestFromProjectSpecResponse` schema (`ingest_id`, `user_id`, `user_requirement_summary`, `tentative_start_date`, `tentative_end_date`, `needs_summary`, `expected_budget`, `warnings`) instead of a stale raw-indexing shape. Added open item on `kg_artifact_path` not being returned by Call 1. Cross-checked against the app team's own Spring-facing wire-contract notes. |
 | 2026-08-12 | **S2a:** documented `Idempotency-Key` + `X-Correlation-Id` / `traceparent` conventions (process-local idempotency). |
 | 2026-08-11 | Initial draft, compiled from `app/schemas/*.py` and `app/api/*.py` as of `feature/ml-6-internal-pricing-api`. Covers all 4 live routes Spring Boot calls. |
