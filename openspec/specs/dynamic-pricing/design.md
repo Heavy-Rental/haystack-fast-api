@@ -352,6 +352,14 @@ uv run pytest tests/test_pricing_client_phase1e.py tests/test_pricing_phase2b_wi
 
 The live run read all 27 assets from `primary_snapshot` with `degraded=false`. No category had a real minimum ratio inside 0.28–0.35; maximum-band hit rates were 50% for forklift, 0% for scissor lift, 14.3% for boom lift, and 0% for excavator. The script prints the table and writes an ignored chart under `ml-experiments/outputs/phase2d/`. It loads no model and mutates no database row, baseline CSV, or production artifact. These results are inputs to Phase 2d-ii, not recalibration changes themselves.
 
+### Phase 2d-ii recalibration and candidate build (implemented 2026-08-13)
+
+Phase 2d-ii jointly recalibrated all scale controls: category anchors are forklift `80/220`, excavator `230/985`, scissor lift `85/205`, and conservative boom lift `120/500`; guardrail ratios are `0.74–0.88` / `1.12–1.33`; the duration curve uses floor `0.84` and rate `0.18` (`m(7)≈0.894`, `m(14)≈0.855`, `m(30)≈0.841`). The conservative boom-lift lower anchor avoids trusting an unstable extrapolation where the live fleet has no asset near the configured 12 m floor.
+
+The generator wrote 5,000 ignored rows to `ml-experiments/data/phase2d/synthetic_pricing_data_v2.csv`. Strict checks passed, including duration anchors and feature directionality, with 35.3% generation-time target clipping. Generator sanity charts live under `ml-experiments/outputs/phase2d/`; `guardrail_calibration_check.png` belongs to Phase 2d-i, while `candidate_validation_check.png` is reserved for Phase 2d-iii.
+
+The production trainer wrote the tracked candidate `app/services/pricing/artifacts/model_v2.pkl` and `current_v2.json`. Holdout MAE/RMSE/R² are `16.6376`/`26.1103`/`0.9866`. The serving loader still reads only `model.pkl`/`current.json`, so live predictions are unchanged; validation and any promotion remain Phase 2d-iii and Phase 2e.
+
 ### Implementation branches
 
 | Branch | Scope |
@@ -361,7 +369,7 @@ The live run read all 27 assets from `primary_snapshot` with `degraded=false`. N
 | `feature/ml-6-internal-pricing-api` | **Done (2026-08-11)** — `POST /internal/v1/pricing/quote` (`app/api/internal_pricing.py`, `app/schemas/pricing.py`, `repository.py::get_asset_for_pricing()`); 5 new unit tests, 149 total passing. Resequenced ahead of `feature/ml-4-integration-tests` (lean Phase 2b) — see "Internal quote API" above |
 | `feature/ml-4-integration-tests` | **Done (2026-08-11)** — pipeline wired (`pricing_client.py` swapped to `app.services.pricing.model.predict_price(...)`, `min_daily_rate`/`max_daily_rate` threaded through `predict_price_adapter.py`); pipeline-integration tests only (guardrail/feature-schema tests already covered) — `tests/test_pricing_client_phase1e.py` rewritten, `tests/test_pricing_phase2b_wiring.py` added (2 new tests); 154 total passing. Manual retrain endpoint stays moved to demo-prep subtask |
 | `HR-118-ml-real-bound-measurement` | **Done (2026-08-12)** — Phase 2d-i read-only real-bound measurement; 27 assets loaded undegraded from `primary_snapshot`, two calibration knobs compared, ignored chart generated; no production data/artifact changes; 188 tests passing |
-| `TBD` | **Done (2026-08-13)** — Phase 2d-ii joint recalibration and versioned candidate build; strict 5,000-row generation checks passed, candidate MAE 16.64/R² 0.9866; serving artifacts untouched |
+| `HR-141-ml-recalibration-candidate-build` | **Done (2026-08-13)** — Phase 2d-ii joint recalibration and versioned candidate build; strict 5,000-row generation checks passed, candidate MAE 16.64/R² 0.9866; serving artifacts untouched |
 
 ## N — Norms
 
