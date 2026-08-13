@@ -361,6 +361,7 @@ The live run read all 27 assets from `primary_snapshot` with `degraded=false`. N
 | `feature/ml-6-internal-pricing-api` | **Done (2026-08-11)** — `POST /internal/v1/pricing/quote` (`app/api/internal_pricing.py`, `app/schemas/pricing.py`, `repository.py::get_asset_for_pricing()`); 5 new unit tests, 149 total passing. Resequenced ahead of `feature/ml-4-integration-tests` (lean Phase 2b) — see "Internal quote API" above |
 | `feature/ml-4-integration-tests` | **Done (2026-08-11)** — pipeline wired (`pricing_client.py` swapped to `app.services.pricing.model.predict_price(...)`, `min_daily_rate`/`max_daily_rate` threaded through `predict_price_adapter.py`); pipeline-integration tests only (guardrail/feature-schema tests already covered) — `tests/test_pricing_client_phase1e.py` rewritten, `tests/test_pricing_phase2b_wiring.py` added (2 new tests); 154 total passing. Manual retrain endpoint stays moved to demo-prep subtask |
 | `HR-118-ml-real-bound-measurement` | **Done (2026-08-12)** — Phase 2d-i read-only real-bound measurement; 27 assets loaded undegraded from `primary_snapshot`, two calibration knobs compared, ignored chart generated; no production data/artifact changes; 188 tests passing |
+| `TBD` | **Done (2026-08-13)** — Phase 2d-ii joint recalibration and versioned candidate build; strict 5,000-row generation checks passed, candidate MAE 16.64/R² 0.9866; serving artifacts untouched |
 
 ## N — Norms
 
