@@ -10,7 +10,7 @@
 | **Document type** | Architecture vocabulary / agent role mapping (study only) |
 | **Status** | Complete (docs only — no runtime rename required) |
 | **Date** | 2026-08-11 |
-| **Version** | 2.1.7 |
+| **Version** | 2.1.9 |
 | **Application** | `haystack-fast-api` Multi-Agent Orchestrator (LangGraph) |
 | **Question** | How do **Coordinator**, **Worker**, and **Delegator** map onto the existing Orchestrator + domain agents + in-process tools design? |
 | **Authority** | **Authoritative for role vocabulary.** Dual-plane study remains authoritative for data planes, tool catalog, and sync. Implementation plan Phase 7 is authoritative for rollout steps. |
@@ -2837,7 +2837,8 @@ Indexing gate checklist: validate `user_id` + sources + MIME → run index servi
 | **S7.0** state + F-2 | STM partitions; illegal writes rejected | **As-built** |
 | **S7.1** fleet/needs tools | Execution layer; allowlist; fake/SQL DI | **As-built** |
 | **S4** live SQL fleet | `FLEET_BACKEND=sql` reads `postgres_haystack` via allowlisted ORM | **As-built** (app + config T0–T2) |
-| **S7.2** Neo4j tools | Optional graph templates; K-3 skip; populate no-op | **As-built** (`app/agents/neo4j_tools.py`; live client **S8.3**) |
+| **S7.2** Neo4j tools | Optional graph templates; K-3 skip; populate no-op | **As-built** (`neo4j_tools.py`; live **S8.3**) |
+| **S8.3** live Neo4j client | Bolt read + populate HTTP; default fake | **As-built** (`NEO4J_BACKEND=bolt`; K-3 on unavailable) |
 | **S8.1 T3** Neo4j populate | Config `neo4j-populate` SQL → Cypher MERGE; fleet labels isolated | **As-built** (config pack `develop`) |
 | **S8.2 T4** populate trigger | Post-sync HTTP + admin `POST /v1/populate` :8089; scoped delete; never drop KG-1 | **As-built** (config pack `develop`) |
 | **S7.3** recommend LangGraph | DAG §10.0.10–§10.0.11: **seq** gate→[5]→plan; **par** across needs (capped); **seq** [6]→[7] within need; barrier [8] | **As-built** |
@@ -2845,6 +2846,7 @@ Indexing gate checklist: validate `user_id` + sources + MIME → run index servi
 | **S7.5** HTTP Call 2 enrich | Same quote DTO; multi-agent behind `RECOMMEND_VIA_AGENT_GRAPH` (default off) | **As-built** |
 | **S7.6** `tool_traces` | `role` / `need_id` / `duration_ms` on terminal spans; G-1 feed | **As-built** |
 | **S7.7** recommend prompts | **Derive from §10 A–L** (incl. **seq/par** L-1/L-2/L-3); tool DI; tests: within-need order + across-need parallel + no invent | **As-built** (`recommend_prompts.py` + `build_recommend_runtime`) |
+| **S7.8** Worker [5] KG-1 | Live `project_vector_search` + `project_kg_query` then decompose | **As-built** (`make_project_worker`; session tools) |
 
 **Safeguards unchanged:** no recommend if **[4]** failed; no invent inventory; no silent zeros; no free-form SQL/Cypher in nodes.
 
@@ -2911,6 +2913,8 @@ Indexing gate checklist: validate `user_id` + sources + MIME → run index servi
 | **1.8.0** | 2026-08-11 | **§10 I Context management** (hierarchy global/session/task + switching preserve/restore/merge); §10.0.8 |
 | **1.9.0** | 2026-08-11 | **§10 J Decision integration** (retrieval + patterns + optimization); §10.0.9; role decision authority |
 | **2.0.0** | 2026-08-11 | **§10 K Workflow optimization** (DAG, fan-out caps, resources, dynamic adjustment); §10.0.10 |
+| **2.1.9** | 2026-08-13 | **S7.8 as-built:** Worker [5] live KG-1 `project_vector_search` + `project_kg_query` |
+| **2.1.8** | 2026-08-13 | **S8.3 as-built:** live Bolt Neo4j tools + populate HTTP; default fake; K-3 on unavailable |
 | **2.1.7** | 2026-08-13 | **S4 app as-built:** live SQL fleet (`FLEET_BACKEND=sql`); `asset_id` = `assets.name` |
 | **2.1.6** | 2026-08-13 | **S7.2 as-built:** `neo4j_cypher_read` templates + `trigger_neo4j_populate` no-op; K-3 skip (`app/agents/neo4j_tools.py`) |
 | **2.1.5** | 2026-08-13 | **S7.7 as-built:** A–L recommend prompts + tool DI + Delegator `worker_kind` allowlist (`app/agents/recommend_prompts.py`) |

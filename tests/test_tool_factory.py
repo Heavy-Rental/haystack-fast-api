@@ -161,3 +161,10 @@ def test_catalog_without_neo4j_tools() -> None:
     assert TOOL_NEO4J_CYPHER_READ not in catalog
     with pytest.raises(UnknownToolError, match="not registered"):
         catalog.get(TOOL_NEO4J_CYPHER_READ)
+
+
+def test_catalog_default_neo4j_backend_is_fake() -> None:
+    from app.agents.neo4j_tools import FakeNeo4jBackend
+
+    catalog = build_recommend_tool_catalog(backend="fake")
+    assert isinstance(catalog.neo4j, FakeNeo4jBackend)

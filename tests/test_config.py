@@ -70,3 +70,13 @@ def test_fleet_backend_defaults_to_fake() -> None:
     """Phase 4 / S4: FLEET_BACKEND defaults to fake (CI-safe seed)."""
     settings = Settings()
     assert settings.fleet_backend == "fake"
+
+
+def test_neo4j_backend_defaults_to_fake() -> None:
+    """Phase 8 / S8.3: NEO4J_BACKEND defaults to fake (CI-safe)."""
+    settings = Settings()
+    assert settings.neo4j_backend == "fake"
+    assert settings.neo4j_uri == "bolt://neo4j:7687"
+    assert settings.neo4j_user == "neo4j"
+    assert settings.neo4j_populate_url == "http://neo4j-populate:8089/v1/populate"
+    assert settings.neo4j_populate_timeout_seconds == 2.0

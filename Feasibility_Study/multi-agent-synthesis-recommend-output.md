@@ -9,7 +9,7 @@
 | **Document type** | Architecture / agent orchestration feasibility study |
 | **Status** | Complete (study only — no implementation) |
 | **Date** | 2026-08-10 |
-| **Version** | 1.4.7 |
+| **Version** | 1.4.8 |
 | **Application** | `haystack-fast-api` Multi-Agent Orchestrator (LangGraph) |
 | **Question** | Can the **synthesis** step under Multi-Agent Orchestrator output **recommended assets** and **predicted rent price** grounded in the **uploaded project specification**? |
 | **As-built** | `app/agents/nodes.py` (`make_synthesis_node`), `app/agents/prompts.py`, Stage-1 Q&A only |
@@ -200,6 +200,7 @@ Upload project-spec
 | **1.3.8** | 2026-08-11 | Coordinator **I** context management: merge multi-need task contexts |
 | **1.3.9** | 2026-08-11 | Coordinator **J** decision integration: rank only tool-backed candidates |
 | **1.4.0** | 2026-08-11 | Coordinator **K** workflow: barrier synthesis after fan-out |
+| **1.4.8** | 2026-08-13 | **S8.3 as-built:** live Neo4j tools (default fake); synthesis still tool-free |
 | **1.4.7** | 2026-08-13 | **S7.2 as-built:** fake Neo4j tools; synthesis still tool-free (graph notes optional on fleet slice) |
 | **1.4.6** | 2026-08-13 | **S7.7 as-built:** A–L Coordinator/Worker prompts + rationale helper; tool-free [8] unchanged |
 | **1.4.5** | 2026-08-12 | **S7.5 as-built:** Call 2 graph enrich behind `RECOMMEND_VIA_AGENT_GRAPH` (same quote DTO) |

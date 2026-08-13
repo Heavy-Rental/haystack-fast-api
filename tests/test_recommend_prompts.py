@@ -117,6 +117,8 @@ def test_recommend_role_prompts_encode_a_l_partitions() -> None:
     assert "l-1" in FLEET_WORKER_SYSTEM.lower()
     assert "l-2" in DELEGATOR_POLICY_SYSTEM.lower() or "parallel" in DELEGATOR_POLICY_SYSTEM.lower()
     assert "decompose_project_needs" in PROJECT_WORKER_SYSTEM
+    assert "project_vector_search" in PROJECT_WORKER_SYSTEM
+    assert "project_kg_query" in PROJECT_WORKER_SYSTEM
     assert "predict_asset_price" in PRICING_WORKER_SYSTEM
     assert "retrieve_fleet_assets" in FLEET_WORKER_SYSTEM
 

@@ -41,6 +41,11 @@ dependencies = [
     "pgvector-haystack>=3.0.0",
 ]
 
+[project.optional-dependencies]
+neo4j = [
+    "neo4j>=5.28.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3.0",
@@ -61,6 +66,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
     "pgvector: needs Postgres with pgvector extension (optional; skip unless RUN_PGVECTOR_TESTS=1)",
+    "neo4j: needs a live Neo4j Bolt endpoint (optional; skip unless RUN_NEO4J_TESTS=1)",
 ]
 
 [tool.ruff]

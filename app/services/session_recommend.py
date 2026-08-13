@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Callable
 from datetime import date
-from typing import Any, Callable
+from typing import Any
 
 from app.agents.recommend_graph import run_recommend_graph
 from app.agents.recommend_state import indexing_ok as state_indexing_ok
@@ -307,6 +308,7 @@ class SessionRecommendService:
             fanout_cap=self._fanout_cap,
             price_fn=self._price_fn,
             settings=self._settings,
+            project_session=session,
         )
         if not state_indexing_ok(state):
             raise BadRequestError(

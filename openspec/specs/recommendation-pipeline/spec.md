@@ -406,7 +406,7 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | Production pricing swap | Single `pricing_client` module | FR-022; agent tool `predict_asset_price` (S6) shares entrypoint |
 | Agent fleet tools (S7.1) | In-process allowlist via `fleet_tools` + `tool_factory` | Fake seed default; SQL DTO backend; free-form SQL rejected; invoked from S7.3 graph |
 | Live SQL fleet (S4 app) | `FLEET_BACKEND=sql` → `FleetRepository` | `asset_id` = `assets.name`; live-hold bookings; fake remains CI default |
-| Agent Neo4j tools (S7.2) | `neo4j_cypher_read` templates + `trigger_neo4j_populate` no-op | Empty graph → []; K-3 skip; live populate S8 |
+| Agent Neo4j tools (S7.2 + S8.3) | Templates + `NEO4J_BACKEND=fake\|bolt`; populate HTTP | Empty/unavailable → []; K-3 skip; live POST `NEO4J_POPULATE_URL` |
 | Recommend agent state (S7.0) | `RecommendAgentState` + F-2 validation | Partition ownership used by S7.3 nodes |
 | Recommend LangGraph + stub synthesis (S7.3/S7.4) | Isolated DAG + tool-free [8] | Invoked from Call 2 when `RECOMMEND_VIA_AGENT_GRAPH` (S7.5) |
 | Call 2 multi-agent enrich (S7.5) | Same quote DTO; flag default off | Gate refuse → 400; traces stay off the body (S7.6) |

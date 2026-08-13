@@ -86,10 +86,11 @@ S7.4 as-built: tool-free stub Coordinator synthesis [8]
 S7.5 as-built: Call 2 HTTP enrich behind RECOMMEND_VIA_AGENT_GRAPH (default off)
 S7.6 as-built: tool_traces role / need_id / duration_ms (not on quote DTO)
 S7.7 as-built: A–L recommend prompts (`app/agents/recommend_prompts.py`) + tool DI / Delegator allowlist
+S7.8 as-built: Worker [5] live project_vector_search + project_kg_query (session KG-1) then decompose
 S8.1 T3 as-built (config): neo4j-populate SQL→Cypher MERGE; fleet labels isolated
 S8.2 T4 as-built (config): post-sync POST + admin HTTP :8089; scoped delete; KG-1 preserved
-S8.3 TARGET: live neo4j_cypher_read + trigger_neo4j_populate in this app
-KG-2 equipment stockpile persist tools (Stage 2 / S8.3)
+S8.3 as-built: live neo4j_cypher_read + trigger_neo4j_populate (NEO4J_BACKEND=bolt; default fake)
+KG-2 FR-KG-011 as-built: persist = pack T3/T4; load = app S8.3
 ```
 
 **Portal mapping (Spring handoff):** `Feasibility_Study_Spring/portal-to-haystack-mapping.md`  

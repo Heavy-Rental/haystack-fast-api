@@ -94,6 +94,8 @@ class ProjectNeed(TypedDict, total=False):
 class ProjectState(TypedDict, total=False):
     research_notes: str
     graph_notes: str
+    research_hits: list[dict[str, Any]]
+    graph_hits: list[dict[str, Any]]
     needs: list[ProjectNeed]
 
 

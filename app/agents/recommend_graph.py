@@ -11,7 +11,8 @@ across needs. HTTP Call 2 is wired behind ``RECOMMEND_VIA_AGENT_GRAPH`` (S7.5).
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 
@@ -31,7 +32,12 @@ from app.agents.tool_factory import (
     build_recommend_tool_catalog,
 )
 from app.config import Settings, get_settings
+from app.core.exceptions import NotFoundError
 from app.services.need_decomposer import NeedDecomposer
+from app.services.project_knowledge_session import (
+    ProjectKnowledgeSession,
+    get_project_knowledge_registry,
+)
 
 
 def build_recommend_graph(
@@ -109,6 +115,7 @@ def run_recommend_graph(
     runtime: RecommendRuntime | None = None,
     agent_mode: str | None = None,
     rationale_fn: Callable[..., Any] | None = None,
+    project_session: ProjectKnowledgeSession | None = None,
 ) -> RecommendAgentState:
     """Invoke one recommend-mode graph run (Call 2 uses this when flagged)."""
     cfg = settings or get_settings()
@@ -117,6 +124,12 @@ def run_recommend_graph(
 
     owned_session = None
     tools_catalog = catalog
+    pk_session = project_session
+    if pk_session is None:
+        try:
+            pk_session = get_project_knowledge_registry().get(user_id, ingest_id)
+        except NotFoundError:
+            pk_session = None
     if runtime is None and tools_catalog is None:
         kind = str(getattr(cfg, "fleet_backend", None) or "fake").strip().lower()
         if kind == "sql":
@@ -127,6 +140,15 @@ def run_recommend_graph(
                 backend="sql",
                 session=owned_session,
                 decomposer=decomposer,
+                settings=cfg,
+                project_session=pk_session,
+            )
+        else:
+            tools_catalog = build_recommend_tool_catalog(
+                backend="fake",
+                decomposer=decomposer,
+                settings=cfg,
+                project_session=pk_session,
             )
 
     injected = runtime
@@ -134,6 +156,7 @@ def run_recommend_graph(
         injected = build_recommend_runtime(
             catalog=tools_catalog,
             decomposer=decomposer,
+            settings=cfg,
             agent_mode=agent_mode
             if agent_mode is not None
             else (cfg.project_agent_mode or "stub"),
