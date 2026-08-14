@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
-    "name": "Indexing + Project Knowledge (Stage 1)",
-    "description": "Postman collection for haystack-fast-api multi-call journey:\n\n1) **Call 1** `POST /internal/v1/recommendations/submitprojectspecification` \u2014 indexing + mandatory KG-1 + lean FR-IX-023 body\n2) **Call 2** `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations` \u2014 **recommend / quote** (`quoteRef`, `items[]`, rates)\n3) **Call 3** `POST /internal/v1/recommendations/project-knowledge/query` \u2014 **chatbot Q&A** (`answer`, hits, tool_traces)\n\n**Import:** Collection + environment `Indexing-Pipeline-Local`.\n**Server:** `uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload` from `haystack-fast-api/`.\n**Files:** For multipart requests, attach fixtures from `postman/fixtures/`.\n\n**Portal saga:** Run Call 1 (ingest) then Call 2 (recommend) so `ingestId` is saved; React primary body is Call 2 quote.\nCall 3 chatbot is optional follow-up (same `userId` + `ingestId`).\nSessions are process-local; use the same server for all calls.\nDefault `PROJECT_AGENT_MODE=stub` (no LLM key required for Call 3).\n\n**Call 1 success:** `ingest_id`, `user_id`, `user_requirement_summary`, dates, needs, budget, warnings.\n**Call 2 success:** `quoteRef`, `items[].equipment`, rates, `specSummary`, `rationale` (not Q&A `answer`).\n**Call 3 success:** `answer`, `sources_used`, `tool_traces`, `research_hits`, `graph_hits`.\n",
+    "name": "Call 1 Ingest · Call 2 Recommend · Call 3 Q&A",
+    "description": "Postman collection for haystack-fast-api multi-call journey (as-built):\n\n1) **Call 1** `POST /internal/v1/recommendations/submitprojectspecification`\n   — dual-branch indexing + mandatory KG-1 (internal) + **lean FR-IX-023** public body\n2) **Call 2** `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations`\n   — **recommend / quote** (`quoteRef`, `items[]`, `confidenceScore`, `mlPredictedPrice`)\n3) **Call 3** `POST /internal/v1/recommendations/project-knowledge/query`\n   — **chatbot Q&A** (`answer`, hits, `tool_traces`)\n\n**Import:** this collection + environment `Indexing-Pipeline-Local`.\n\n**Server:** from `haystack-fast-api/`:\n```\nuv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload\n```\n\n**Portal saga:** Call 1 then Call 2 (save `ingestId`). React primary body = Call 2 quote.\nCall 3 is optional follow-up on the same process-local session.\n\n**Call 1 public body (lean):** `ingest_id`, `user_id`, `user_requirement_summary`,\n`tentative_start_date`/`end_date`, `needs_summary[]`, `expected_budget`, `warnings[]`.\nTechnical fields (`data_kind`, `documents_written`, `kg_built`, `documents[]`) are **not** on the public response (session/meta only).\n\n**Headers:** `Idempotency-Key` (Call 1 only), `X-Correlation-Id`, optional `traceparent`.\n\n**Env notes:**\n- CI/local fake: `FLEET_BACKEND=fake`, `RECOMMEND_VIA_AGENT_GRAPH=false`, mock embedder\n- Live compose: `FLEET_BACKEND=sql` → `equipment.id` = `assets.id`; optional `RECOMMEND_VIA_AGENT_GRAPH=true`\n\n**Docs:** `docs/call1-call2-endpoint-process.md` · `docs/multi-agent-architecture.md` · `postman/README.md`\n",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -44,6 +44,10 @@
       "key": "traceparent",
       "value": "",
       "description": "Optional W3C traceparent"
+    },
+    {
+      "key": "projectKnowledgeQueryPath",
+      "value": "/internal/v1/recommendations/project-knowledge/query"
     }
   ],
   "item": [
@@ -94,7 +98,7 @@
       ]
     },
     {
-      "name": "01 Happy path \u2014 JSON (unstructured)",
+      "name": "01 Happy path — JSON (unstructured)",
       "item": [
         {
           "name": "02 POST JSON project_text (unstructured)",
@@ -102,50 +106,40 @@
             {
               "listen": "test",
               "script": {
-                "type": "text/javascript",
                 "exec": [
+                  "const j = pm.response.json();",
                   "pm.test('Status is 200', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "const j = pm.response.json();",
-                  "pm.test('ingest_id prefix', function () {",
+                  "pm.test('lean FR-IX-023 body', function () {",
                   "    pm.expect(j.ingest_id).to.match(/^ing_/);",
-                  "});",
-                  "pm.test('data_kind unstructured', function () {",
-                  "    pm.expect(j.data_kind).to.eql('unstructured');",
-                  "});",
-                  "pm.test('wrote embedded chunks', function () {",
-                  "    pm.expect(j.document_count).to.be.at.least(1);",
-                  "    pm.expect(j.chunk_count).to.be.at.least(1);",
-                  "    pm.expect(j.documents_written).to.be.at.least(1);",
-                  "    pm.expect(j.documents).to.be.an('array').that.is.not.empty;",
-                  "    pm.expect(j.documents[0].has_embedding).to.eql(true);",
-                  "    pm.expect(j.documents[0].content_preview.length).to.be.at.least(1);",
-                  "});",
-                  "pm.test('no legacy recommend envelope', function () {",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.user_requirement_summary).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.needs_summary).to.be.an('array');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    // technical indexing/KG fields must not be required on public body",
+                  "    pm.expect(j).to.not.have.property('data_kind');",
+                  "    pm.expect(j).to.not.have.property('documents_written');",
+                  "    pm.expect(j).to.not.have.property('kg_built');",
+                  "    pm.expect(j).to.not.have.property('documents');",
                   "    pm.expect(j).to.not.have.property('recommendation_id');",
                   "    pm.expect(j).to.not.have.property('results_by_need');",
                   "});",
-                  "if (pm.response.code === 200) {",
-                  "    const j = pm.response.json();",
-                  "    if (j.ingest_id) {",
-                  "        pm.collectionVariables.set('ingestId', j.ingest_id);",
-                  "        pm.environment.set('ingestId', j.ingest_id);",
-                  "    }",
-                  "    if (j.user_id) {",
-                  "        pm.collectionVariables.set('userId', j.user_id);",
-                  "        pm.environment.set('userId', j.user_id);",
-                  "    }",
+                  "if (j.ingest_id) {",
+                  "    pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "    pm.environment.set('ingestId', j.ingest_id);",
                   "}",
-                  "pm.test('kg_built true', function () {",
-                  "    pm.expect(j.kg_built).to.eql(true);",
-                  "    pm.expect(j.kg_node_count).to.be.at.least(1);",
-                  "    pm.expect(j.kg_artifact_path).to.be.a('string').and.not.empty;",
-                  "});",
-                  "pm.test('user_id present', function () {",
-                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
+                  "if (j.user_id) {",
+                  "    pm.collectionVariables.set('userId', j.user_id);",
+                  "    pm.environment.set('userId', j.user_id);",
+                  "}",
+                  "pm.test('dates or null', function () {",
+                  "    // may be request echo or extract; must be present as keys",
+                  "    pm.expect(j).to.have.property('tentative_start_date');",
+                  "    pm.expect(j).to.have.property('tentative_end_date');",
                   "});"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -159,7 +153,7 @@
               {
                 "key": "Idempotency-Key",
                 "value": "{{idempotencyKey}}",
-                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
                 "disabled": true
               },
               {
@@ -180,7 +174,7 @@
               "raw": "{\n  \"user_id\": \"user_demo\",\n  \"user_name\": \"Demo User\",\n  \"project_text\": \"Indoor elevated work ~8m for scissors lift\",\n  \"start_date\": \"2026-09-01\",\n  \"end_date\": \"2026-09-12\",\n  \"options\": {\n    \"include_pricing\": true\n  }\n}\n"
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "JSON free-text is treated as unstructured `text/plain`.\n\nExpect: `data_kind=unstructured`, `documents_written >= 1`, `has_embedding=true`."
+            "description": "JSON free-text as unstructured source.\n\nExpect **200 lean FR-IX-023**: `ingest_id`, `user_id`, `user_requirement_summary`, `needs_summary[]`, `warnings[]`.\nTechnical `data_kind` / `documents[]` / `kg_*` are **not** on the public body."
           },
           "response": []
         },
@@ -190,36 +184,35 @@
             {
               "listen": "test",
               "script": {
-                "type": "text/javascript",
                 "exec": [
+                  "const j = pm.response.json();",
                   "pm.test('Status is 200', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "const j = pm.response.json();",
-                  "pm.test('unstructured ingest', function () {",
-                  "    pm.expect(j.data_kind).to.eql('unstructured');",
-                  "    pm.expect(j.documents_written).to.be.at.least(1);",
-                  "});",
-                  "if (pm.response.code === 200) {",
-                  "    const j = pm.response.json();",
-                  "    if (j.ingest_id) {",
-                  "        pm.collectionVariables.set('ingestId', j.ingest_id);",
-                  "        pm.environment.set('ingestId', j.ingest_id);",
-                  "    }",
-                  "    if (j.user_id) {",
-                  "        pm.collectionVariables.set('userId', j.user_id);",
-                  "        pm.environment.set('userId', j.user_id);",
-                  "    }",
-                  "}",
-                  "pm.test('kg_built true', function () {",
-                  "    pm.expect(j.kg_built).to.eql(true);",
-                  "    pm.expect(j.kg_node_count).to.be.at.least(1);",
-                  "    pm.expect(j.kg_artifact_path).to.be.a('string').and.not.empty;",
-                  "});",
-                  "pm.test('user_id present', function () {",
+                  "pm.test('lean FR-IX-023 body', function () {",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
                   "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
-                  "});"
-                ]
+                  "    pm.expect(j.user_requirement_summary).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.needs_summary).to.be.an('array');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    // technical indexing/KG fields must not be required on public body",
+                  "    pm.expect(j).to.not.have.property('data_kind');",
+                  "    pm.expect(j).to.not.have.property('documents_written');",
+                  "    pm.expect(j).to.not.have.property('kg_built');",
+                  "    pm.expect(j).to.not.have.property('documents');",
+                  "    pm.expect(j).to.not.have.property('recommendation_id');",
+                  "    pm.expect(j).to.not.have.property('results_by_need');",
+                  "});",
+                  "if (j.ingest_id) {",
+                  "    pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "    pm.environment.set('ingestId', j.ingest_id);",
+                  "}",
+                  "if (j.user_id) {",
+                  "    pm.collectionVariables.set('userId', j.user_id);",
+                  "    pm.environment.set('userId', j.user_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -233,7 +226,7 @@
               {
                 "key": "Idempotency-Key",
                 "value": "{{idempotencyKey}}",
-                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
                 "disabled": true
               },
               {
@@ -261,7 +254,7 @@
       ]
     },
     {
-      "name": "02 Happy path \u2014 multipart files",
+      "name": "02 Happy path — multipart files",
       "item": [
         {
           "name": "04 POST multipart .txt (unstructured)",
@@ -269,19 +262,35 @@
             {
               "listen": "test",
               "script": {
-                "type": "text/javascript",
                 "exec": [
+                  "const j = pm.response.json();",
                   "pm.test('Status is 200', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "const j = pm.response.json();",
-                  "pm.test('unstructured file', function () {",
-                  "    pm.expect(j.data_kind).to.eql('unstructured');",
-                  "    pm.expect(j.filenames.join(' ')).to.include('project.txt');",
-                  "    pm.expect(j.documents_written).to.be.at.least(1);",
-                  "    pm.expect(j.documents[0].has_embedding).to.eql(true);",
-                  "});"
-                ]
+                  "pm.test('lean FR-IX-023 body', function () {",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.user_requirement_summary).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.needs_summary).to.be.an('array');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    // technical indexing/KG fields must not be required on public body",
+                  "    pm.expect(j).to.not.have.property('data_kind');",
+                  "    pm.expect(j).to.not.have.property('documents_written');",
+                  "    pm.expect(j).to.not.have.property('kg_built');",
+                  "    pm.expect(j).to.not.have.property('documents');",
+                  "    pm.expect(j).to.not.have.property('recommendation_id');",
+                  "    pm.expect(j).to.not.have.property('results_by_need');",
+                  "});",
+                  "if (j.ingest_id) {",
+                  "    pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "    pm.environment.set('ingestId', j.ingest_id);",
+                  "}",
+                  "if (j.user_id) {",
+                  "    pm.collectionVariables.set('userId', j.user_id);",
+                  "    pm.environment.set('userId', j.user_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -291,7 +300,7 @@
               {
                 "key": "Idempotency-Key",
                 "value": "{{idempotencyKey}}",
-                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
                 "disabled": true
               },
               {
@@ -340,7 +349,7 @@
               ]
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "**Body \u2192 form-data** (do NOT set Content-Type manually).\n\n| Key | Type | Value |\n|-----|------|-------|\n| `file` | File | `postman/fixtures/project.txt` |\n| `start_date` | Text | `2026-09-01` (optional) |\n| `end_date` | Text | `2026-09-12` (optional) |\n\nIf the file field is empty after import, click **Select Files** and choose `postman/fixtures/project.txt`."
+            "description": "**Body → form-data** (do NOT set Content-Type manually).\n\n| Key | Type | Value |\n|-----|------|-------|\n| `file` | File | `postman/fixtures/project.txt` |\n| `start_date` | Text | `2026-09-01` (optional) |\n| `end_date` | Text | `2026-09-12` (optional) |\n\nIf the file field is empty after import, click **Select Files** and choose `postman/fixtures/project.txt`."
           },
           "response": []
         },
@@ -350,19 +359,35 @@
             {
               "listen": "test",
               "script": {
-                "type": "text/javascript",
                 "exec": [
+                  "const j = pm.response.json();",
                   "pm.test('Status is 200', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "const j = pm.response.json();",
-                  "pm.test('markdown unstructured', function () {",
-                  "    pm.expect(j.data_kind).to.eql('unstructured');",
-                  "    pm.expect(j.documents_written).to.be.at.least(1);",
-                  "    const preview = (j.documents[0].content_preview || '').toLowerCase();",
-                  "    pm.expect(preview.includes('scissors') || preview.includes('boom') || preview.includes('project')).to.be.true;",
-                  "});"
-                ]
+                  "pm.test('lean FR-IX-023 body', function () {",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.user_requirement_summary).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.needs_summary).to.be.an('array');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    // technical indexing/KG fields must not be required on public body",
+                  "    pm.expect(j).to.not.have.property('data_kind');",
+                  "    pm.expect(j).to.not.have.property('documents_written');",
+                  "    pm.expect(j).to.not.have.property('kg_built');",
+                  "    pm.expect(j).to.not.have.property('documents');",
+                  "    pm.expect(j).to.not.have.property('recommendation_id');",
+                  "    pm.expect(j).to.not.have.property('results_by_need');",
+                  "});",
+                  "if (j.ingest_id) {",
+                  "    pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "    pm.environment.set('ingestId', j.ingest_id);",
+                  "}",
+                  "if (j.user_id) {",
+                  "    pm.collectionVariables.set('userId', j.user_id);",
+                  "    pm.environment.set('userId', j.user_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -372,7 +397,7 @@
               {
                 "key": "Idempotency-Key",
                 "value": "{{idempotencyKey}}",
-                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
                 "disabled": true
               },
               {
@@ -421,21 +446,35 @@
             {
               "listen": "test",
               "script": {
-                "type": "text/javascript",
                 "exec": [
+                  "const j = pm.response.json();",
                   "pm.test('Status is 200', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "const j = pm.response.json();",
-                  "pm.test('csv structured', function () {",
-                  "    pm.expect(j.data_kind).to.eql('structured');",
-                  "    pm.expect(j.structured_count).to.be.at.least(1);",
-                  "    pm.expect(j.structured_document_count).to.be.at.least(1);",
-                  "    pm.expect(j.documents_written).to.be.at.least(1);",
-                  "    pm.expect(j.documents[0].has_embedding).to.eql(true);",
-                  "    pm.expect(j.documents[0].content_preview).to.include('Boom');",
-                  "});"
-                ]
+                  "pm.test('lean FR-IX-023 body', function () {",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.user_requirement_summary).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.needs_summary).to.be.an('array');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    // technical indexing/KG fields must not be required on public body",
+                  "    pm.expect(j).to.not.have.property('data_kind');",
+                  "    pm.expect(j).to.not.have.property('documents_written');",
+                  "    pm.expect(j).to.not.have.property('kg_built');",
+                  "    pm.expect(j).to.not.have.property('documents');",
+                  "    pm.expect(j).to.not.have.property('recommendation_id');",
+                  "    pm.expect(j).to.not.have.property('results_by_need');",
+                  "});",
+                  "if (j.ingest_id) {",
+                  "    pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "    pm.environment.set('ingestId', j.ingest_id);",
+                  "}",
+                  "if (j.user_id) {",
+                  "    pm.collectionVariables.set('userId', j.user_id);",
+                  "    pm.environment.set('userId', j.user_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -445,7 +484,7 @@
               {
                 "key": "Idempotency-Key",
                 "value": "{{idempotencyKey}}",
-                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
                 "disabled": true
               },
               {
@@ -484,7 +523,7 @@
               ]
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "Attach `postman/fixtures/needs.csv`.\n\nExpect: `data_kind=structured`."
+            "description": "Multipart `.csv` (structured branch internally).\n\nExpect 200 lean FR-IX-023. Attach `postman/fixtures/needs.csv`."
           },
           "response": []
         },
@@ -494,18 +533,35 @@
             {
               "listen": "test",
               "script": {
-                "type": "text/javascript",
                 "exec": [
+                  "const j = pm.response.json();",
                   "pm.test('Status is 200', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "const j = pm.response.json();",
-                  "pm.test('json structured', function () {",
-                  "    pm.expect(j.data_kind).to.eql('structured');",
-                  "    pm.expect(j.documents_written).to.be.at.least(1);",
-                  "    pm.expect(j.documents[0].content_preview.toLowerCase()).to.include('excavator');",
-                  "});"
-                ]
+                  "pm.test('lean FR-IX-023 body', function () {",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.user_requirement_summary).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.needs_summary).to.be.an('array');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    // technical indexing/KG fields must not be required on public body",
+                  "    pm.expect(j).to.not.have.property('data_kind');",
+                  "    pm.expect(j).to.not.have.property('documents_written');",
+                  "    pm.expect(j).to.not.have.property('kg_built');",
+                  "    pm.expect(j).to.not.have.property('documents');",
+                  "    pm.expect(j).to.not.have.property('recommendation_id');",
+                  "    pm.expect(j).to.not.have.property('results_by_need');",
+                  "});",
+                  "if (j.ingest_id) {",
+                  "    pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "    pm.environment.set('ingestId', j.ingest_id);",
+                  "}",
+                  "if (j.user_id) {",
+                  "    pm.collectionVariables.set('userId', j.user_id);",
+                  "    pm.environment.set('userId', j.user_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -515,7 +571,7 @@
               {
                 "key": "Idempotency-Key",
                 "value": "{{idempotencyKey}}",
-                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
                 "disabled": true
               },
               {
@@ -564,18 +620,35 @@
             {
               "listen": "test",
               "script": {
-                "type": "text/javascript",
                 "exec": [
+                  "const j = pm.response.json();",
                   "pm.test('Status is 200', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "const j = pm.response.json();",
-                  "pm.test('both sources classified', function () {",
-                  "    pm.expect(j.structured_count + j.unstructured_count).to.be.at.least(2);",
-                  "    pm.expect(['structured', 'unstructured', 'mixed']).to.include(j.data_kind);",
-                  "    pm.expect(j.documents_written).to.be.at.least(1);",
-                  "});"
-                ]
+                  "pm.test('lean FR-IX-023 body', function () {",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.user_requirement_summary).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.needs_summary).to.be.an('array');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    // technical indexing/KG fields must not be required on public body",
+                  "    pm.expect(j).to.not.have.property('data_kind');",
+                  "    pm.expect(j).to.not.have.property('documents_written');",
+                  "    pm.expect(j).to.not.have.property('kg_built');",
+                  "    pm.expect(j).to.not.have.property('documents');",
+                  "    pm.expect(j).to.not.have.property('recommendation_id');",
+                  "    pm.expect(j).to.not.have.property('results_by_need');",
+                  "});",
+                  "if (j.ingest_id) {",
+                  "    pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "    pm.environment.set('ingestId', j.ingest_id);",
+                  "}",
+                  "if (j.user_id) {",
+                  "    pm.collectionVariables.set('userId', j.user_id);",
+                  "    pm.environment.set('userId', j.user_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -585,7 +658,7 @@
               {
                 "key": "Idempotency-Key",
                 "value": "{{idempotencyKey}}",
-                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
                 "disabled": true
               },
               {
@@ -629,7 +702,7 @@
               ]
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "CSV (structured) + free-text (unstructured) \u2192 often `data_kind=mixed`."
+            "description": "CSV file + `project_text` (mixed sources internally).\n\nExpect 200 lean FR-IX-023. Attach `postman/fixtures/needs.csv`."
           },
           "response": []
         }
@@ -668,7 +741,7 @@
               {
                 "key": "Idempotency-Key",
                 "value": "{{idempotencyKey}}",
-                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
                 "disabled": true
               },
               {
@@ -689,7 +762,7 @@
               "raw": "{\n  \"user_id\": \"user_demo\",\n  \"project_text\": \"   \"\n}\n"
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "Whitespace-only text \u2192 400."
+            "description": "Whitespace-only text → 400."
           },
           "response": []
         },
@@ -723,7 +796,7 @@
               {
                 "key": "Idempotency-Key",
                 "value": "{{idempotencyKey}}",
-                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
                 "disabled": true
               },
               {
@@ -744,7 +817,7 @@
               "raw": "{}\n"
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "Empty JSON object \u2192 400."
+            "description": "Empty JSON object → 400."
           },
           "response": []
         },
@@ -778,7 +851,7 @@
               {
                 "key": "Idempotency-Key",
                 "value": "{{idempotencyKey}}",
-                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
                 "disabled": true
               },
               {
@@ -799,7 +872,7 @@
               "raw": "{\n  \"user_id\": \"user_demo\",\n  \"project_text\": \"Need an excavator\",\n  \"start_date\": \"2026-09-12\",\n  \"end_date\": \"2026-09-01\"\n}\n"
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "`end_date` before `start_date` \u2192 400."
+            "description": "`end_date` before `start_date` → 400."
           },
           "response": []
         },
@@ -829,7 +902,7 @@
               {
                 "key": "Idempotency-Key",
                 "value": "{{idempotencyKey}}",
-                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
                 "disabled": true
               },
               {
@@ -868,7 +941,7 @@
               ]
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "Attach `postman/fixtures/unsupported.bin` \u2192 400."
+            "description": "Attach `postman/fixtures/unsupported.bin` → 400."
           },
           "response": []
         },
@@ -898,7 +971,7 @@
               {
                 "key": "Idempotency-Key",
                 "value": "{{idempotencyKey}}",
-                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
                 "disabled": true
               },
               {
@@ -937,7 +1010,7 @@
               ]
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "Attach `postman/fixtures/empty.txt` (0 bytes) \u2192 400."
+            "description": "Attach `postman/fixtures/empty.txt` (0 bytes) → 400."
           },
           "response": []
         },
@@ -966,7 +1039,7 @@
               {
                 "key": "Idempotency-Key",
                 "value": "{{idempotencyKey}}",
-                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
                 "disabled": true
               },
               {
@@ -994,15 +1067,15 @@
               ]
             },
             "url": "{{baseUrl}}{{ingestPath}}",
-            "description": "Empty multipart (no file, no text) \u2192 400."
+            "description": "Empty multipart (no file, no text) → 400."
           },
           "response": []
         }
       ]
     },
     {
-      "name": "04 Call 2 recommend + Call 3 chatbot Q&A",
-      "description": "After Call 1 ingest in the **same** process:\n- **15/16 style:** ingest then **Call 2 recommend** (`getassetrecommendations`) \u2014 primary portal body\n- **Call 3 chatbot:** `project-knowledge/query` \u2014 optional free-form Q&A\n",
+      "name": "04 Portal dual-hop Call 2 + optional Call 3",
+      "description": "After Call 1 ingest in the **same** process:\n- **15/16 style:** ingest then **Call 2 recommend** (`getassetrecommendations`) — primary portal body\n- **Call 3 chatbot:** `project-knowledge/query` — optional free-form Q&A\n",
       "item": [
         {
           "name": "15 POST ingest project-spec for multi-agent",
@@ -1010,35 +1083,35 @@
             {
               "listen": "test",
               "script": {
-                "type": "text/javascript",
                 "exec": [
+                  "const j = pm.response.json();",
                   "pm.test('Status is 200', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "const j = pm.response.json();",
-                  "pm.test('ingest_id prefix', function () {",
+                  "pm.test('lean FR-IX-023 body', function () {",
                   "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.user_requirement_summary).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.needs_summary).to.be.an('array');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    // technical indexing/KG fields must not be required on public body",
+                  "    pm.expect(j).to.not.have.property('data_kind');",
+                  "    pm.expect(j).to.not.have.property('documents_written');",
+                  "    pm.expect(j).to.not.have.property('kg_built');",
+                  "    pm.expect(j).to.not.have.property('documents');",
+                  "    pm.expect(j).to.not.have.property('recommendation_id');",
+                  "    pm.expect(j).to.not.have.property('results_by_need');",
                   "});",
-                  "pm.test('kg_built true', function () {",
-                  "    pm.expect(j.kg_built).to.eql(true);",
-                  "    pm.expect(j.kg_node_count).to.be.at.least(1);",
-                  "});",
-                  "pm.test('wrote embedded chunks', function () {",
-                  "    pm.expect(j.documents_written).to.be.at.least(1);",
-                  "    pm.expect(j.chunk_count).to.be.at.least(1);",
-                  "});",
-                  "if (pm.response.code === 200) {",
-                  "    const j = pm.response.json();",
-                  "    if (j.ingest_id) {",
-                  "        pm.collectionVariables.set('ingestId', j.ingest_id);",
-                  "        pm.environment.set('ingestId', j.ingest_id);",
-                  "    }",
-                  "    if (j.user_id) {",
-                  "        pm.collectionVariables.set('userId', j.user_id);",
-                  "        pm.environment.set('userId', j.user_id);",
-                  "    }",
+                  "if (j.ingest_id) {",
+                  "    pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "    pm.environment.set('ingestId', j.ingest_id);",
+                  "}",
+                  "if (j.user_id) {",
+                  "    pm.collectionVariables.set('userId', j.user_id);",
+                  "    pm.environment.set('userId', j.user_id);",
                   "}"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1052,7 +1125,7 @@
               {
                 "key": "Idempotency-Key",
                 "value": "{{idempotencyKey}}",
-                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key \u2192 same ingest_id (process-local).",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
                 "disabled": true
               },
               {
@@ -1087,7 +1160,7 @@
                 "exec": [
                   "const id = pm.collectionVariables.get('ingestId') || pm.environment.get('ingestId');",
                   "if (!id) {",
-                  "    console.warn('ingestId is empty \u2014 run request 15 first in this server process.');",
+                  "    console.warn('ingestId is empty — run request 15 first in this server process.');",
                   "}"
                 ]
               }
@@ -1095,17 +1168,43 @@
             {
               "listen": "test",
               "script": {
-                "type": "text/javascript",
                 "exec": [
-                  "pm.test('Call 2 recommend 200', function () { pm.response.to.have.status(200); });",
                   "const j = pm.response.json();",
+                  "pm.test('Call 2 recommend 200', function () { pm.response.to.have.status(200); });",
                   "pm.test('quote envelope (not Q&A answer)', function () {",
-                  "  pm.expect(j).to.have.property('quoteRef');",
-                  "  pm.expect(j).to.have.property('items');",
-                  "  pm.expect(j.user_id).to.eql(pm.environment.get('userId') || j.user_id);",
-                  "  pm.expect(j).to.not.have.property('answer');",
+                  "    pm.expect(j).to.have.property('quoteRef');",
+                  "    pm.expect(String(j.quoteRef)).to.match(/^QUO-/);",
+                  "    pm.expect(j).to.have.property('items');",
+                  "    pm.expect(j.items).to.be.an('array');",
+                  "    pm.expect(j.user_id).to.eql(pm.environment.get('userId') || j.user_id);",
+                  "    pm.expect(j.ingest_id).to.eql(pm.environment.get('ingestId') || j.ingest_id);",
+                  "    pm.expect(j).to.not.have.property('answer');",
+                  "    pm.expect(j).to.not.have.property('tool_traces');",
+                  "});",
+                  "pm.test('quote scores and items shape', function () {",
+                  "    // confidenceScore may be null when items empty",
+                  "    pm.expect(j).to.have.property('confidenceScore');",
+                  "    pm.expect(j).to.have.property('warnings');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    j.items.forEach(function (item) {",
+                  "        pm.expect(item).to.have.property('equipment');",
+                  "        pm.expect(item.equipment).to.have.property('id');",
+                  "        pm.expect(item.equipment.id).to.be.ok;",
+                  "        // live SQL: digit assets.id; fake: AST-* seed ids",
+                  "        if (item.mlPredictedPrice !== null && item.mlPredictedPrice !== undefined) {",
+                  "            pm.expect(Number(item.mlPredictedPrice)).to.be.above(0);",
+                  "            if (item.equipment.baseDailyRate !== null && item.equipment.baseDailyRate !== undefined) {",
+                  "                pm.expect(Number(item.equipment.baseDailyRate)).to.eql(Number(item.mlPredictedPrice));",
+                  "            }",
+                  "        }",
+                  "        if (item.matchScore !== null && item.matchScore !== undefined) {",
+                  "            pm.expect(Number(item.matchScore)).to.be.at.least(0);",
+                  "            pm.expect(Number(item.matchScore)).to.be.at.most(1);",
+                  "        }",
+                  "    });",
                   "});"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1151,7 +1250,7 @@
                 "getassetrecommendations"
               ]
             },
-            "description": "**Call 2 recommend / quote.** Requires prior Call 1 in same process.\nBody: user_id + ingest_id + optional query.\nExpect 200 with quoteRef, items[] (equipment + rates), not Q&A answer."
+            "description": "**Call 2 recommend / quote.** Requires `userId` + `ingestId` from request 15.\n\nExpect 200: `quoteRef` (QUO-…), `items[]`, `confidenceScore`, optional `mlPredictedPrice` / `matchScore`.\nMust **not** include chatbot `answer` or `tool_traces`.\n\nLive SQL: `equipment.id` = `assets.id` (digit string). Fake/seed: `AST-*` ids."
           },
           "response": []
         },
@@ -1165,7 +1264,7 @@
                 "exec": [
                   "const id = pm.collectionVariables.get('ingestId') || pm.environment.get('ingestId');",
                   "if (!id) {",
-                  "    console.warn('ingestId is empty \u2014 run request 15 first in this server process.');",
+                  "    console.warn('ingestId is empty — run request 15 first in this server process.');",
                   "}"
                 ]
               }
@@ -1173,16 +1272,21 @@
             {
               "listen": "test",
               "script": {
-                "type": "text/javascript",
                 "exec": [
-                  "pm.test('Call 3 Q&A 200', function () { pm.response.to.have.status(200); });",
                   "const j = pm.response.json();",
+                  "pm.test('Call 3 Q&A 200', function () { pm.response.to.have.status(200); });",
                   "pm.test('chatbot answer (not quote)', function () {",
-                  "  pm.expect(j).to.have.property('answer');",
-                  "  pm.expect(j.answer.length).to.be.above(0);",
-                  "  pm.expect(j).to.not.have.property('quoteRef');",
+                  "    pm.expect(j).to.have.property('answer');",
+                  "    pm.expect(j.answer.length).to.be.above(0);",
+                  "    pm.expect(j).to.not.have.property('quoteRef');",
+                  "    pm.expect(j).to.not.have.property('items');",
+                  "    pm.expect(j.user_id).to.eql(pm.environment.get('userId') || j.user_id);",
+                  "    pm.expect(j.ingest_id).to.eql(pm.environment.get('ingestId') || j.ingest_id);",
+                  "    pm.expect(j).to.have.property('sources_used');",
+                  "    pm.expect(j.sources_used).to.be.an('array');",
                   "});"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1228,7 +1332,7 @@
                 "query"
               ]
             },
-            "description": "**Call 3 chatbot Q&A.** Run after Call 1 (same process). Optional after portal submit.\n\nRequest: `user_id`, `ingest_id`, **required** `query`.\nExpect: `answer`, `sources_used`, `tool_traces`."
+            "description": "**Call 3 chatbot Q&A** over project DocumentStore + KG-1.\n\nExpect 200: non-empty `answer`, `sources_used[]`. Must **not** include `quoteRef` / `items`."
           },
           "response": []
         },
@@ -1291,7 +1395,7 @@
                 "getassetrecommendations"
               ]
             },
-            "description": "Unknown session \u2192 404 `not_found`."
+            "description": "Call 2 with unknown `ingest_id` → **404** `{\"error\":\"not_found\",...}`."
           },
           "response": []
         },
@@ -1352,7 +1456,7 @@
                 "query"
               ]
             },
-            "description": "Empty query fails validation (422 from FastAPI/Pydantic or 400)."
+            "description": "Call 3 with empty `query` → **422** or **400**."
           },
           "response": []
         }

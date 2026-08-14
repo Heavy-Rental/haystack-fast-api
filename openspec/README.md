@@ -8,11 +8,12 @@ Behaviour source of truth for this service, aligned to:
 
 **Start:** [`AGENTS.md`](./AGENTS.md) (reading order, runtime flow, conflict rules).
 
-**Portal dual-hop:** React `project-spec` → Call 1 ingest → **Call 2 recommend** (`getassetrecommendations` quote) → React. **Call 3** chatbot: `.../project-knowledge/query`. See [`AGENTS.md`](./AGENTS.md) · [`../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../Feasibility_Study_Spring/portal-to-haystack-mapping.md) · [`changes/2026-08-12-call2-recommend-call3-qa/`](./changes/2026-08-12-call2-recommend-call3-qa/).
+**Portal dual-hop:** React `project-spec` → Call 1 ingest → **Call 2 recommend** (`getassetrecommendations` quote) → React. **Call 3** chatbot: `.../project-knowledge/query`. See [`AGENTS.md`](./AGENTS.md) · [`specs/portal-dual-hop/spec.md`](./specs/portal-dual-hop/spec.md) · [`../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../Feasibility_Study_Spring/portal-to-haystack-mapping.md) · [`changes/2026-08-12-call2-recommend-call3-qa/`](./changes/2026-08-12-call2-recommend-call3-qa/).
 
 | Path | Purpose |
 |------|---------|
 | [`project.md`](./project.md) | Product identity & vision |
+| [`specs/portal-dual-hop/spec.md`](./specs/portal-dual-hop/spec.md) | **Call 1 → Call 2 process** (as-built dual-hop, FR-PDH-*) |
 | [`specs/`](./specs/) | Current capability behaviour |
 | [`changes/`](./changes/) | Active + archived change proposals |
 | [`spdd/`](./spdd/) | Optional REASONS canvases & prompt index |

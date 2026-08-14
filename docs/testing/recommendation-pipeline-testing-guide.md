@@ -45,6 +45,7 @@ uv sync --all-groups
 | **HTTP** `POST .../submitprojectspecification` | `tests/test_recommendations_intake.py`, `postman/` | `ingest_id`, `data_kind`, `documents_written`, `has_embedding`, `kg_*` |
 | **HTTP** multi-agent Q&A `POST .../project-knowledge/getassetrecommendations` | [`knowledge-graph-testing-guide.md`](./knowledge-graph-testing-guide.md); `tests/test_project_knowledge_*.py`; Postman folder **04** | `answer`, dual `sources_used` / `tool_traces` |
 | **Service** FR-010 | `tests/test_recommend_pipeline_mvp.py`, `tests/test_pipeline_intake_front.py` | `recommendation_id`, `results_by_need`, singular `item` |
+| **Eval pack** Call 1→2 predicted vs gold | `tests/test_call1_call2_eval_pack.py`, `tests/test_eval_metrics.py`; method + **`.env`/conftest isolation** in [`../call1-call2-endpoint-process.md`](../call1-call2-endpoint-process.md) §11 | Hit@1, need F1, `confidenceScore` consistency, MAPE |
 
 ---
 
@@ -52,6 +53,8 @@ uv sync --all-groups
 
 ```bash
 cd haystack-fast-api
+
+# HTML report path (default for all pytest runs): reports/pytest-report.html
 
 # Intake front — FR-010.1–3 (resolve → decompose → expand)
 uv run pytest tests/test_pipeline_intake_front.py -v

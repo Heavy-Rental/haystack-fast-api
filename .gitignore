@@ -19,6 +19,8 @@ venv/
 .mypy_cache/
 .coverage
 htmlcov/
+# pytest-html output (regenerate with uv run pytest)
+reports/
 
 # IDE / OS
 .idea/
