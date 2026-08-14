@@ -130,6 +130,10 @@ Sessions are **process-local**. Restarting uvicorn drops Call 1 `ingest_id` sess
 uv run pytest tests/ -q
 ```
 
+HTML report (always written): open **`reports/pytest-report.html`** in a browser.  
+Config: `pyproject.toml` → `addopts` (`pytest-html`, self-contained).  
+Eval pack only: `uv run pytest tests/test_eval_metrics.py tests/test_confidence_score.py tests/test_call1_call2_eval_pack.py -q`
+
 No live Postgres, Neo4j, or LLM required.
 
 Optional live packs (skipped unless you opt in):
@@ -182,6 +186,10 @@ Full collection (multipart files, negatives, Call 3): [`postman/README.md`](./po
 | Doc | When |
 |-----|------|
 | [`openspec/AGENTS.md`](./openspec/AGENTS.md) | Reading order |
+| [`docs/call1-call2-endpoint-process.md`](./docs/call1-call2-endpoint-process.md) | Full Call 1 → Call 2 process guide |
+| [`docs/multi-agent-architecture.md`](./docs/multi-agent-architecture.md) | Multi-agent (indexing gate, Call 3 Q&A, Call 2 C/W/D) |
+| [`docs/README.md`](./docs/README.md) | Docs index |
+| [`openspec/specs/portal-dual-hop/spec.md`](./openspec/specs/portal-dual-hop/spec.md) | OpenSpec dual-hop (FR-PDH-*) |
 | [`openspec/specs/indexing/contracts/ingest-from-project-spec.md`](./openspec/specs/indexing/contracts/ingest-from-project-spec.md) | Call 1 fields |
 | [`openspec/specs/recommendation-pipeline/contracts/get-asset-recommendations.md`](./openspec/specs/recommendation-pipeline/contracts/get-asset-recommendations.md) | Call 2 quote + identity |
 | [`docs/testing/recommendation-pipeline-testing-guide.md`](./docs/testing/recommendation-pipeline-testing-guide.md) | Pipeline tests |

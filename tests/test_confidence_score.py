@@ -53,3 +53,26 @@ def test_confidence_seed_id_not_live() -> None:
     )
     # coverage 0.30, match 0.20, live 0, avail 0, priced 0
     assert score == 0.50
+
+
+def test_confidence_recomputed_from_quote_items() -> None:
+    """Drift guard: formula on quote items matches compute_confidence_score."""
+    from app.schemas.recommend_quote import AssetRecommendResponse
+    from tests.eval.metrics import recompute_confidence_from_quote
+
+    items = [_item(), _item(eq_id="28")]
+    quote = AssetRecommendResponse(
+        user_id="u",
+        ingest_id="ing_x",
+        quoteRef="QUO-TEST",
+        items=items,
+        days=14,
+        confidenceScore=0.99,
+    )
+    recomputed = recompute_confidence_from_quote(
+        quote, need_count=2, has_dates=True
+    )
+    assert recomputed == 0.99
+    assert recomputed == compute_confidence_score(
+        items=items, need_count=2, has_dates=True
+    )

@@ -32,6 +32,7 @@ context: |
       live FLEET_BACKEND=sql: equipment.id = assets.id; CI fake uses seed AST-*
     → Call 3 CHATBOT Q&A POST .../project-knowledge/query (optional follow-ups)
       (user_id + ingest_id + query required; answer + hits)
+  Process spec: openspec/specs/portal-dual-hop/spec.md (FR-PDH-001…011)
   Code: APIRouter prefix /internal/v1/recommendations
   Mapping: Feasibility_Study_Spring/portal-to-haystack-mapping.md
 

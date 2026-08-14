@@ -49,6 +49,7 @@ neo4j = [
 [dependency-groups]
 dev = [
     "pytest>=8.3.0",
+    "pytest-html>=4.1.0",
     "httpx>=0.28.0",
     "ruff>=0.8.0",
     "faker>=40.36.0",
@@ -64,6 +65,13 @@ packages = ["app"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+# HTML report: reports/pytest-report.html (self-contained CSS/JS).
+# Override path: uv run pytest --html=reports/custom.html --self-contained-html
+# Disable for a single run: uv run pytest -p no:html -o addopts=
+addopts = [
+    "--html=reports/pytest-report.html",
+    "--self-contained-html",
+]
 markers = [
     "pgvector: needs Postgres with pgvector extension (optional; skip unless RUN_PGVECTOR_TESTS=1)",
     "neo4j: needs a live Neo4j Bolt endpoint (optional; skip unless RUN_NEO4J_TESTS=1)",

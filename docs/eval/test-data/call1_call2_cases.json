@@ -1,0 +1,399 @@
+{
+  "eval_seed": 42,
+  "description": "Deterministic synthetic pack for Call 1 / Call 2 predicted-vs-actual evaluation",
+  "cases": [
+    {
+      "case_id": "happy_scissors",
+      "kind": "happy",
+      "project_text": "Need one scissors lift for indoor elevated work ~8m. From 1 Sep 2026 to 14 Sep 2026. Budget SGD 12000.",
+      "call1_expected": {
+        "equipment_types": ["scissor lift"],
+        "start_date": "2026-09-01",
+        "end_date": "2026-09-14",
+        "budget_amount": 12000,
+        "budget_currency": "SGD",
+        "must_not_invent_budget": false
+      },
+      "call2_expected": {
+        "need_count": 1,
+        "gold_by_need": [
+          {
+            "need_id": "need_1",
+            "description": "Need scissors lift for indoor elevated work ~8m",
+            "equipment_hints": ["scissor lift"],
+            "quantity": 1,
+            "gold_asset_ids": ["AST-SL-001", "AST-SL-002"],
+            "gold_categories": ["Scissors Lift"],
+            "available": true,
+            "price_daily": 185.0
+          }
+        ],
+        "confidence_min": 0.55,
+        "hit_at_1_required": true,
+        "expect_empty_items": false
+      }
+    },
+    {
+      "case_id": "happy_excavator",
+      "kind": "happy",
+      "project_text": "Need an excavator for site prep and trenching. Rental 2026-10-01 to 2026-10-10. Budget SGD 8000.",
+      "call1_expected": {
+        "equipment_types": ["excavator"],
+        "start_date": "2026-10-01",
+        "end_date": "2026-10-10",
+        "budget_amount": 8000,
+        "budget_currency": "SGD",
+        "must_not_invent_budget": false
+      },
+      "call2_expected": {
+        "need_count": 1,
+        "gold_by_need": [
+          {
+            "need_id": "need_1",
+            "description": "Need excavator for site prep",
+            "equipment_hints": ["excavator"],
+            "quantity": 1,
+            "gold_asset_ids": ["AST-EX-001", "AST-EX-002"],
+            "gold_categories": ["Excavator"],
+            "available": true,
+            "price_daily": 185.0
+          }
+        ],
+        "confidence_min": 0.55,
+        "hit_at_1_required": true,
+        "expect_empty_items": false
+      }
+    },
+    {
+      "case_id": "happy_forklift",
+      "kind": "happy",
+      "project_text": "Warehouse loading bay needs a forklift. From 2026-11-01 to 2026-11-07. Budget SGD 5000.",
+      "call1_expected": {
+        "equipment_types": ["forklift"],
+        "start_date": "2026-11-01",
+        "end_date": "2026-11-07",
+        "budget_amount": 5000,
+        "budget_currency": "SGD",
+        "must_not_invent_budget": false
+      },
+      "call2_expected": {
+        "need_count": 1,
+        "gold_by_need": [
+          {
+            "need_id": "need_1",
+            "description": "Need forklift for warehouse loading",
+            "equipment_hints": ["forklift"],
+            "quantity": 1,
+            "gold_asset_ids": ["AST-FL-001"],
+            "gold_categories": ["Fork Lift"],
+            "available": true,
+            "price_daily": 185.0
+          }
+        ],
+        "confidence_min": 0.55,
+        "hit_at_1_required": true,
+        "expect_empty_items": false
+      }
+    },
+    {
+      "case_id": "happy_boom",
+      "kind": "happy",
+      "project_text": "Outdoor facade work requires a boom lift / aerial platform. 2026-08-15 to 2026-08-25. Budget SGD 15000.",
+      "call1_expected": {
+        "equipment_types": ["boom lift"],
+        "start_date": "2026-08-15",
+        "end_date": "2026-08-25",
+        "budget_amount": 15000,
+        "budget_currency": "SGD",
+        "must_not_invent_budget": false
+      },
+      "call2_expected": {
+        "need_count": 1,
+        "gold_by_need": [
+          {
+            "need_id": "need_1",
+            "description": "Need boom lift for facade work",
+            "equipment_hints": ["boom lift"],
+            "quantity": 1,
+            "gold_asset_ids": ["AST-BL-001"],
+            "gold_categories": ["Boom Lift"],
+            "available": true,
+            "price_daily": 185.0
+          }
+        ],
+        "confidence_min": 0.55,
+        "hit_at_1_required": true,
+        "expect_empty_items": false
+      }
+    },
+    {
+      "case_id": "multi_scissors_excavator",
+      "kind": "happy",
+      "project_text": "Need a scissors lift for indoor elevated work ~8m and an excavator for site prep. From 1 Sep 2026 to 20 Sep 2026. Budget SGD 20000.",
+      "call1_expected": {
+        "equipment_types": ["scissor lift", "excavator"],
+        "start_date": "2026-09-01",
+        "end_date": "2026-09-20",
+        "budget_amount": 20000,
+        "budget_currency": "SGD",
+        "must_not_invent_budget": false
+      },
+      "call2_expected": {
+        "need_count": 2,
+        "gold_by_need": [
+          {
+            "need_id": "need_access",
+            "description": "Need scissors lift for indoor elevated work ~8m",
+            "equipment_hints": ["scissor lift"],
+            "quantity": 1,
+            "gold_asset_ids": ["AST-SL-001", "AST-SL-002"],
+            "gold_categories": ["Scissors Lift"],
+            "available": true,
+            "price_daily": 185.0
+          },
+          {
+            "need_id": "need_earthwork",
+            "description": "Need excavator for site prep",
+            "equipment_hints": ["excavator"],
+            "quantity": 1,
+            "gold_asset_ids": ["AST-EX-001", "AST-EX-002"],
+            "gold_categories": ["Excavator"],
+            "available": true,
+            "price_daily": 185.0
+          }
+        ],
+        "confidence_min": 0.55,
+        "hit_at_1_required": true,
+        "expect_empty_items": false
+      }
+    },
+    {
+      "case_id": "no_match_submarine",
+      "kind": "no_match",
+      "project_text": "Need a submarine for underwater inspection next month. Budget is tight.",
+      "call1_expected": {
+        "equipment_types": [],
+        "start_date": null,
+        "end_date": null,
+        "budget_amount": null,
+        "budget_currency": null,
+        "must_not_invent_budget": true
+      },
+      "call2_expected": {
+        "need_count": 1,
+        "gold_by_need": [
+          {
+            "need_id": "need_unknown",
+            "description": "Need a submarine for underwater inspection",
+            "equipment_hints": ["submarine"],
+            "quantity": 1,
+            "gold_asset_ids": [],
+            "gold_categories": [],
+            "available": null,
+            "price_daily": null
+          }
+        ],
+        "confidence_min": null,
+        "hit_at_1_required": false,
+        "expect_empty_items": true
+      }
+    },
+    {
+      "case_id": "no_dates_scissors",
+      "kind": "happy",
+      "project_text": "Need a scissors lift for indoor elevated work around 8 meters. Budget SGD 9000.",
+      "call1_expected": {
+        "equipment_types": ["scissor lift"],
+        "start_date": null,
+        "end_date": null,
+        "budget_amount": 9000,
+        "budget_currency": "SGD",
+        "must_not_invent_budget": false
+      },
+      "call2_expected": {
+        "need_count": 1,
+        "gold_by_need": [
+          {
+            "need_id": "need_1",
+            "description": "Need scissors lift indoor elevated work",
+            "equipment_hints": ["scissor lift"],
+            "quantity": 1,
+            "gold_asset_ids": ["AST-SL-001", "AST-SL-002"],
+            "gold_categories": ["Scissors Lift"],
+            "available": true,
+            "price_daily": 185.0
+          }
+        ],
+        "confidence_min": 0.50,
+        "hit_at_1_required": true,
+        "expect_empty_items": false
+      }
+    },
+    {
+      "case_id": "no_budget_forklift",
+      "kind": "happy",
+      "project_text": "Need a forklift for warehouse loading bay work from 2026-12-01 to 2026-12-05.",
+      "call1_expected": {
+        "equipment_types": ["forklift"],
+        "start_date": "2026-12-01",
+        "end_date": "2026-12-05",
+        "budget_amount": null,
+        "budget_currency": null,
+        "must_not_invent_budget": true
+      },
+      "call2_expected": {
+        "need_count": 1,
+        "gold_by_need": [
+          {
+            "need_id": "need_1",
+            "description": "Need forklift for warehouse loading",
+            "equipment_hints": ["forklift"],
+            "quantity": 1,
+            "gold_asset_ids": ["AST-FL-001"],
+            "gold_categories": ["Fork Lift"],
+            "available": true,
+            "price_daily": 185.0
+          }
+        ],
+        "confidence_min": 0.55,
+        "hit_at_1_required": true,
+        "expect_empty_items": false
+      }
+    },
+    {
+      "case_id": "excavator_prefers_available",
+      "kind": "happy",
+      "project_text": "Need an excavator between 2026-09-05 and 2026-09-12 for trench work.",
+      "call1_expected": {
+        "equipment_types": ["excavator"],
+        "start_date": "2026-09-05",
+        "end_date": "2026-09-12",
+        "budget_amount": null,
+        "budget_currency": null,
+        "must_not_invent_budget": true
+      },
+      "call2_expected": {
+        "need_count": 1,
+        "gold_by_need": [
+          {
+            "need_id": "need_1",
+            "description": "Need excavator for trench work",
+            "equipment_hints": ["excavator"],
+            "quantity": 1,
+            "gold_asset_ids": ["AST-EX-001"],
+            "gold_categories": ["Excavator"],
+            "available": true,
+            "price_daily": 185.0,
+            "prefer_not_asset_ids": ["AST-EX-002"]
+          }
+        ],
+        "confidence_min": 0.55,
+        "hit_at_1_required": true,
+        "expect_empty_items": false
+      }
+    },
+    {
+      "case_id": "multi_fork_boom",
+      "kind": "happy",
+      "project_text": "Site needs a forklift for materials and a boom lift for high exterior work. 2026-07-01 to 2026-07-15. Budget SGD 18000.",
+      "call1_expected": {
+        "equipment_types": ["forklift", "boom lift"],
+        "start_date": "2026-07-01",
+        "end_date": "2026-07-15",
+        "budget_amount": 18000,
+        "budget_currency": "SGD",
+        "must_not_invent_budget": false
+      },
+      "call2_expected": {
+        "need_count": 2,
+        "gold_by_need": [
+          {
+            "need_id": "need_lift",
+            "description": "Need forklift for materials",
+            "equipment_hints": ["forklift"],
+            "quantity": 1,
+            "gold_asset_ids": ["AST-FL-001"],
+            "gold_categories": ["Fork Lift"],
+            "available": true,
+            "price_daily": 185.0
+          },
+          {
+            "need_id": "need_aerial",
+            "description": "Need boom lift for high exterior work",
+            "equipment_hints": ["boom lift"],
+            "quantity": 1,
+            "gold_asset_ids": ["AST-BL-001"],
+            "gold_categories": ["Boom Lift"],
+            "available": true,
+            "price_daily": 185.0
+          }
+        ],
+        "confidence_min": 0.55,
+        "hit_at_1_required": true,
+        "expect_empty_items": false
+      }
+    },
+    {
+      "case_id": "happy_scissors_short_window",
+      "kind": "happy",
+      "project_text": "Scissor lift required for ceiling work ~8m on 2026-09-01 through 2026-09-03. Budget SGD 3000.",
+      "call1_expected": {
+        "equipment_types": ["scissor lift"],
+        "start_date": "2026-09-01",
+        "end_date": "2026-09-03",
+        "budget_amount": 3000,
+        "budget_currency": "SGD",
+        "must_not_invent_budget": false
+      },
+      "call2_expected": {
+        "need_count": 1,
+        "gold_by_need": [
+          {
+            "need_id": "need_1",
+            "description": "Scissor lift for ceiling work ~8m",
+            "equipment_hints": ["scissor lift"],
+            "quantity": 1,
+            "gold_asset_ids": ["AST-SL-001", "AST-SL-002"],
+            "gold_categories": ["Scissors Lift"],
+            "available": true,
+            "price_daily": 185.0
+          }
+        ],
+        "confidence_min": 0.55,
+        "hit_at_1_required": true,
+        "expect_empty_items": false
+      }
+    },
+    {
+      "case_id": "no_match_helicopter",
+      "kind": "no_match",
+      "project_text": "Need a helicopter for deep-sea surveying tomorrow. Budget SGD 50000.",
+      "call1_expected": {
+        "equipment_types": [],
+        "start_date": null,
+        "end_date": null,
+        "budget_amount": 50000,
+        "budget_currency": "SGD",
+        "must_not_invent_budget": false
+      },
+      "call2_expected": {
+        "need_count": 1,
+        "gold_by_need": [
+          {
+            "need_id": "need_heli",
+            "description": "Need a helicopter for deep-sea surveying",
+            "equipment_hints": ["helicopter"],
+            "quantity": 1,
+            "gold_asset_ids": [],
+            "gold_categories": [],
+            "available": null,
+            "price_daily": null
+          }
+        ],
+        "confidence_min": null,
+        "hit_at_1_required": false,
+        "expect_empty_items": true
+      }
+    }
+  ]
+}

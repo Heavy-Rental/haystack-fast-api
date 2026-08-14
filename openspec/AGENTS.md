@@ -10,6 +10,12 @@ This folder is the **SDD source of truth**. Standards:
 
 **Start here**, then follow a path. Do not treat all capabilities as equally “live.”
 
+**Call 1 → Call 2 process (full steps, planes, checklist):**  
+[`specs/portal-dual-hop/spec.md`](./specs/portal-dual-hop/spec.md) (FR-PDH-001…011).
+
+**Multi-agent architecture (readable guide under docs/):**  
+[`../docs/multi-agent-architecture.md`](../docs/multi-agent-architecture.md).
+
 ---
 
 ## Runtime flow (as-built)
