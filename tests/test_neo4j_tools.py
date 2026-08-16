@@ -80,6 +80,8 @@ from app.agents.neo4j_tools import (
     FreeFormCypherRejected,
     UnavailableNeo4jBackend,
     UnknownNeo4jTemplateError,
+    _FLEET_NODES_CYPHER,
+    _FLEET_RELS_CYPHER,
     map_fleet_graph,
     neo4j_cypher_read,
     trigger_neo4j_populate,
@@ -463,6 +465,13 @@ def test_bolt_mapper_matches_fixture_templates() -> None:
         live = neo4j_cypher_read(template=template, backend=backend, **kwargs)
         expected = neo4j_cypher_read(template=template, backend=fake, **kwargs)
         assert {row["id"] for row in live} == {row["id"] for row in expected}
+
+
+def test_bolt_cypher_avoids_missing_document_label_token() -> None:
+    """Negative Document filter must not use `:Document` (Neo4j 01N50)."""
+    for cypher in (_FLEET_NODES_CYPHER, _FLEET_RELS_CYPHER):
+        assert ":Document" not in cypher
+        assert "'Document' IN labels(" in cypher
 
 
 def test_bolt_mapper_drops_document_labels() -> None:
