@@ -35,6 +35,8 @@ def test_build_openai_embedder_passes_dimensions() -> None:
 
     assert openai_embedding_dimensions("text-embedding-3-small", 768) == 768
     assert openai_embedding_dimensions("text-embedding-3-large", 384) == 384
+    assert openai_embedding_dimensions("qwen3-embedding-0.6b", 1024) == 1024
+    assert openai_embedding_dimensions("qwen3-embedding-0.6b", 768) == 768
     assert openai_embedding_dimensions("text-embedding-ada-002", 384) is None
 
     emb = build_document_embedder(
@@ -44,6 +46,64 @@ def test_build_openai_embedder_passes_dimensions() -> None:
         openai_model="text-embedding-3-small",
     )
     assert getattr(emb, "dimensions", None) == 768
+    assert getattr(emb._inner, "dimensions", None) == 768
+
+    qwen = build_document_embedder(
+        mode="openai",
+        dimension=768,
+        openai_api_key="sk-test",
+        openai_model="qwen3-embedding-0.6b",
+    )
+    assert getattr(qwen._inner, "dimensions", None) == 768
+
+
+def test_resize_embedding_truncates_and_rejects_short_vectors() -> None:
+    from app.pipelines.indexing.embedder_factory import resize_embedding
+
+    same = resize_embedding([1.0, 0.0, 0.0], 3)
+    assert same == [1.0, 0.0, 0.0]
+
+    truncated = resize_embedding([3.0, 4.0, 0.0, 9.0], 2)
+    assert len(truncated) == 2
+    assert truncated == pytest.approx([0.6, 0.8])
+
+    with pytest.raises(ValueError, match="cannot pad"):
+        resize_embedding([1.0, 2.0], 4)
+
+
+def test_document_and_query_embedders_enforce_configured_dim() -> None:
+    from haystack.dataclasses import Document
+
+    from app.pipelines.indexing.embedder_factory import (
+        DimensionEnforcingDocumentEmbedder,
+        DimensionEnforcingTextEmbedder,
+    )
+    from app.pipelines.indexing.retrieval import build_text_embedder
+
+    class _WideDoc:
+        def run(self, documents: list) -> dict:
+            from dataclasses import replace
+
+            return {
+                "documents": [replace(doc, embedding=[1.0] * 1024) for doc in documents],
+                "meta": {},
+            }
+
+    class _WideText:
+        def run(self, text: str) -> dict:
+            del text
+            return {"embedding": [1.0] * 1024, "meta": {}}
+
+    docs_out = DimensionEnforcingDocumentEmbedder(_WideDoc(), 768).run(
+        documents=[Document(content="excavator")]
+    )
+    assert len(docs_out["documents"][0].embedding) == 768
+
+    query_out = DimensionEnforcingTextEmbedder(_WideText(), 768).run(text="excavator")
+    assert len(query_out["embedding"]) == 768
+
+    query = build_text_embedder(mode="mock", dimension=16)
+    assert len(query.run(text="scissors lift")["embedding"]) == 16
 
 
 def test_ingest_maps_pgvector_dimension_error() -> None:

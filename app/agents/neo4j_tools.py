@@ -66,17 +66,19 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
 
 _FREEFORM_KEYS = ("cypher", "query", "raw_cypher", "sql", "statement", "raw_sql")
 
+# Use labels() membership, not `:Document`. Neo4j 5+ emits 01N50 when a
+# negative label predicate names a token that has never been created.
 _FLEET_NODES_CYPHER = (
     "MATCH (n) "
     "WHERE any(l IN labels(n) WHERE l IN $fleet_labels) "
-    "AND NOT n:Document "
+    "AND NOT 'Document' IN labels(n) "
     "RETURN n"
 )
 _FLEET_RELS_CYPHER = (
     "MATCH (a)-[r]->(b) "
     "WHERE any(l IN labels(a) WHERE l IN $fleet_labels) "
     "AND any(l IN labels(b) WHERE l IN $fleet_labels) "
-    "AND NOT a:Document AND NOT b:Document "
+    "AND NOT 'Document' IN labels(a) AND NOT 'Document' IN labels(b) "
     "RETURN a, r, b"
 )
 

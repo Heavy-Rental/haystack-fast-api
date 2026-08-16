@@ -18,7 +18,9 @@ from haystack.document_stores.in_memory import InMemoryDocumentStore
 from haystack.utils import Secret
 
 from app.pipelines.indexing.embedder_factory import (
+    DimensionEnforcingTextEmbedder,
     EmbedderMode,
+    _maybe_st_truncate_kwargs,
     openai_embedding_dimensions,
 )
 
@@ -36,7 +38,8 @@ def build_text_embedder(
     """Query-side embedder matching ``build_document_embedder`` modes."""
     normalized = str(mode or "mock").strip().lower()
     if normalized == "mock":
-        return MockTextEmbedder(dimension=dimension, model=model)
+        inner: Any = MockTextEmbedder(dimension=dimension, model=model)
+        return DimensionEnforcingTextEmbedder(inner, dimension)
     if normalized == "openai":
         kwargs: dict[str, Any] = {
             "model": openai_model,
@@ -49,7 +52,8 @@ def build_text_embedder(
             kwargs["api_key"] = Secret.from_token(openai_api_key)
         if openai_base_url:
             kwargs["api_base_url"] = openai_base_url
-        return OpenAITextEmbedder(**kwargs)
+        inner = OpenAITextEmbedder(**kwargs)
+        return DimensionEnforcingTextEmbedder(inner, dimension)
     if normalized in {"sentence-transformers", "st", "minilm"}:
         try:
             from haystack.components.embedders import (  # type: ignore[attr-defined]
@@ -65,10 +69,15 @@ def build_text_embedder(
                     "SentenceTransformersTextEmbedder is not available. "
                     "Install sentence-transformers or use INDEXING_EMBEDDER=mock."
                 ) from exc
-        return SentenceTransformersTextEmbedder(
-            model=sentence_transformers_model,
-            progress_bar=False,
+        st_kwargs: dict[str, Any] = {
+            "model": sentence_transformers_model,
+            "progress_bar": False,
+        }
+        st_kwargs.update(
+            _maybe_st_truncate_kwargs(SentenceTransformersTextEmbedder, dimension)
         )
+        inner = SentenceTransformersTextEmbedder(**st_kwargs)
+        return DimensionEnforcingTextEmbedder(inner, dimension)
     raise ValueError(f"unsupported indexing embedder mode: {mode!r}")
 
 
