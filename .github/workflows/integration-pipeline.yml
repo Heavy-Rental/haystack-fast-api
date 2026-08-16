@@ -1,0 +1,672 @@
+# =============================================================================
+# Heavy Rental haystack-fast-api — Integration CI Pipeline (reusable)
+# =============================================================================
+# Stages (priority order — Integration is highest priority):
+#   1. Integration           (HIGHEST) checkout, Python 3.12 + uv, Haystack smoke
+#   2. Quality Control       needs Integration — Ruff + pytest (CI-safe backends)
+#   3. Security Testing      needs Integration — SAST (Semgrep p/python) + pip-audit
+#                            report + SCA/FS (Trivy)
+#   4. CodeQL Analysis       needs Integration — GitHub CodeQL (Python)
+#   5. GitHub Flow CI Gate   aggregate: Integration first, then QC + Security + CodeQL
+#
+# Security report format (standard): SARIF 2.1.0
+#   - Semgrep → semgrep.sarif
+#   - Trivy FS → trivy-fs.sarif
+#   - CodeQL → GitHub Code Scanning (native SARIF via analyze)
+# Human-readable console output is for gates/logs only, not the report standard.
+# pip-audit JSON is a Python-specific extra report (does not fail the job).
+#
+# GitHub Flow for develop (validate only — NEVER packages a release wheel)
+# --------------------------------------------------------------------------
+# This pipeline is CI only: merge-into-develop validation. It does not
+# run uv build or publish artifacts to GHCR.
+#
+#   1. Branch from develop
+#   2. Open PR → develop (or push to develop) → haystack-ci-caller → this workflow
+#   3. Branch protection on develop should require:
+#        - "Integration"              ← highest priority / must pass first
+#        - "Quality Control"
+#        - "Security Testing"
+#        - "CodeQL Analysis"
+#        - "GitHub Flow CI Gate"       ← optional single aggregate check
+#   4. Merge when green → develop is integration-tested, not production-deployed
+#   5. Wheel packaging lives only in release-pipeline.yml
+#   6. This family does not provision infrastructure, deploy, or operate.
+#      Those concerns belong to another project.
+#
+# Application:
+#   https://github.com/Heavy-Rental/haystack-fast-api
+#   Python 3.12 · uv · FastAPI · Haystack 2.x · Ruff · pytest
+#
+# How haystack-fast-api uses this
+# -------------------------------
+# Install both files into the application repository:
+#
+#   .github/workflows/integration-pipeline.yml   ← this file (reusable only)
+#   .github/workflows/haystack-ci-caller.yml     ← sole allowed entry point
+#
+# This file exposes only workflow_call (no push / PR / workflow_dispatch).
+# A gate job rejects any caller other than haystack-ci-caller.yml.
+#
+# Local validation (pipeline-development repo root, in the devcontainer):
+#   actionlint haystack-fast-api-pipeline/integration-pipeline/integration-pipeline.yml
+#   act — see haystack-fast-api-pipeline/act/README.md
+#
+# No GitHub Actions secrets required for v1.
+# =============================================================================
+
+name: Haystack FastAPI CI
+
+on:
+  workflow_call:
+    inputs:
+      app_repository:
+        description: >
+          Override application repository (owner/name). Leave empty to use the
+          calling repository (required for PR checks on haystack-fast-api).
+        required: false
+        type: string
+        default: ""
+      app_ref:
+        description: >
+          Override git ref (branch/tag/SHA). Leave empty to use the calling
+          workflow's commit (github.sha) — correct for pull_request events.
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: haystack-ci-${{ github.workflow }}-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  security-events: write
+  actions: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  APP_PATH: app
+  DEFAULT_APP_REPOSITORY: Heavy-Rental/haystack-fast-api
+  DEFAULT_APP_REF: develop
+  # CI-safe Haystack backends (QUICKSTART Profile A / tests/conftest.py)
+  NEED_DECOMPOSER: stub
+  INDEXING_EMBEDDER: mock
+  INDEXING_DOCUMENT_STORE: memory
+  INDEXING_EMBEDDING_DIM: "384"
+  FLEET_BACKEND: fake
+  PRICING_SCHEMA: primary_snapshot
+  NEO4J_BACKEND: fake
+  RECOMMEND_VIA_AGENT_GRAPH: "false"
+  KG_APPLY_TRANSFORMS: "false"
+  PROJECT_AGENT_MODE: stub
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 0. Caller gate — only haystack-ci-caller.yml may invoke this workflow
+  # ---------------------------------------------------------------------------
+  assert-caller:
+    name: Assert caller
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Allow only haystack-ci-caller.yml
+        env:
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+        run: |
+          set -euo pipefail
+          echo "github.workflow_ref=${WORKFLOW_REF}"
+          echo "github.event_name=${EVENT_NAME}"
+          echo "github.workflow=${WORKFLOW_NAME}"
+          # nektos/act does not populate github.workflow_ref. ACT=true is set by
+          # act and is unset on GitHub-hosted runners — do not weaken the gate there.
+          if [ "${ACT:-}" = "true" ] && [ -z "${WORKFLOW_REF}" ]; then
+            echo "act local run: caller gate skipped (github.workflow_ref unset)"
+            {
+              echo "### Caller gate"
+              echo ""
+              echo "nektos/act — \`github.workflow_ref\` is empty; filename gate skipped."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          case "${WORKFLOW_REF}" in
+            */.github/workflows/haystack-ci-caller.yml@*)
+              echo "Allowed caller: haystack-ci-caller.yml"
+              {
+                echo "### Caller gate"
+                echo ""
+                echo "Invoked by \`haystack-ci-caller.yml\` — OK."
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo "::error::integration-pipeline.yml may only be invoked by .github/workflows/haystack-ci-caller.yml (got: ${WORKFLOW_REF})"
+              exit 1
+              ;;
+          esac
+
+  # ---------------------------------------------------------------------------
+  # 1. Integration — HIGHEST PRIORITY
+  # ---------------------------------------------------------------------------
+  integration:
+    name: Integration
+    runs-on: ubuntu-latest
+    needs: [assert-caller]
+    timeout-minutes: 30
+    outputs:
+      app_repository: ${{ steps.meta.outputs.app_repository }}
+      app_ref: ${{ steps.meta.outputs.app_ref }}
+      checkout_mode: ${{ steps.meta.outputs.checkout_mode }}
+    steps:
+      - name: Resolve application source (same-repo caller vs remote override)
+        id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_REPO: ${{ inputs.app_repository }}
+          INPUT_REF: ${{ inputs.app_ref }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_SHA: ${{ github.sha }}
+          DEFAULT_APP_REF_VALUE: ${{ env.DEFAULT_APP_REF }}
+        run: |
+          set -euo pipefail
+          EVENT="${EVENT_NAME}"
+          INPUT_REPO="${INPUT_REPO}"
+          INPUT_REF="${INPUT_REF}"
+
+          if [ -n "${INPUT_REPO}" ] && [ "${INPUT_REPO}" != "${GH_REPOSITORY}" ]; then
+            APP_REPO="${INPUT_REPO}"
+            APP_REF="${INPUT_REF:-${DEFAULT_APP_REF_VALUE}}"
+            MODE=remote
+          else
+            APP_REPO="${GH_REPOSITORY}"
+            APP_REF="${INPUT_REF:-${GH_SHA}}"
+            MODE=caller
+          fi
+
+          echo "app_repository=$APP_REPO" >> "$GITHUB_OUTPUT"
+          echo "app_ref=$APP_REF" >> "$GITHUB_OUTPUT"
+          echo "checkout_mode=$MODE" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Source resolution"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Event | \`$EVENT\` |"
+            echo "| Mode | \`$MODE\` |"
+            echo "| Repository | \`$APP_REPO\` |"
+            echo "| Ref | \`$APP_REF\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Integrating application: $APP_REPO @ $APP_REF (mode=$MODE)"
+
+      - name: Checkout calling repository (PR / push head)
+        if: steps.meta.outputs.checkout_mode == 'caller'
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.APP_PATH }}
+
+      - name: Checkout remote application repository
+        if: steps.meta.outputs.checkout_mode == 'remote'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.meta.outputs.app_repository }}
+          ref: ${{ steps.meta.outputs.app_ref }}
+          path: ${{ env.APP_PATH }}
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
+
+      - name: Require uv.lock and sync frozen environment
+        working-directory: ${{ env.APP_PATH }}
+        run: |
+          set -euo pipefail
+          if [ ! -f uv.lock ]; then
+            echo "::error::uv.lock not found — this pipeline expects a locked uv project."
+            exit 1
+          fi
+          echo "==> uv / Python versions"
+          uv --version
+          python --version
+          echo "==> uv lock --check"
+          uv lock --check
+          echo "==> uv sync --frozen --all-groups"
+          uv sync --frozen --all-groups
+
+      - name: Verify project layout and Haystack / FastAPI smoke
+        working-directory: ${{ env.APP_PATH }}
+        env:
+          PYTHON_VERSION_VALUE: ${{ env.PYTHON_VERSION }}
+        run: |
+          set -euo pipefail
+          echo "==> Required files"
+          test -f pyproject.toml
+          test -f uv.lock
+          test -f .python-version
+          test -f app/main.py
+          test -f tests/conftest.py
+          echo "==> Haystack + FastAPI smoke (mock embedder / memory store / stub decomposer)"
+          if [ -n "${LLM_API_KEY:-}" ]; then
+            echo "::error::LLM_API_KEY must not be set in Integration."
+            exit 1
+          fi
+          uv run python -c "
+          import haystack
+          from haystack import Pipeline
+          from app.main import create_app
+          from app.pipelines import build_indexing_pipeline, build_intake_front_pipeline
+
+          print('haystack', getattr(haystack, '__version__', 'unknown'))
+          app = create_app()
+          print('fastapi', getattr(app, 'title', type(app).__name__))
+          indexing = build_indexing_pipeline()
+          intake = build_intake_front_pipeline()
+          if not isinstance(indexing, Pipeline):
+              raise SystemExit(f'indexing pipeline type={type(indexing)!r}')
+          if not isinstance(intake, Pipeline):
+              raise SystemExit(f'intake pipeline type={type(intake)!r}')
+          print('indexing', type(indexing).__name__)
+          print('intake', type(intake).__name__)
+          print('Haystack/FastAPI smoke OK')
+          "
+          {
+            echo "### Integration checks"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Runner Python | \`${PYTHON_VERSION_VALUE}\` |"
+            echo "| Package manager | \`uv\` (frozen lock) |"
+            echo "| Haystack smoke | \`Pipeline\` + \`create_app\` |"
+            echo "| Backends | mock embedder / memory store / stub / fake |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Integration checks passed."
+
+      - name: Upload uv project fingerprint
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-metadata
+          path: |
+            ${{ env.APP_PATH }}/pyproject.toml
+            ${{ env.APP_PATH }}/uv.lock
+          retention-days: 7
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # 2. Quality control — Ruff + pytest (Haystack + FastAPI TestClient)
+  # ---------------------------------------------------------------------------
+  quality-control:
+    name: Quality Control
+    runs-on: ubuntu-latest
+    needs: [integration]
+    timeout-minutes: 40
+    steps:
+      - name: Checkout calling repository (PR / push head)
+        if: needs.integration.outputs.checkout_mode == 'caller'
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.APP_PATH }}
+
+      - name: Checkout remote application repository
+        if: needs.integration.outputs.checkout_mode == 'remote'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.integration.outputs.app_repository }}
+          ref: ${{ needs.integration.outputs.app_ref }}
+          path: ${{ env.APP_PATH }}
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
+
+      - name: Install locked environment
+        working-directory: ${{ env.APP_PATH }}
+        run: |
+          set -euo pipefail
+          uv sync --frozen --all-groups
+
+      - name: Ruff check and pytest
+        working-directory: ${{ env.APP_PATH }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LLM_API_KEY:-}" ]; then
+            echo "::error::LLM_API_KEY must not be set in Quality Control."
+            exit 1
+          fi
+          if [ -n "${RUN_PGVECTOR_TESTS:-}" ] || [ -n "${RUN_NEO4J_TESTS:-}" ]; then
+            echo "::error::Live pgvector/Neo4j opt-in flags must not be set in v1 CI."
+            exit 1
+          fi
+          echo "==> Ruff (app + tests)"
+          uv run ruff check app tests
+          mkdir -p reports
+          echo "==> pytest (Haystack pipelines + FastAPI TestClient + eval pack)"
+          uv run pytest tests/
+          {
+            echo "### Quality control"
+            echo ""
+            echo "Ruff and pytest completed successfully."
+            echo ""
+            echo "| Tool | Command |"
+            echo "| --- | --- |"
+            echo "| Ruff | \`uv run ruff check app tests\` |"
+            echo "| pytest | \`uv run pytest tests/\` |"
+            echo "| HTML report | \`reports/pytest-report.html\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload pytest HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-test-reports
+          path: |
+            ${{ env.APP_PATH }}/reports/pytest-report.html
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # 3. Security testing — Semgrep (Python) + pip-audit + Trivy
+  # ---------------------------------------------------------------------------
+  security-testing:
+    name: Security Testing
+    runs-on: ubuntu-latest
+    needs: [integration]
+    timeout-minutes: 25
+    steps:
+      - name: Checkout calling repository (PR / push head)
+        if: needs.integration.outputs.checkout_mode == 'caller'
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.APP_PATH }}
+
+      - name: Checkout remote application repository
+        if: needs.integration.outputs.checkout_mode == 'remote'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.integration.outputs.app_repository }}
+          ref: ${{ needs.integration.outputs.app_ref }}
+          path: ${{ env.APP_PATH }}
+
+      - name: Create security reports directory
+        run: mkdir -p "${GITHUB_WORKSPACE}/security-reports"
+
+      - name: Setup Python (Semgrep + uv)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
+
+      - name: Install Semgrep
+        run: pip install --quiet semgrep
+
+      - name: SAST — Semgrep (Python / OWASP) → SARIF
+        working-directory: ${{ env.APP_PATH }}
+        run: |
+          set -euo pipefail
+          REPORT_DIR="${GITHUB_WORKSPACE}/security-reports"
+          SEMGREP_COMMON=(
+            --config=p/python
+            --config=p/owasp-top-ten
+            --config=p/security-audit
+            --config=p/secrets
+            --metrics=off
+          )
+
+          echo "==> Semgrep report (SARIF 2.1.0)"
+          set +e
+          semgrep scan "${SEMGREP_COMMON[@]}" \
+            --sarif \
+            --output="${REPORT_DIR}/semgrep.sarif" \
+            .
+          SARIF_RC=$?
+          set -e
+          if [ -f "${REPORT_DIR}/semgrep.sarif" ]; then
+            echo "SARIF written: ${REPORT_DIR}/semgrep.sarif (semgrep exit=${SARIF_RC}; non-zero is OK for report pass)"
+          else
+            echo "::warning::semgrep.sarif was not produced (exit=${SARIF_RC})"
+          fi
+
+          echo "==> SAST gate (ERROR severity only; exit 1 if findings)"
+          set +e
+          semgrep scan "${SEMGREP_COMMON[@]}" \
+            --severity=ERROR \
+            --error \
+            --text \
+            .
+          GATE_RC=$?
+          set -e
+          if [ "${GATE_RC}" -ne 0 ]; then
+            echo "::error::Semgrep SAST gate failed (exit=${GATE_RC})."
+            echo "The SARIF report may still have been written successfully."
+            echo "This step fails because --severity=ERROR --error found ERROR-level issues"
+            echo "(or Semgrep could not complete the gate scan)."
+            echo "Open security-reports/semgrep.sarif or the text findings above."
+            exit "${GATE_RC}"
+          fi
+          echo "SAST (Semgrep) gate passed — no ERROR-level findings. SARIF: security-reports/semgrep.sarif"
+
+      - name: Python SCA report — pip-audit (does not fail the job)
+        working-directory: ${{ env.APP_PATH }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          REPORT_DIR="${GITHUB_WORKSPACE}/security-reports"
+          uv export --frozen --no-dev --no-hashes -o "${REPORT_DIR}/requirements-frozen.txt"
+          uvx pip-audit -r "${REPORT_DIR}/requirements-frozen.txt" \
+            --format json \
+            --output "${REPORT_DIR}/pip-audit.json" \
+            || true
+          {
+            echo "### pip-audit"
+            echo ""
+            echo "Python lockfile audit is report-only. Gate remains Trivy CRITICAL."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Trivy cache key
+        id: trivy-cache-meta
+        run: echo "week=$(date -u +%Y-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Trivy DBs
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cache/trivy
+          key: trivy-db-${{ runner.os }}-${{ steps.trivy-cache-meta.outputs.week }}
+          restore-keys: |
+            trivy-db-${{ runner.os }}-
+
+      - name: Trivy filesystem scan (SARIF report)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.APP_PATH }}
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+          format: sarif
+          output: security-reports/trivy-fs.sarif
+          ignore-unfixed: true
+          scanners: vuln
+          cache: "false"
+          cache-dir: ${{ github.workspace }}/.cache/trivy
+
+      - name: Trivy filesystem scan (console table)
+        if: always()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.APP_PATH }}
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+          format: table
+          ignore-unfixed: true
+          scanners: vuln
+          cache: "false"
+          cache-dir: ${{ github.workspace }}/.cache/trivy
+
+      - name: Trivy SCA gate (CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.APP_PATH }}
+          severity: CRITICAL
+          exit-code: "1"
+          format: table
+          ignore-unfixed: true
+          scanners: vuln
+          cache: "false"
+          cache-dir: ${{ github.workspace }}/.cache/trivy
+
+      - name: Upload Semgrep SARIF to Code Scanning
+        if: always() && hashFiles('security-reports/semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: security-reports/semgrep.sarif
+          checkout_path: ${{ env.APP_PATH }}
+          category: haystack-ci-semgrep
+        continue-on-error: true
+
+      - name: Upload Trivy SARIF to Code Scanning
+        if: always() && hashFiles('security-reports/trivy-fs.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: security-reports/trivy-fs.sarif
+          checkout_path: ${{ env.APP_PATH }}
+          category: haystack-ci-trivy-fs
+        continue-on-error: true
+
+      - name: Upload security reports (SARIF + pip-audit)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports-sarif
+          path: |
+            security-reports/*.sarif
+            security-reports/pip-audit.json
+            security-reports/requirements-frozen.txt
+          retention-days: 30
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # 4. CodeQL analysis — Python
+  # ---------------------------------------------------------------------------
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    needs: [integration]
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout calling repository (PR / push head)
+        if: needs.integration.outputs.checkout_mode == 'caller'
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.APP_PATH }}
+
+      - name: Checkout remote application repository
+        if: needs.integration.outputs.checkout_mode == 'remote'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.integration.outputs.app_repository }}
+          ref: ${{ needs.integration.outputs.app_ref }}
+          path: ${{ env.APP_PATH }}
+
+      - name: Initialize CodeQL (Python)
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          source-root: ${{ env.APP_PATH }}
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "haystack-ci-codeql-python"
+
+      - name: CodeQL summary
+        if: always()
+        run: |
+          {
+            echo "### CodeQL Analysis"
+            echo ""
+            echo "Language: Python"
+            echo "Query suite: security-and-quality"
+            echo "Category: haystack-ci-codeql-python"
+            echo ""
+            echo "View results: repository → Security → Code scanning alerts"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # 5. GitHub Flow CI gate — aggregate status for branch protection
+  # ---------------------------------------------------------------------------
+  github-flow-gate:
+    name: GitHub Flow CI Gate
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [integration, quality-control, security-testing, codeql]
+    timeout-minutes: 5
+    steps:
+      - name: Enforce Integration priority and full CI green
+        env:
+          INTEGRATION: ${{ needs.integration.result }}
+          QUALITY: ${{ needs.quality-control.result }}
+          SECURITY: ${{ needs.security-testing.result }}
+          CODEQL: ${{ needs.codeql.result }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo "### GitHub Flow CI gate"
+            echo ""
+            echo "| Job | Result | Priority |"
+            echo "| --- | --- | --- |"
+            echo "| Integration | \`${INTEGRATION}\` | **1 (highest)** |"
+            echo "| Quality Control | \`${QUALITY}\` | 2 |"
+            echo "| Security Testing | \`${SECURITY}\` | 2 |"
+            echo "| CodeQL Analysis | \`${CODEQL}\` | 2 |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "Integration (priority 1): ${INTEGRATION}"
+          echo "Quality Control (priority 2): ${QUALITY}"
+          echo "Security Testing (priority 2): ${SECURITY}"
+          echo "CodeQL Analysis (priority 2): ${CODEQL}"
+
+          if [ "${INTEGRATION}" != "success" ]; then
+            echo "::error::Integration is the highest-priority gate and did not succeed (result=${INTEGRATION})."
+            echo "Fix Integration before Quality Control / Security Testing / CodeQL can proceed."
+            exit 1
+          fi
+          if [ "${QUALITY}" != "success" ]; then
+            echo "::error::Quality Control did not succeed (result=${QUALITY})."
+            exit 1
+          fi
+          if [ "${SECURITY}" != "success" ]; then
+            echo "::error::Security Testing did not succeed (result=${SECURITY})."
+            exit 1
+          fi
+          if [ "${CODEQL}" != "success" ]; then
+            echo "::error::CodeQL Analysis did not succeed (result=${CODEQL})."
+            exit 1
+          fi
+
+          echo "GitHub Flow CI gate passed: Integration first, then Quality Control + Security Testing + CodeQL."

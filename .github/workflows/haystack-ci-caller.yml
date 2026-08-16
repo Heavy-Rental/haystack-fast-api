@@ -1,0 +1,88 @@
+# =============================================================================
+# Install into: haystack-fast-api
+# Path:         .github/workflows/haystack-ci-caller.yml
+# =============================================================================
+# GitHub Flow CI caller — validates feature-branch pull requests before merge.
+#
+# Place both files in the FastAPI / Haystack application repository:
+#
+#   .github/workflows/haystack-ci-caller.yml       ← this file (triggers)
+#   .github/workflows/integration-pipeline.yml     ← reusable pipeline (called)
+#
+# GitHub Flow
+# -----------
+#   1. Branch from develop
+#   2. Open a pull request into develop → this workflow runs (Integration first)
+#   3. Review + green checks → merge into develop
+#   4. Release packaging → haystack-release-caller.yml on GitHub Release
+#                          publish, or on PR develop → master
+#
+# Reusable workflow (same repository):
+#   ./.github/workflows/integration-pipeline.yml
+#
+# Job priority (do not reorder conceptually)
+# -----------------------------------------
+#   1. Integration           ← HIGHEST PRIORITY (required status check)
+#   2. Quality Control       (needs Integration; Ruff + pytest)
+#   2. Security Testing      (needs Integration; Semgrep p/python + Trivy)
+#   2. CodeQL Analysis       (needs Integration; Python Code Scanning)
+#   3. GitHub Flow CI Gate   (aggregate of the above — optional single check)
+#
+# Setup
+# -----
+# 1. Copy into the haystack-fast-api repo:
+#      .github/workflows/haystack-ci-caller.yml
+#      .github/workflows/integration-pipeline.yml
+# 2. Branch protection on develop (Settings → Branches):
+#      - Require a pull request before merging
+#      - Require status checks to pass before merging:
+#          * Integration              ← require this first / highest priority
+#          * Quality Control
+#          * Security Testing
+#          * CodeQL Analysis
+#          * GitHub Flow CI Gate      ← optional single aggregate check
+#      - Do not allow bypassing the above for administrators (recommended)
+# 3. No repository secrets required for v1.
+# =============================================================================
+
+name: CI
+
+on:
+  pull_request:
+    branches: [develop]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      app_repository:
+        description: Override application repository (owner/name). Empty = this repo (correct on GitHub; for act against the Haystack app, set Heavy-Rental/haystack-fast-api).
+        required: false
+        type: string
+        default: ""
+      app_ref:
+        description: Override git ref. Empty = this commit.
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: haystack-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  security-events: write
+  actions: read
+
+jobs:
+  integration-pipeline:
+    name: Integration pipeline
+    uses: ./.github/workflows/integration-pipeline.yml
+    with:
+      app_repository: ${{ inputs.app_repository }}
+      app_ref: ${{ inputs.app_ref }}
+    # Empty inputs on PR/push: checks out this repo at github.sha (application repo).
+    # For act in pipeline-development, pass app_repository=Heavy-Rental/haystack-fast-api.
+    # No secrets: haystack QC does not need a database or LLM key.

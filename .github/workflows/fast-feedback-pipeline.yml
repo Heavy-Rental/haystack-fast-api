@@ -1,0 +1,267 @@
+# =============================================================================
+# Heavy Rental haystack-fast-api — Fast Feedback CI Pipeline (reusable)
+# =============================================================================
+# Purpose: quick Integration-only check (same steps as the Integration stage of
+# integration-pipeline.yml). No Quality Control, Security, CodeQL, or packaging.
+#
+# Stages:
+#   1. Integration only — checkout, Python 3.12 + uv, Haystack smoke, layout
+#
+# Use this for early signal on feature-branch pushes. Full gates remain in:
+#   integration-pipeline.yml  (haystack-ci-caller.yml)
+#   release-pipeline.yml      (haystack-release-caller.yml)
+#
+# How haystack-fast-api uses this
+# -------------------------------
+# Install both files into the application repository:
+#
+#   .github/workflows/fast-feedback-pipeline.yml          ← this file (reusable only)
+#   .github/workflows/haystack-fast-feedback-caller.yml   ← sole allowed entry point
+#
+# This file exposes only workflow_call (no push / PR / workflow_dispatch).
+# A gate job rejects any caller other than haystack-fast-feedback-caller.yml.
+#
+# This family does not provision infrastructure, deploy, or operate production.
+# Those concerns belong to another project.
+#
+# Local validation (pipeline-development repo root, in the devcontainer):
+#   actionlint haystack-fast-api-pipeline/fast-feedback-ci-pipeline/fast-feedback-pipeline.yml
+#   act — see haystack-fast-api-pipeline/act/README.md
+#
+# No secrets required.
+# =============================================================================
+
+name: Haystack FastAPI Fast Feedback CI
+
+on:
+  workflow_call:
+    inputs:
+      app_repository:
+        description: >
+          Override application repository (owner/name). Leave empty to use the
+          calling repository.
+        required: false
+        type: string
+        default: ""
+      app_ref:
+        description: >
+          Override git ref (branch/tag/SHA). Leave empty to use the calling
+          workflow's commit (github.sha).
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: haystack-fast-feedback-${{ github.workflow }}-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  APP_PATH: app
+  DEFAULT_APP_REPOSITORY: Heavy-Rental/haystack-fast-api
+  DEFAULT_APP_REF: develop
+  NEED_DECOMPOSER: stub
+  INDEXING_EMBEDDER: mock
+  INDEXING_DOCUMENT_STORE: memory
+  INDEXING_EMBEDDING_DIM: "384"
+  FLEET_BACKEND: fake
+  PRICING_SCHEMA: primary_snapshot
+  NEO4J_BACKEND: fake
+  RECOMMEND_VIA_AGENT_GRAPH: "false"
+  KG_APPLY_TRANSFORMS: "false"
+  PROJECT_AGENT_MODE: stub
+
+jobs:
+  assert-caller:
+    name: Assert caller
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Allow only haystack-fast-feedback-caller.yml
+        env:
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+        run: |
+          set -euo pipefail
+          echo "github.workflow_ref=${WORKFLOW_REF}"
+          echo "github.event_name=${EVENT_NAME}"
+          echo "github.workflow=${WORKFLOW_NAME}"
+          if [ "${ACT:-}" = "true" ] && [ -z "${WORKFLOW_REF}" ]; then
+            echo "act local run: caller gate skipped (github.workflow_ref unset)"
+            {
+              echo "### Caller gate"
+              echo ""
+              echo "nektos/act — \`github.workflow_ref\` is empty; filename gate skipped."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          case "${WORKFLOW_REF}" in
+            */.github/workflows/haystack-fast-feedback-caller.yml@*)
+              echo "Allowed caller: haystack-fast-feedback-caller.yml"
+              {
+                echo "### Caller gate"
+                echo ""
+                echo "Invoked by \`haystack-fast-feedback-caller.yml\` — OK."
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo "::error::fast-feedback-pipeline.yml may only be invoked by .github/workflows/haystack-fast-feedback-caller.yml (got: ${WORKFLOW_REF})"
+              exit 1
+              ;;
+          esac
+
+  integration:
+    name: Integration
+    runs-on: ubuntu-latest
+    needs: [assert-caller]
+    timeout-minutes: 30
+    outputs:
+      app_repository: ${{ steps.meta.outputs.app_repository }}
+      app_ref: ${{ steps.meta.outputs.app_ref }}
+      checkout_mode: ${{ steps.meta.outputs.checkout_mode }}
+    steps:
+      - name: Resolve application source (same-repo caller vs remote override)
+        id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_REPO: ${{ inputs.app_repository }}
+          INPUT_REF: ${{ inputs.app_ref }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_SHA: ${{ github.sha }}
+          DEFAULT_APP_REF_VALUE: ${{ env.DEFAULT_APP_REF }}
+        run: |
+          set -euo pipefail
+          EVENT="${EVENT_NAME}"
+          INPUT_REPO="${INPUT_REPO}"
+          INPUT_REF="${INPUT_REF}"
+
+          if [ -n "${INPUT_REPO}" ] && [ "${INPUT_REPO}" != "${GH_REPOSITORY}" ]; then
+            APP_REPO="${INPUT_REPO}"
+            APP_REF="${INPUT_REF:-${DEFAULT_APP_REF_VALUE}}"
+            MODE=remote
+          else
+            APP_REPO="${GH_REPOSITORY}"
+            APP_REF="${INPUT_REF:-${GH_SHA}}"
+            MODE=caller
+          fi
+
+          echo "app_repository=$APP_REPO" >> "$GITHUB_OUTPUT"
+          echo "app_ref=$APP_REF" >> "$GITHUB_OUTPUT"
+          echo "checkout_mode=$MODE" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Source resolution (fast feedback)"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Event | \`$EVENT\` |"
+            echo "| Mode | \`$MODE\` |"
+            echo "| Repository | \`$APP_REPO\` |"
+            echo "| Ref | \`$APP_REF\` |"
+            echo "| Scope | Integration stage only |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Fast feedback integrating: $APP_REPO @ $APP_REF (mode=$MODE)"
+
+      - name: Checkout calling repository (PR / push head)
+        if: steps.meta.outputs.checkout_mode == 'caller'
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.APP_PATH }}
+
+      - name: Checkout remote application repository
+        if: steps.meta.outputs.checkout_mode == 'remote'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.meta.outputs.app_repository }}
+          ref: ${{ steps.meta.outputs.app_ref }}
+          path: ${{ env.APP_PATH }}
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
+
+      - name: Require uv.lock and sync frozen environment
+        working-directory: ${{ env.APP_PATH }}
+        run: |
+          set -euo pipefail
+          if [ ! -f uv.lock ]; then
+            echo "::error::uv.lock not found — this pipeline expects a locked uv project."
+            exit 1
+          fi
+          echo "==> uv / Python versions"
+          uv --version
+          python --version
+          echo "==> uv lock --check"
+          uv lock --check
+          echo "==> uv sync --frozen --all-groups"
+          uv sync --frozen --all-groups
+
+      - name: Verify project layout and Haystack / FastAPI smoke
+        working-directory: ${{ env.APP_PATH }}
+        env:
+          PYTHON_VERSION_VALUE: ${{ env.PYTHON_VERSION }}
+        run: |
+          set -euo pipefail
+          echo "==> Required files"
+          test -f pyproject.toml
+          test -f uv.lock
+          test -f .python-version
+          test -f app/main.py
+          test -f tests/conftest.py
+          echo "==> Haystack + FastAPI smoke (mock embedder / memory store / stub decomposer)"
+          if [ -n "${LLM_API_KEY:-}" ]; then
+            echo "::error::LLM_API_KEY must not be set in Integration."
+            exit 1
+          fi
+          uv run python -c "
+          import haystack
+          from haystack import Pipeline
+          from app.main import create_app
+          from app.pipelines import build_indexing_pipeline, build_intake_front_pipeline
+
+          print('haystack', getattr(haystack, '__version__', 'unknown'))
+          app = create_app()
+          print('fastapi', getattr(app, 'title', type(app).__name__))
+          indexing = build_indexing_pipeline()
+          intake = build_intake_front_pipeline()
+          if not isinstance(indexing, Pipeline):
+              raise SystemExit(f'indexing pipeline type={type(indexing)!r}')
+          if not isinstance(intake, Pipeline):
+              raise SystemExit(f'intake pipeline type={type(intake)!r}')
+          print('indexing', type(indexing).__name__)
+          print('intake', type(intake).__name__)
+          print('Haystack/FastAPI smoke OK')
+          "
+          {
+            echo "### Integration checks (fast feedback)"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Runner Python | \`${PYTHON_VERSION_VALUE}\` |"
+            echo "| Package manager | \`uv\` (frozen lock) |"
+            echo "| Haystack smoke | \`Pipeline\` + \`create_app\` |"
+            echo "| Scope | Integration stage only |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Fast feedback integration checks passed."
+
+      - name: Upload uv project fingerprint
+        uses: actions/upload-artifact@v4
+        with:
+          name: fast-feedback-integration-metadata
+          path: |
+            ${{ env.APP_PATH }}/pyproject.toml
+            ${{ env.APP_PATH }}/uv.lock
+          retention-days: 3
+          if-no-files-found: warn

@@ -1,0 +1,839 @@
+# =============================================================================
+# Heavy Rental haystack-fast-api — Release CI Pipeline (reusable)
+# =============================================================================
+# Stages (priority order — Integration is highest priority):
+#   1. Integration      (HIGHEST) checkout, Python 3.12 + uv, Haystack smoke
+#   2. Quality Control  needs Integration — Ruff + pytest
+#   3. Security Testing needs Integration — SAST (Semgrep p/python) + Trivy
+#   4. CodeQL Analysis  needs Integration — GitHub CodeQL (Python)
+#   5. Packaging        needs Integration + QC + Security + CodeQL
+#                       uv build + Docker image (tar artifact; GHCR off PR)
+#
+# Security report format (standard): SARIF 2.1.0
+#   - Semgrep → semgrep.sarif
+#   - Trivy FS → trivy-fs.sarif
+#   - CodeQL → GitHub Code Scanning (native SARIF via analyze)
+#
+# GitHub Flow
+# --------------------------------------------------------------------------
+# Invoked via haystack-release-caller.yml when:
+#   - a GitHub Release is published, or
+#   - a pull request is opened/updated from develop → master
+# Feature-branch PR validation remains haystack-ci-caller.yml (Integration first).
+#
+#   feature → develop (CI) → PR develop→master and/or publish GitHub Release
+#     → this pipeline
+#
+# Same gates as integration-pipeline.yml plus uv build wheel/sdist artifacts
+# and a Docker image (gzipped tar always; GHCR push outside pull requests).
+# Uses the application Dockerfile when present; otherwise generates a
+# Python 3.12 + uv + uvicorn image (Haystack FastAPI, not Tomcat).
+#
+# Application:
+#   https://github.com/Heavy-Rental/haystack-fast-api
+#   Python 3.12 · uv · FastAPI · Haystack 2.x
+#
+# How haystack-fast-api uses this on release
+# ------------------------------------------
+# Install both files into the application repository:
+#
+#   .github/workflows/release-pipeline.yml            ← this file (reusable only)
+#   .github/workflows/haystack-release-caller.yml     ← sole allowed entry point
+#
+# Local validation (pipeline-development repo root, in the devcontainer):
+#   actionlint haystack-fast-api-pipeline/release-pipeline/release-pipeline.yml
+#   act — see haystack-fast-api-pipeline/act/README.md
+#
+# GHCR push uses GITHUB_TOKEN (packages: write). No LLM / DB secrets.
+# Image is saved as a gzipped tar for a later deploy project that cannot pull GHCR.
+# This family does not provision infrastructure, deploy, or operate production.
+# =============================================================================
+
+name: Haystack FastAPI Release CI
+
+on:
+  workflow_call:
+    inputs:
+      app_repository:
+        description: >
+          Override application repository (owner/name). Leave empty to use the
+          calling repository.
+        required: false
+        type: string
+        default: ""
+      app_ref:
+        description: >
+          Override git ref (branch/tag/SHA). Leave empty to use the calling
+          workflow's commit (github.sha).
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: haystack-release-${{ github.workflow }}-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+  # Required to push the packaging Docker image to GHCR (non-PR runs)
+  packages: write
+
+env:
+  PYTHON_VERSION: "3.12"
+  APP_PATH: app
+  DEFAULT_APP_REPOSITORY: Heavy-Rental/haystack-fast-api
+  DEFAULT_APP_REF: master
+  IMAGE_NAME: haystack-fast-api
+  PYTHON_BASE_IMAGE: python:3.12-slim-bookworm
+  NEED_DECOMPOSER: stub
+  INDEXING_EMBEDDER: mock
+  INDEXING_DOCUMENT_STORE: memory
+  INDEXING_EMBEDDING_DIM: "384"
+  FLEET_BACKEND: fake
+  PRICING_SCHEMA: primary_snapshot
+  NEO4J_BACKEND: fake
+  RECOMMEND_VIA_AGENT_GRAPH: "false"
+  KG_APPLY_TRANSFORMS: "false"
+  PROJECT_AGENT_MODE: stub
+
+jobs:
+  assert-caller:
+    name: Assert caller
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Allow only haystack-release-caller.yml
+        env:
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+        run: |
+          set -euo pipefail
+          echo "github.workflow_ref=${WORKFLOW_REF}"
+          echo "github.event_name=${EVENT_NAME}"
+          echo "github.workflow=${WORKFLOW_NAME}"
+          if [ "${ACT:-}" = "true" ] && [ -z "${WORKFLOW_REF}" ]; then
+            echo "act local run: caller gate skipped (github.workflow_ref unset)"
+            {
+              echo "### Caller gate"
+              echo ""
+              echo "nektos/act — \`github.workflow_ref\` is empty; filename gate skipped."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          case "${WORKFLOW_REF}" in
+            */.github/workflows/haystack-release-caller.yml@*)
+              echo "Allowed caller: haystack-release-caller.yml"
+              {
+                echo "### Caller gate"
+                echo ""
+                echo "Invoked by \`haystack-release-caller.yml\` — OK."
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo "::error::release-pipeline.yml may only be invoked by .github/workflows/haystack-release-caller.yml (got: ${WORKFLOW_REF})"
+              exit 1
+              ;;
+          esac
+
+  integration:
+    name: Integration
+    runs-on: ubuntu-latest
+    needs: [assert-caller]
+    timeout-minutes: 30
+    outputs:
+      app_repository: ${{ steps.meta.outputs.app_repository }}
+      app_ref: ${{ steps.meta.outputs.app_ref }}
+      checkout_mode: ${{ steps.meta.outputs.checkout_mode }}
+    steps:
+      - name: Resolve application source (same-repo caller vs remote override)
+        id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_REPO: ${{ inputs.app_repository }}
+          INPUT_REF: ${{ inputs.app_ref }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_SHA: ${{ github.sha }}
+          DEFAULT_APP_REF_VALUE: ${{ env.DEFAULT_APP_REF }}
+        run: |
+          set -euo pipefail
+          EVENT="${EVENT_NAME}"
+          INPUT_REPO="${INPUT_REPO}"
+          INPUT_REF="${INPUT_REF}"
+
+          if [ -n "${INPUT_REPO}" ] && [ "${INPUT_REPO}" != "${GH_REPOSITORY}" ]; then
+            APP_REPO="${INPUT_REPO}"
+            APP_REF="${INPUT_REF:-${DEFAULT_APP_REF_VALUE}}"
+            MODE=remote
+          else
+            APP_REPO="${GH_REPOSITORY}"
+            APP_REF="${INPUT_REF:-${GH_SHA}}"
+            MODE=caller
+          fi
+
+          echo "app_repository=$APP_REPO" >> "$GITHUB_OUTPUT"
+          echo "app_ref=$APP_REF" >> "$GITHUB_OUTPUT"
+          echo "checkout_mode=$MODE" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Source resolution"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Event | \`$EVENT\` |"
+            echo "| Mode | \`$MODE\` |"
+            echo "| Repository | \`$APP_REPO\` |"
+            echo "| Ref | \`$APP_REF\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Integrating application: $APP_REPO @ $APP_REF (mode=$MODE)"
+
+      - name: Checkout calling repository (release / push head)
+        if: steps.meta.outputs.checkout_mode == 'caller'
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.APP_PATH }}
+
+      - name: Checkout remote application repository
+        if: steps.meta.outputs.checkout_mode == 'remote'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.meta.outputs.app_repository }}
+          ref: ${{ steps.meta.outputs.app_ref }}
+          path: ${{ env.APP_PATH }}
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
+
+      - name: Require uv.lock and sync frozen environment
+        working-directory: ${{ env.APP_PATH }}
+        run: |
+          set -euo pipefail
+          if [ ! -f uv.lock ]; then
+            echo "::error::uv.lock not found — this pipeline expects a locked uv project."
+            exit 1
+          fi
+          uv --version
+          python --version
+          uv lock --check
+          uv sync --frozen --all-groups
+
+      - name: Verify project layout and Haystack / FastAPI smoke
+        working-directory: ${{ env.APP_PATH }}
+        env:
+          PYTHON_VERSION_VALUE: ${{ env.PYTHON_VERSION }}
+        run: |
+          set -euo pipefail
+          test -f pyproject.toml
+          test -f uv.lock
+          test -f .python-version
+          test -f app/main.py
+          test -f tests/conftest.py
+          if [ -n "${LLM_API_KEY:-}" ]; then
+            echo "::error::LLM_API_KEY must not be set in Integration."
+            exit 1
+          fi
+          uv run python -c "
+          import haystack
+          from haystack import Pipeline
+          from app.main import create_app
+          from app.pipelines import build_indexing_pipeline, build_intake_front_pipeline
+
+          print('haystack', getattr(haystack, '__version__', 'unknown'))
+          app = create_app()
+          print('fastapi', getattr(app, 'title', type(app).__name__))
+          indexing = build_indexing_pipeline()
+          intake = build_intake_front_pipeline()
+          if not isinstance(indexing, Pipeline):
+              raise SystemExit(f'indexing pipeline type={type(indexing)!r}')
+          if not isinstance(intake, Pipeline):
+              raise SystemExit(f'intake pipeline type={type(intake)!r}')
+          print('Haystack/FastAPI smoke OK')
+          "
+          {
+            echo "### Integration checks"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Runner Python | \`${PYTHON_VERSION_VALUE}\` |"
+            echo "| Package manager | \`uv\` (frozen lock) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload uv project fingerprint
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-integration-metadata
+          path: |
+            ${{ env.APP_PATH }}/pyproject.toml
+            ${{ env.APP_PATH }}/uv.lock
+          retention-days: 14
+          if-no-files-found: warn
+
+  quality-control:
+    name: Quality Control
+    runs-on: ubuntu-latest
+    needs: [integration]
+    timeout-minutes: 40
+    steps:
+      - name: Checkout calling repository (release / push head)
+        if: needs.integration.outputs.checkout_mode == 'caller'
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.APP_PATH }}
+
+      - name: Checkout remote application repository
+        if: needs.integration.outputs.checkout_mode == 'remote'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.integration.outputs.app_repository }}
+          ref: ${{ needs.integration.outputs.app_ref }}
+          path: ${{ env.APP_PATH }}
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
+
+      - name: Install locked environment
+        working-directory: ${{ env.APP_PATH }}
+        run: uv sync --frozen --all-groups
+
+      - name: Ruff check and pytest
+        working-directory: ${{ env.APP_PATH }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LLM_API_KEY:-}" ]; then
+            echo "::error::LLM_API_KEY must not be set in Quality Control."
+            exit 1
+          fi
+          uv run ruff check app tests
+          mkdir -p reports
+          uv run pytest tests/
+          {
+            echo "### Quality control"
+            echo ""
+            echo "Ruff and pytest completed successfully."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload pytest HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-quality-test-reports
+          path: ${{ env.APP_PATH }}/reports/pytest-report.html
+          retention-days: 14
+          if-no-files-found: warn
+
+  security-testing:
+    name: Security Testing
+    runs-on: ubuntu-latest
+    needs: [integration]
+    timeout-minutes: 25
+    steps:
+      - name: Checkout calling repository (release / push head)
+        if: needs.integration.outputs.checkout_mode == 'caller'
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.APP_PATH }}
+
+      - name: Checkout remote application repository
+        if: needs.integration.outputs.checkout_mode == 'remote'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.integration.outputs.app_repository }}
+          ref: ${{ needs.integration.outputs.app_ref }}
+          path: ${{ env.APP_PATH }}
+
+      - name: Create security reports directory
+        run: mkdir -p "${GITHUB_WORKSPACE}/security-reports"
+
+      - name: Setup Python (Semgrep + uv)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
+
+      - name: Install Semgrep
+        run: pip install --quiet semgrep
+
+      - name: SAST — Semgrep (Python / OWASP) → SARIF
+        working-directory: ${{ env.APP_PATH }}
+        run: |
+          set -euo pipefail
+          REPORT_DIR="${GITHUB_WORKSPACE}/security-reports"
+          SEMGREP_COMMON=(
+            --config=p/python
+            --config=p/owasp-top-ten
+            --config=p/security-audit
+            --config=p/secrets
+            --metrics=off
+          )
+
+          echo "==> Semgrep report (SARIF 2.1.0)"
+          set +e
+          semgrep scan "${SEMGREP_COMMON[@]}" \
+            --sarif \
+            --output="${REPORT_DIR}/semgrep.sarif" \
+            .
+          SARIF_RC=$?
+          set -e
+          if [ -f "${REPORT_DIR}/semgrep.sarif" ]; then
+            echo "SARIF written: ${REPORT_DIR}/semgrep.sarif (semgrep exit=${SARIF_RC}; non-zero is OK for report pass)"
+          else
+            echo "::warning::semgrep.sarif was not produced (exit=${SARIF_RC})"
+          fi
+
+          echo "==> SAST gate (ERROR severity only; exit 1 if findings)"
+          set +e
+          semgrep scan "${SEMGREP_COMMON[@]}" \
+            --severity=ERROR \
+            --error \
+            --text \
+            .
+          GATE_RC=$?
+          set -e
+          if [ "${GATE_RC}" -ne 0 ]; then
+            echo "::error::Semgrep SAST gate failed (exit=${GATE_RC})."
+            exit "${GATE_RC}"
+          fi
+          echo "SAST (Semgrep) gate passed — no ERROR-level findings."
+
+      - name: Python SCA report — pip-audit (does not fail the job)
+        working-directory: ${{ env.APP_PATH }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          REPORT_DIR="${GITHUB_WORKSPACE}/security-reports"
+          uv export --frozen --no-dev --no-hashes -o "${REPORT_DIR}/requirements-frozen.txt"
+          uvx pip-audit -r "${REPORT_DIR}/requirements-frozen.txt" \
+            --format json \
+            --output "${REPORT_DIR}/pip-audit.json" \
+            || true
+
+      - name: Trivy cache key
+        id: trivy-cache-meta
+        run: echo "week=$(date -u +%Y-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Trivy DBs
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cache/trivy
+          key: trivy-db-${{ runner.os }}-${{ steps.trivy-cache-meta.outputs.week }}
+          restore-keys: |
+            trivy-db-${{ runner.os }}-
+
+      - name: Trivy filesystem scan (SARIF report)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.APP_PATH }}
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+          format: sarif
+          output: security-reports/trivy-fs.sarif
+          ignore-unfixed: true
+          scanners: vuln
+          cache: "false"
+          cache-dir: ${{ github.workspace }}/.cache/trivy
+
+      - name: Trivy filesystem scan (console table)
+        if: always()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.APP_PATH }}
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+          format: table
+          ignore-unfixed: true
+          scanners: vuln
+          cache: "false"
+          cache-dir: ${{ github.workspace }}/.cache/trivy
+
+      - name: Trivy SCA gate (CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.APP_PATH }}
+          severity: CRITICAL
+          exit-code: "1"
+          format: table
+          ignore-unfixed: true
+          scanners: vuln
+          cache: "false"
+          cache-dir: ${{ github.workspace }}/.cache/trivy
+
+      - name: Upload Semgrep SARIF to Code Scanning
+        if: always() && hashFiles('security-reports/semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: security-reports/semgrep.sarif
+          checkout_path: ${{ env.APP_PATH }}
+          category: haystack-release-semgrep
+        continue-on-error: true
+
+      - name: Upload Trivy SARIF to Code Scanning
+        if: always() && hashFiles('security-reports/trivy-fs.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: security-reports/trivy-fs.sarif
+          checkout_path: ${{ env.APP_PATH }}
+          category: haystack-release-trivy-fs
+        continue-on-error: true
+
+      - name: Upload security reports (SARIF + pip-audit)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-security-reports-sarif
+          path: |
+            security-reports/*.sarif
+            security-reports/pip-audit.json
+            security-reports/requirements-frozen.txt
+          retention-days: 30
+          if-no-files-found: warn
+
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    needs: [integration]
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout calling repository (release / push head)
+        if: needs.integration.outputs.checkout_mode == 'caller'
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.APP_PATH }}
+
+      - name: Checkout remote application repository
+        if: needs.integration.outputs.checkout_mode == 'remote'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.integration.outputs.app_repository }}
+          ref: ${{ needs.integration.outputs.app_ref }}
+          path: ${{ env.APP_PATH }}
+
+      - name: Initialize CodeQL (Python)
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          source-root: ${{ env.APP_PATH }}
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "haystack-release-codeql-python"
+
+      - name: CodeQL summary
+        if: always()
+        run: |
+          {
+            echo "### CodeQL Analysis"
+            echo ""
+            echo "Language: Python"
+            echo "Query suite: security-and-quality"
+            echo "Category: haystack-release-codeql-python"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  packaging:
+    name: Packaging
+    runs-on: ubuntu-latest
+    needs: [integration, quality-control, security-testing, codeql]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout calling repository (release / push head)
+        if: needs.integration.outputs.checkout_mode == 'caller'
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.APP_PATH }}
+
+      - name: Checkout remote application repository
+        if: needs.integration.outputs.checkout_mode == 'remote'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.integration.outputs.app_repository }}
+          ref: ${{ needs.integration.outputs.app_ref }}
+          path: ${{ env.APP_PATH }}
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
+
+      - name: Build wheel and sdist
+        working-directory: ${{ env.APP_PATH }}
+        run: |
+          set -euo pipefail
+          uv build
+          echo "==> dist outputs"
+          ls -lah dist || true
+
+      - name: Stage versioned and stable artifacts
+        id: package
+        working-directory: ${{ env.APP_PATH }}
+        env:
+          GH_RUN_NUMBER: ${{ github.run_number }}
+          GH_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        run: |
+          set -euo pipefail
+          WHEEL="$(find dist -maxdepth 1 -type f -name '*.whl' | head -n 1 || true)"
+          SDIST="$(find dist -maxdepth 1 -type f -name '*.tar.gz' | head -n 1 || true)"
+          if [ -z "${WHEEL}" ] || [ ! -f "${WHEEL}" ]; then
+            echo "::error::No wheel produced under dist/ after uv build"
+            ls -lah dist || true
+            exit 1
+          fi
+          if [ -z "${SDIST}" ] || [ ! -f "${SDIST}" ]; then
+            echo "::error::No sdist produced under dist/ after uv build"
+            ls -lah dist || true
+            exit 1
+          fi
+
+          VERSION="$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          VERSION="${VERSION:-0.0.0}"
+          SHORT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+          RUN_ID="${GH_RUN_NUMBER}"
+
+          VERSIONED_WHEEL="haystack-fast-api-v${VERSION}-build${RUN_ID}-${SHORT_SHA}.whl"
+          STABLE_WHEEL="haystack-fast-api.whl"
+          VERSIONED_SDIST="haystack-fast-api-v${VERSION}-build${RUN_ID}-${SHORT_SHA}.tar.gz"
+          STABLE_SDIST="haystack-fast-api.tar.gz"
+
+          cp "${WHEEL}" "${GITHUB_WORKSPACE}/${VERSIONED_WHEEL}"
+          cp "${WHEEL}" "${GITHUB_WORKSPACE}/${STABLE_WHEEL}"
+          cp "${SDIST}" "${GITHUB_WORKSPACE}/${VERSIONED_SDIST}"
+          cp "${SDIST}" "${GITHUB_WORKSPACE}/${STABLE_SDIST}"
+
+          for f in \
+            "${GITHUB_WORKSPACE}/${VERSIONED_WHEEL}" \
+            "${GITHUB_WORKSPACE}/${STABLE_WHEEL}" \
+            "${GITHUB_WORKSPACE}/${VERSIONED_SDIST}" \
+            "${GITHUB_WORKSPACE}/${STABLE_SDIST}"
+          do
+            if [ ! -s "$f" ]; then
+              echo "::error::Staged package is empty or missing: $f"
+              exit 1
+            fi
+          done
+
+          IMAGE_TAG="v${VERSION}-build${RUN_ID}-${SHORT_SHA}"
+          IMAGE_NAME_LC="${IMAGE_NAME,,}"
+          OWNER_LC="${GH_REPOSITORY_OWNER,,}"
+          IMAGE_LOCAL="${IMAGE_NAME_LC}:${IMAGE_TAG}"
+          IMAGE_LOCAL_LATEST="${IMAGE_NAME_LC}:latest"
+          IMAGE_REMOTE="ghcr.io/${OWNER_LC}/${IMAGE_NAME_LC}:${IMAGE_TAG}"
+          IMAGE_REMOTE_LATEST="ghcr.io/${OWNER_LC}/${IMAGE_NAME_LC}:latest"
+          IMAGE_TAR="haystack-fast-api-v${VERSION}-build${RUN_ID}-${SHORT_SHA}.tar.gz"
+
+          {
+            echo "versioned_wheel=${VERSIONED_WHEEL}"
+            echo "stable_wheel=${STABLE_WHEEL}"
+            echo "versioned_sdist=${VERSIONED_SDIST}"
+            echo "stable_sdist=${STABLE_SDIST}"
+            echo "version=${VERSION}"
+            echo "short_sha=${SHORT_SHA}"
+            echo "image_tag=${IMAGE_TAG}"
+            echo "image_local=${IMAGE_LOCAL}"
+            echo "image_local_latest=${IMAGE_LOCAL_LATEST}"
+            echo "image_remote=${IMAGE_REMOTE}"
+            echo "image_remote_latest=${IMAGE_REMOTE_LATEST}"
+            echo "image_tar=${IMAGE_TAR}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Packaging"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| version | \`${VERSION}\` |"
+            echo "| Versioned wheel | \`${VERSIONED_WHEEL}\` |"
+            echo "| Stable wheel | \`${STABLE_WHEEL}\` |"
+            echo "| Versioned sdist | \`${VERSIONED_SDIST}\` |"
+            echo "| Stable sdist | \`${STABLE_SDIST}\` |"
+            echo "| Docker image (local) | \`${IMAGE_LOCAL}\` |"
+            echo "| Docker image (GHCR) | \`${IMAGE_REMOTE}\` |"
+            echo "| Image archive | \`${IMAGE_TAR}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # -------------------------------------------------------------------
+      # Docker image: Python 3.12 + uv + uvicorn for a later deploy project
+      # Uses app Dockerfile when present; otherwise generates one.
+      # -------------------------------------------------------------------
+      - name: Prepare Dockerfile for uvicorn image
+        working-directory: ${{ env.APP_PATH }}
+        env:
+          PYTHON_BASE_IMAGE: ${{ env.PYTHON_BASE_IMAGE }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          APP_REPOSITORY: ${{ needs.integration.outputs.app_repository }}
+          SHORT_SHA: ${{ steps.package.outputs.short_sha }}
+          VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -f Dockerfile ]; then
+            echo "Using Dockerfile from application repository"
+          else
+            echo "No app Dockerfile found — generating Python 3.12 + uv + uvicorn Dockerfile"
+            {
+              echo "# Generated by haystack-fast-api release packaging (FastAPI + Haystack)"
+              echo "FROM ${PYTHON_BASE_IMAGE}"
+              echo "COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/"
+              echo "LABEL org.opencontainers.image.title=\"${IMAGE_NAME}\""
+              echo "LABEL org.opencontainers.image.description=\"Heavy Rental Haystack FastAPI\""
+              echo "LABEL org.opencontainers.image.source=\"https://github.com/${APP_REPOSITORY}\""
+              echo "LABEL org.opencontainers.image.revision=\"${SHORT_SHA}\""
+              echo "LABEL org.opencontainers.image.version=\"${VERSION}\""
+              echo ""
+              echo "WORKDIR /app"
+              echo "COPY pyproject.toml uv.lock ./"
+              echo "RUN uv sync --frozen --no-dev"
+              echo "COPY app ./app"
+              echo ""
+              echo "EXPOSE 8000"
+              echo "CMD [\"uv\", \"run\", \"uvicorn\", \"app.main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\"]"
+            } > Dockerfile
+          fi
+
+          echo "==> Dockerfile"
+          cat Dockerfile
+
+      - name: Build Docker image
+        id: docker
+        working-directory: ${{ env.APP_PATH }}
+        env:
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          GH_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          IMAGE_LOCAL: ${{ steps.package.outputs.image_local }}
+          IMAGE_LOCAL_LATEST: ${{ steps.package.outputs.image_local_latest }}
+          IMAGE_REMOTE: ${{ steps.package.outputs.image_remote }}
+          IMAGE_REMOTE_LATEST: ${{ steps.package.outputs.image_remote_latest }}
+          IMAGE_TAR: ${{ steps.package.outputs.image_tar }}
+        run: |
+          set -euo pipefail
+          IMAGE_NAME_LC="${IMAGE_NAME,,}"
+          OWNER_LC="${GH_REPOSITORY_OWNER,,}"
+          IMAGE_LOCAL="${IMAGE_LOCAL,,}"
+          IMAGE_LOCAL_LATEST="${IMAGE_LOCAL_LATEST,,}"
+          IMAGE_REMOTE="${IMAGE_REMOTE,,}"
+          IMAGE_REMOTE_LATEST="${IMAGE_REMOTE_LATEST,,}"
+
+          docker build \
+            --pull \
+            -t "${IMAGE_LOCAL}" \
+            -t "${IMAGE_LOCAL_LATEST}" \
+            -t "${IMAGE_REMOTE}" \
+            -t "${IMAGE_REMOTE_LATEST}" \
+            .
+
+          echo "==> Images built"
+          echo "Local:  ${IMAGE_LOCAL}"
+          echo "GHCR:   ${IMAGE_REMOTE}"
+          docker images "${IMAGE_NAME_LC}" --format 'table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}'
+          docker images "ghcr.io/${OWNER_LC}/${IMAGE_NAME_LC}" --format 'table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}' || true
+
+          TAR_PATH="${GITHUB_WORKSPACE}/${IMAGE_TAR}"
+          docker save "${IMAGE_LOCAL}" | gzip -c > "${TAR_PATH}"
+          ls -lh "${TAR_PATH}"
+          if [ ! -s "${TAR_PATH}" ]; then
+            echo "::error::Docker image tar is missing or empty: ${TAR_PATH}"
+            exit 1
+          fi
+
+          {
+            echo "image_id=$(docker image inspect -f '{{.Id}}' "${IMAGE_LOCAL}")"
+            echo "tar_path=${TAR_PATH}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload Docker image archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: haystack-fast-api-release-docker-image
+          path: ${{ github.workspace }}/${{ steps.package.outputs.image_tar }}
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Login to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push Docker image to GHCR
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE_REMOTE: ${{ steps.package.outputs.image_remote }}
+          IMAGE_REMOTE_LATEST: ${{ steps.package.outputs.image_remote_latest }}
+        run: |
+          set -euo pipefail
+          IMAGE_REMOTE="${IMAGE_REMOTE,,}"
+          IMAGE_REMOTE_LATEST="${IMAGE_REMOTE_LATEST,,}"
+          docker push "${IMAGE_REMOTE}"
+          docker push "${IMAGE_REMOTE_LATEST}"
+          echo "Pushed:"
+          echo "  ${IMAGE_REMOTE}"
+          echo "  ${IMAGE_REMOTE_LATEST}"
+
+      - name: Upload release packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: haystack-fast-api-release-packages
+          path: |
+            ${{ github.workspace }}/${{ steps.package.outputs.versioned_wheel }}
+            ${{ github.workspace }}/${{ steps.package.outputs.stable_wheel }}
+            ${{ github.workspace }}/${{ steps.package.outputs.versioned_sdist }}
+            ${{ github.workspace }}/${{ steps.package.outputs.stable_sdist }}
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Packaging summary
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          IMAGE_LOCAL: ${{ steps.package.outputs.image_local }}
+          IMAGE_REMOTE: ${{ steps.package.outputs.image_remote }}
+          IMAGE_TAR: ${{ steps.package.outputs.image_tar }}
+          IMAGE_ID: ${{ steps.docker.outputs.image_id }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Deploy options"
+            echo ""
+            echo "1. **Wheel / sdist** — download \`haystack-fast-api-release-packages\`."
+            echo "2. **Image archive** — \`docker load < ${IMAGE_TAR}\` then run \`${IMAGE_LOCAL}\` (id \`${IMAGE_ID}\`)."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${EVENT_NAME}" != "pull_request" ]; then
+            echo "3. **GHCR** — \`docker pull ${IMAGE_REMOTE}\` (also tagged \`:latest\`)." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "3. **GHCR** — push skipped on pull_request; image is available as the tar artifact only." >> "$GITHUB_STEP_SUMMARY"
+          fi
