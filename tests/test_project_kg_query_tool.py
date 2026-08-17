@@ -1,12 +1,12 @@
 """project_kg_query tool."""
 
 from haystack.dataclasses import Document
+from haystack.document_stores.in_memory import InMemoryDocumentStore
 
 from app.agents.tools import TOOL_PROJECT_KG_QUERY, build_project_kg_query_tool
 from app.pipelines.kg.generator import KnowledgeGraphGenerator
 from app.pipelines.kg.query import query_knowledge_graph
 from app.services.project_knowledge_session import ProjectKnowledgeSession
-from haystack.document_stores.in_memory import InMemoryDocumentStore
 
 
 def test_query_knowledge_graph_document_nodes() -> None:

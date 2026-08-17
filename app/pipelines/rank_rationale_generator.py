@@ -9,7 +9,7 @@ from haystack import component
 
 from app.pipelines.catalog import infer_model_categories
 
-_HEIGHT_M = re.compile(r"~?\s*(\d+(?:\.\d+)?)\s*m\b", re.I)
+_HEIGHT_M = re.compile(r"~?\s*(\d+(?:\.\d+)?)\s*m\b", re.IGNORECASE)
 
 _CONDITION_SCORE = {
     "NEEDS_REPAIR": 0,
@@ -78,9 +78,8 @@ def score_need_match(unit_need: dict[str, Any], candidate: dict[str, Any]) -> fl
     cat = str(candidate.get("category") or "").strip().lower()
     etype = str(candidate.get("equipment_type") or "").strip().lower()
     category_hit = 0.0
-    if wanted:
-        if cat in wanted or any(w in etype or w in cat for w in wanted):
-            category_hit = 1.0
+    if wanted and (cat in wanted or any(w in etype or w in cat for w in wanted)):
+        category_hit = 1.0
     score = 0.50 * category_hit
 
     need_h = _needed_height_m(unit_need)

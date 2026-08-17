@@ -83,8 +83,8 @@ def _state_with_fleet_and_price() -> dict:
 
 def test_qa_prompts_still_forbid_invent_fleet() -> None:
     """Scenario: Q&A prompts still forbid invent fleet."""
-    qa_blob = "\n".join(
-        [RESEARCH_AGENT_SYSTEM, GRAPH_AGENT_SYSTEM, SYNTHESIS_AGENT_SYSTEM]
+    qa_blob = (
+        f"{RESEARCH_AGENT_SYSTEM}\n{GRAPH_AGENT_SYSTEM}\n{SYNTHESIS_AGENT_SYSTEM}"
     ).lower()
     assert "do not invent" in qa_blob or "not invent" in qa_blob
     assert "fleet" in qa_blob or "inventory" in qa_blob or "stock" in qa_blob

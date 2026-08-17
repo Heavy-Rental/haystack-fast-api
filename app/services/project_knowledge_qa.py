@@ -99,7 +99,7 @@ class ProjectKnowledgeQAService:
             )
         except NotFoundError:
             raise
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("session resolve failed: %s", exc)
             raise NotFoundError(
                 f"project knowledge session not found for user_id={uid!r} "

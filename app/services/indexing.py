@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import replace
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -151,7 +151,7 @@ def _expires_at_iso(ttl_seconds: float) -> str | None:
     """Return ISO expires_at when TTL is positive; else None."""
     if ttl_seconds is None or float(ttl_seconds) <= 0:
         return None
-    exp = datetime.now(timezone.utc) + timedelta(seconds=float(ttl_seconds))
+    exp = datetime.now(UTC) + timedelta(seconds=float(ttl_seconds))
     return exp.isoformat()
 
 
@@ -358,7 +358,7 @@ class IndexingIngestService:
 
         try:
             out = run_indexing_pipeline(pipeline, sources=sources)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _reraise_embedding_dimension_error(exc)
             raise
 
@@ -440,7 +440,7 @@ class IndexingIngestService:
             )
         except BadRequestError:
             raise
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             msg = f"knowledge graph step failed: {exc}"
             logger.warning(msg)
             raise BadRequestError(msg) from exc

@@ -14,11 +14,11 @@ from app.pipelines.catalog import _KEYWORD_TO_MODEL, model_categories_in_text
 from app.schemas.recommendations import DecomposedNeed
 
 _QTY_WORDS: tuple[tuple[re.Pattern[str], int], ...] = (
-    (re.compile(r"\b(two|2)\b", re.I), 2),
-    (re.compile(r"\b(three|3)\b", re.I), 3),
-    (re.compile(r"\b(four|4)\b", re.I), 4),
-    (re.compile(r"\b(five|5)\b", re.I), 5),
-    (re.compile(r"\b(one|1)\b", re.I), 1),
+    (re.compile(r"\b(two|2)\b", re.IGNORECASE), 2),
+    (re.compile(r"\b(three|3)\b", re.IGNORECASE), 3),
+    (re.compile(r"\b(four|4)\b", re.IGNORECASE), 4),
+    (re.compile(r"\b(five|5)\b", re.IGNORECASE), 5),
+    (re.compile(r"\b(one|1)\b", re.IGNORECASE), 1),
 )
 
 

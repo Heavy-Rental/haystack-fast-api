@@ -46,7 +46,6 @@ import pytest
 from app.agents.tools import TOOL_PREDICT_ASSET_PRICE, predict_asset_price
 from app.services.pricing_client import predict_price_for_asset
 
-
 _BASE_KWARGS = {
     "category": "excavator",
     "condition": "GOOD",

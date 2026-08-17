@@ -95,7 +95,7 @@ def test_threads_db_and_dates_through(
 
 
 def test_degraded_prediction_marks_result_without_new_field(_fake_predict_price) -> None:
-    captured, result_holder = _fake_predict_price
+    _captured, result_holder = _fake_predict_price
     result_holder["value"] = _FakePrediction(clamped_price=99.0, degraded=True)
 
     result = pc.predict_price_for_asset(

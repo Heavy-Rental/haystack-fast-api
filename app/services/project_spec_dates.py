@@ -7,8 +7,7 @@ from __future__ import annotations
 
 import calendar
 import re
-from datetime import date
-from typing import Any
+from datetime import UTC, date, datetime
 
 _ISO = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2})?)?\b")
 _ISO_COMPACT = re.compile(r"\b(20\d{2})(\d{2})(\d{2})\b")
@@ -61,8 +60,8 @@ _NUMERIC_DATE = (
     r"|\d{1,2}[./-]\d{1,2}[./-]\d{2,4}"
 )
 _ANY_DATE = rf"(?:{_NAMED_DATE}|{_NUMERIC_DATE})"
-_NAMED_DATE_RX = re.compile(rf"\b({_NAMED_DATE})\b", re.I)
-_ANY_DATE_RX = re.compile(rf"\b({_ANY_DATE})\b", re.I)
+_NAMED_DATE_RX = re.compile(rf"\b({_NAMED_DATE})\b", re.IGNORECASE)
+_ANY_DATE_RX = re.compile(rf"\b({_ANY_DATE})\b", re.IGNORECASE)
 _RANGE_LEAD = r"(?:from|on|start(?:ing)?(?:\s+date)?|begin(?:ning)?)"
 _RANGE_MID = r"(?:to|until|through|till|-|–|—)"
 
@@ -80,17 +79,17 @@ _END_ONLY_ANY = re.compile(
     rf"(?i)\b(?:end(?:ing)?(?:\s+date)?|until|to|through|till)\s*[:=]?\s*"
     rf"({_ANY_DATE})\b"
 )
-_QUARTER = re.compile(r"\bQ([1-4])\s+(\d{4})\b", re.I)
-_MONTH_YEAR = re.compile(rf"\b({_MONTH_DOT})\s+(\d{{4}})\b", re.I)
+_QUARTER = re.compile(r"\bQ([1-4])\s+(\d{4})\b", re.IGNORECASE)
+_MONTH_YEAR = re.compile(rf"\b({_MONTH_DOT})\s+(\d{{4}})\b", re.IGNORECASE)
 _END_OF_MONTH = re.compile(
-    rf"\b(?:end|ending|close)\s+of\s+({_MONTH_DOT})(?:\s+(\d{{4}}))?\b", re.I
+    rf"\b(?:end|ending|close)\s+of\s+({_MONTH_DOT})(?:\s+(\d{{4}}))?\b", re.IGNORECASE
 )
 _START_OF_MONTH = re.compile(
     rf"\b(?:start|starting|beginning|begin)\s+of\s+({_MONTH_DOT})(?:\s+(\d{{4}}))?\b",
-    re.I,
+    re.IGNORECASE,
 )
-_NEXT_MONTH = re.compile(r"\bnext\s+month\b", re.I)
-_THIS_MONTH = re.compile(r"\bthis\s+month\b", re.I)
+_NEXT_MONTH = re.compile(r"\bnext\s+month\b", re.IGNORECASE)
+_THIS_MONTH = re.compile(r"\bthis\s+month\b", re.IGNORECASE)
 _QUARTER_MONTHS: dict[int, tuple[int, int]] = {
     1: (1, 3),
     2: (4, 6),
@@ -195,18 +194,18 @@ def _parse_dmy(token: str) -> date | None:
 
 def _parse_named_token(token: str) -> date | None:
     text = re.sub(r"\s+", " ", (token or "").strip().strip(".,"))
-    text = re.sub(r"(\d)(st|nd|rd|th)\b", r"\1", text, flags=re.I)
-    text = re.sub(r"\bof\b", " ", text, flags=re.I)
+    text = re.sub(r"(\d)(st|nd|rd|th)\b", r"\1", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bof\b", " ", text, flags=re.IGNORECASE)
     text = re.sub(r"\s+", " ", text).strip()
     dmy = re.fullmatch(
-        rf"(\d{{1,2}})[\s\-]+({_MONTH_DOT})[\s\-]+(\d{{2,4}})", text, flags=re.I
+        rf"(\d{{1,2}})[\s\-]+({_MONTH_DOT})[\s\-]+(\d{{2,4}})", text, flags=re.IGNORECASE
     )
     if dmy:
         return _parse_named_parts(
             int(dmy.group(1)), dmy.group(2), _expand_year(int(dmy.group(3)))
         )
     mdy = re.fullmatch(
-        rf"({_MONTH_DOT})[\s\-]+(\d{{1,2}}),?[\s\-]+(\d{{2,4}})", text, flags=re.I
+        rf"({_MONTH_DOT})[\s\-]+(\d{{1,2}}),?[\s\-]+(\d{{2,4}})", text, flags=re.IGNORECASE
     )
     if mdy:
         return _parse_named_parts(
@@ -259,7 +258,7 @@ def _extract_pair_from_text(
 ) -> tuple[date | None, date | None]:
     """Best-effort pair or single-bound extract; never invent."""
     source = text or ""
-    today = today or date.today()
+    today = today or datetime.now(UTC).date()
 
     for rx in (_FROM_TO_ANY, _BETWEEN_ANY):
         m = rx.search(source)
@@ -315,7 +314,7 @@ def resolve_rental_dates(
     Returns (start, end, warnings).
     """
     warnings: list[str] = []
-    today = today or date.today()
+    today = today or datetime.now(UTC).date()
 
     # Request both set: pure echo (S1b); already validated end>=start at API layer
     if request_start is not None and request_end is not None:

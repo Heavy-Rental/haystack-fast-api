@@ -1,13 +1,12 @@
 """Packt Ch.4 dual-branch indexing: unstructured vs CSV paths."""
 
-from haystack.dataclasses import ByteStream
+from haystack.dataclasses import ByteStream, Document
 from haystack.document_stores.in_memory import InMemoryDocumentStore
 
 from app.pipelines.indexing.document_sanitizer import DocumentSanitizer
 from app.pipelines.indexing.embedder_factory import build_document_embedder
 from app.pipelines.indexing.mime_map import guess_mime_from_filename
 from app.pipelines.indexing.pipeline import build_indexing_pipeline, run_indexing_pipeline
-from haystack.dataclasses import Document
 
 
 def _bs(name: str, data: bytes) -> ByteStream:

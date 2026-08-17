@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from haystack.dataclasses import Document
 from haystack.document_stores.in_memory import InMemoryDocumentStore
 
+from app.core.exceptions import NotFoundError
 from app.pipelines.indexing.document_store import delete_ingest_chunks
 from app.pipelines.indexing.embedder_factory import build_document_embedder
 from app.services.project_chunk_cleanup import (
@@ -58,8 +59,8 @@ def test_delete_ingest_chunks_isolates_other_ingest() -> None:
 
 def test_purge_expired_chunks_only_expired() -> None:
     store = InMemoryDocumentStore()
-    past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
-    future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    past = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    future = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
     _write(
         store,
         content="expired chunk",
@@ -82,7 +83,7 @@ def test_purge_expired_chunks_only_expired() -> None:
         expires_at=None,
     )
 
-    n = purge_expired_chunks(store, now=datetime.now(timezone.utc))
+    n = purge_expired_chunks(store, now=datetime.now(UTC))
     assert n == 1
     remaining = list(store.filter_documents() or [])
     assert len(remaining) == 2
@@ -109,5 +110,5 @@ def test_discard_session_deletes_chunks_and_registry() -> None:
     try:
         reg.get("u", "ing_x")
         raise AssertionError("session should be gone")
-    except Exception as exc:  # NotFoundError
+    except NotFoundError as exc:
         assert "not found" in str(exc).lower()

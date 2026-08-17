@@ -11,7 +11,6 @@ from app.pipelines.indexing.mime_map import (
     MIME_CSV,
     MIME_DOCX,
     MIME_JSON,
-    MIME_MARKDOWN,
     MIME_TEXT_PLAIN,
     MIME_XLSX,
     guess_mime_from_filename,
@@ -101,8 +100,9 @@ def test_convert_docx() -> None:
 
 
 def test_pipeline_classify_then_convert_txt() -> None:
-    from app.pipelines.indexing.embedder_factory import build_document_embedder
     from haystack.document_stores.in_memory import InMemoryDocumentStore
+
+    from app.pipelines.indexing.embedder_factory import build_document_embedder
 
     pipe = build_indexing_pipeline(
         document_store=InMemoryDocumentStore(),
@@ -118,8 +118,9 @@ def test_pipeline_classify_then_convert_txt() -> None:
 
 
 def test_pipeline_classify_then_convert_csv() -> None:
-    from app.pipelines.indexing.embedder_factory import build_document_embedder
     from haystack.document_stores.in_memory import InMemoryDocumentStore
+
+    from app.pipelines.indexing.embedder_factory import build_document_embedder
 
     pipe = build_indexing_pipeline(
         document_store=InMemoryDocumentStore(),

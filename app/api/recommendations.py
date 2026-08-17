@@ -7,6 +7,8 @@ from fastapi import APIRouter, Header, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import ValidationError
 
+from app.agents.indexing_gate import run_indexing_gate
+from app.config import get_settings
 from app.core.exceptions import BadRequestError
 from app.schemas.indexing import IngestFromProjectSpecResponse
 from app.schemas.project_knowledge import (
@@ -18,16 +20,14 @@ from app.schemas.recommend_quote import (
     AssetRecommendResponse,
 )
 from app.schemas.recommendations import RecommendFromProjectSpecRequest
-from app.agents.indexing_gate import run_indexing_gate
-from app.config import get_settings
+from app.services.indexing import (
+    IndexingIngestService,
+    byte_stream_from_upload,
+)
 from app.services.ingest_idempotency import (
     get_ingest_idempotency_store,
     normalize_idempotency_key,
     scope_idempotency_key,
-)
-from app.services.indexing import (
-    IndexingIngestService,
-    byte_stream_from_upload,
 )
 from app.services.project_knowledge_qa import ProjectKnowledgeQAService
 from app.services.session_recommend import SessionRecommendService

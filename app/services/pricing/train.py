@@ -79,7 +79,7 @@ def train(
     joblib.dump(model, model_out)
 
     meta = {
-        "trained_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "trained_at": dt.datetime.now(dt.UTC).isoformat(),
         "feature_columns": fs.FEATURE_COLUMNS,
         "condition_order": fs.CONDITION_ORDER,
         "categories": fs.CATEGORIES,

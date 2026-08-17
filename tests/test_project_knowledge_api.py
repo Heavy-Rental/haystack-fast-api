@@ -4,14 +4,13 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from haystack.document_stores.in_memory import InMemoryDocumentStore
 
 from app.config import get_settings
 from app.main import create_app
 from app.pipelines.indexing.embedder_factory import build_document_embedder
 from app.pipelines.indexing.pipeline import build_indexing_pipeline
 from app.services.indexing import IndexingIngestService
-from haystack.document_stores.in_memory import InMemoryDocumentStore
-
 
 PROJECT_TEXT = (
     "Requires a 20-ton excavator on soft clay. Timeline is 8 weeks."
@@ -35,18 +34,7 @@ def api_client(
 
 
 def test_ingest_then_project_knowledge_query(api_client: TestClient) -> None:
-    # Use service path with known store so HTTP Q&A can find the session
-    # registered by the same process (TestClient shares app process).
-    store = InMemoryDocumentStore()
-    ingest_service = IndexingIngestService(
-        pipeline=build_indexing_pipeline(
-            document_store=store,
-            embedder=build_document_embedder(mode="mock", dimension=8),
-        ),
-        document_store=store,
-    )
-    # Prefer HTTP ingest (registers session with default settings dim=384)
-    # Override settings already mock+8; IndexingIngestService() uses settings.
+    # HTTP ingest registers the session in-process for the following Q&A call.
     ingest_resp = api_client.post(
         "/internal/v1/recommendations/submitprojectspecification",
         json={

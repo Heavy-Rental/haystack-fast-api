@@ -25,6 +25,7 @@ single predict_price(...) call's own internal reads still never mix schemas
 from __future__ import annotations
 
 import logging
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -46,7 +47,9 @@ router = APIRouter(prefix="/internal/v1/pricing", tags=["internal-pricing"])
 
 
 @router.post("/quote", response_model=PricingQuoteResponse)
-def quote(body: PricingQuoteRequest, db: Session = Depends(get_db)) -> PricingQuoteResponse:
+def quote(
+    body: PricingQuoteRequest, db: Annotated[Session, Depends(get_db)]
+) -> PricingQuoteResponse:
     """Authoritative, guardrail-clamped price per requested asset at checkout."""
     results = [_quote_one_item(db, body, item) for item in body.items]
     return PricingQuoteResponse(

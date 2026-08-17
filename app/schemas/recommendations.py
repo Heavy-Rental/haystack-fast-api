@@ -56,9 +56,12 @@ class RecommendFromProjectSpecRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_date_window(self) -> "RecommendFromProjectSpecRequest":
-        if self.start_date is not None and self.end_date is not None:
-            if self.end_date < self.start_date:
-                raise ValueError("end_date must be on or after start_date")
+        if (
+            self.start_date is not None
+            and self.end_date is not None
+            and self.end_date < self.start_date
+        ):
+            raise ValueError("end_date must be on or after start_date")
         if not self.project_text:
             raise ValueError("project_text must not be empty")
         if not self.user_id:

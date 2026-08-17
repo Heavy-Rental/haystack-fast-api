@@ -61,7 +61,7 @@ def build_text_embedder(
             )
         except ImportError:
             try:
-                from haystack_integrations.components.embedders.sentence_transformers import (  # noqa: E501
+                from haystack_integrations.components.embedders.sentence_transformers import (
                     SentenceTransformersTextEmbedder,
                 )
             except ImportError as exc:
@@ -184,11 +184,10 @@ def _meta_matches_tenant(
 ) -> bool:
     uid = (user_id or "").strip()
     iid = (ingest_id or "").strip()
-    if uid and str(meta.get("user_id") or "").strip() != uid:
-        return False
-    if iid and str(meta.get("ingest_id") or "").strip() != iid:
-        return False
-    return True
+    return not (
+        (uid and str(meta.get("user_id") or "").strip() != uid)
+        or (iid and str(meta.get("ingest_id") or "").strip() != iid)
+    )
 
 
 def run_vector_search(

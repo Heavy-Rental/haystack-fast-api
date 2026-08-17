@@ -27,7 +27,7 @@ full incident writeup.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -126,7 +126,7 @@ def get_asset_for_pricing(
 
 def compute_lead_time_days(start_date: date, *, today: date | None = None) -> int:
     """lead_time_days = start_date - today, no new persisted column."""
-    return (start_date - (today or date.today())).days
+    return (start_date - (today or datetime.now(UTC).date())).days
 
 
 def compute_period_utilization(

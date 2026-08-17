@@ -20,6 +20,7 @@ from typing import Any
 import pytest
 from haystack.document_stores.in_memory import InMemoryDocumentStore
 
+from app.core.exceptions import NotFoundError
 from app.pipelines.asset_candidate_filter import AssetCandidateFilter
 from app.pipelines.booking_availability_filter import BookingAvailabilityFilter
 from app.pipelines.predict_price_adapter import PredictPriceAdapter
@@ -172,7 +173,7 @@ def _run_call2(case: dict[str, Any], *, user_id: str, ingest_id: str) -> Any:
     try:
         existing = reg.get(user_id, ingest_id)
         meta = dict(existing.meta or {})
-    except Exception:
+    except NotFoundError:
         meta = {}
         reg.put(
             ProjectKnowledgeSession(

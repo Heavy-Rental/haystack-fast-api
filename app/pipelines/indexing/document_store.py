@@ -115,10 +115,9 @@ def existing_pgvector_embedding_dim(
     except ImportError:
         return None
     try:
-        with psycopg.connect(connection_string) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
+        with psycopg.connect(connection_string) as conn, conn.cursor() as cur:
+            cur.execute(
+                """
                     SELECT format_type(a.atttypid, a.atttypmod)
                     FROM pg_attribute a
                     JOIN pg_class c ON a.attrelid = c.oid
@@ -128,10 +127,10 @@ def existing_pgvector_embedding_dim(
                       AND a.attname = 'embedding'
                       AND NOT a.attisdropped
                     """,
-                    (table_name,),
-                )
-                row = cur.fetchone()
-    except Exception:  # noqa: BLE001 — inspect is best-effort
+                (table_name,),
+            )
+            row = cur.fetchone()
+    except Exception:
         logger.debug("could not inspect pgvector embedding dimension", exc_info=True)
         return None
     if not row:

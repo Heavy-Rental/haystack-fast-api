@@ -157,11 +157,10 @@ def test_service_kg_failure_hard_fails(
     with patch(
         "app.pipelines.kg.runner.run_knowledge_graph",
         return_value=failed,
-    ):
-        with pytest.raises(BadRequestError, match="simulated kg failure"):
-            service.ingest_from_project_spec(
-                user_id="u_fail",
-                project_text="Need excavator",
-            )
+    ), pytest.raises(BadRequestError, match="simulated kg failure"):
+        service.ingest_from_project_spec(
+            user_id="u_fail",
+            project_text="Need excavator",
+        )
 
     get_settings.cache_clear()

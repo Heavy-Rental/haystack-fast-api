@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+from haystack.dataclasses import Document
 from haystack.document_stores.in_memory import InMemoryDocumentStore
 
 from app.core.exceptions import NotFoundError
@@ -13,8 +15,6 @@ from app.services.project_knowledge_session import (
     get_or_load_session,
     load_knowledge_graph_from_artifact,
 )
-from haystack.dataclasses import Document
-import pytest
 
 
 def test_registry_put_get_delete() -> None:

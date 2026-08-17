@@ -240,10 +240,11 @@ def test_needs_summary_empty_when_decomposer_returns_none(
     """Inject empty decomposer via service factory path is harder on HTTP;
     assert stub path still produces needs — empty path covered in unit-style service test.
     """
+    from haystack.document_stores.in_memory import InMemoryDocumentStore
+
     from app.pipelines.indexing.embedder_factory import build_document_embedder
     from app.pipelines.indexing.pipeline import build_indexing_pipeline
     from app.services.indexing import IndexingIngestService
-    from haystack.document_stores.in_memory import InMemoryDocumentStore
 
     class _EmptyDecomposer:
         def decompose(self, source_text: str) -> list:

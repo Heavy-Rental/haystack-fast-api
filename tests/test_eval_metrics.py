@@ -103,13 +103,6 @@ def test_coverage_mape_mean_match() -> None:
 
 
 def test_recompute_confidence_matches_formula() -> None:
-    items = [
-        RecommendQuoteItem(
-            matchScore=1.0,
-            mlPredictedPrice=185.0,
-            equipment=EquipmentQuote(id="27", available=True),
-        )
-    ]
     quote = {
         "items": [
             {
