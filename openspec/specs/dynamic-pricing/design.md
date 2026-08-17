@@ -384,6 +384,21 @@ uv run pytest tests/test_candidate_validation_check.py -q
 uv run python ml-experiments/candidate_validation_check.py
 ```
 
+### Phase 2e calibrated-model promotion (implemented 2026-08-17)
+
+The pre-promotion serving pair is retained as `model_v1.pkl`/`current_v1.json`; its SHA-256 identities are `7c8e8d98d6626fa6991c1e7648739700b0bcb60ee557881522311da6dbb0b0fe` and `4c4131c40a1919e468724da7b38e004b1d03a8b91f2011932e5c71b7ad15d0d9`. The reviewed v2 files remain in place, and the literal serving filenames are byte-identical to them (`dd665d21f4f36176a40dca7c831c80c216155cc75f3605cc787d956ddbd29571` for the model and `98a19dcb1f7fe5fe4097f5855202f12e1e5312845d57237f01f3a6131e0cddca` for metadata).
+
+`ml-experiments/phase2e_serving_smoke.py` verifies those identities, calls `reload_model()`, loads all 27 assets from the tiered pricing schema, and calls the production `predict_price()` entrypoint at 1/7/14/30 days with the Phase 2d-iii fixed inputs. The undegraded `primary_snapshot` run reported `prod-2026-08-13` and reproduced aggregate clamp rates of 11.11%/25.93%/29.63%/29.63%. Excavator reproduced 0%/42.86%/57.14%/57.14%, so it remains a monitoring concern rather than a promotion discrepancy.
+
+Rollback copies the v1 pair back onto the literal serving filenames and then performs the same reload and smoke. Phase 3 promotion may replace the serving pair later, but it must preserve its own generation boundary.
+
+Verification:
+
+```bash
+uv run pytest tests/test_pricing_phase2e_promotion.py -q
+uv run python ml-experiments/phase2e_serving_smoke.py
+```
+
 ### Implementation branches
 
 | Branch | Scope |
@@ -395,6 +410,7 @@ uv run python ml-experiments/candidate_validation_check.py
 | `HR-118-ml-real-bound-measurement` | **Done (2026-08-12)** — Phase 2d-i read-only real-bound measurement; 27 assets loaded undegraded from `primary_snapshot`, two calibration knobs compared, ignored chart generated; no production data/artifact changes; 188 tests passing |
 | `HR-141-ml-recalibration-candidate-build` | **Done (2026-08-13)** — Phase 2d-ii joint recalibration and versioned candidate build; strict 5,000-row generation checks passed, candidate MAE 16.64/R² 0.9866; serving artifacts untouched |
 | `HR-146-ml-candidate-validation` | **Done (2026-08-13)** — Phase 2d-iii direct-artifact comparison, 8 focused tests, ignored chart, 27-asset multi-duration run, common-v2-holdout accuracy and SHA/metadata provenance comparison; every Phase 2e gate passed; serving artifacts unchanged |
+| `2026-08-17-phase2e-model-promotion` | **Done (2026-08-17)** — v1 rollback preservation, v2 serving promotion, artifact identity tests, hot reload, and 27-asset production-path smoke |
 
 ## N — Norms
 

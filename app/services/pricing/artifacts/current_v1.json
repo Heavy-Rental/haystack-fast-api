@@ -1,5 +1,5 @@
 {
-  "trained_at": "2026-08-13T07:44:33.658247+00:00",
+  "trained_at": "2026-08-07T12:27:05.791506+00:00",
   "feature_columns": [
     "category_forklift",
     "category_scissor lift",
@@ -36,14 +36,14 @@
     "random_state": 42
   },
   "metrics": {
-    "mae": 16.637565713500976,
-    "rmse": 26.110255016916195,
-    "r2": 0.9866479915848265
+    "mae": 10.675994533996581,
+    "rmse": 16.822801213461123,
+    "r2": 0.9739321719091302
   },
   "row_counts": {
     "train": 4000,
     "test": 1000,
     "total": 5000
   },
-  "data_source": "ml-experiments/data/phase2d/synthetic_pricing_data_v2.csv"
+  "data_source": "data/synthetic_pricing_data.csv"
 }

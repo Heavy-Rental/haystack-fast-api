@@ -73,7 +73,7 @@ the full Jira subtask table and branch names.
 
 - [ ] Manual "retrain now" HTTP endpoint — permanently scrapped
 - [ ] Real geocoding for `distance_km`
-- [ ] Phase 2e (Phase 2d candidate promotion) — separate, in flight
+- [x] Phase 2e (Phase 2d candidate promotion) — completed separately 2026-08-17
 - [ ] Multi-generation rollback history beyond one rolling backup
 - [ ] Merging the finished requirement into live `spec.md`/`design.md`
       (separate, later archival change)
