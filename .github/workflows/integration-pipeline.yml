@@ -202,25 +202,27 @@ jobs:
 
       - name: Checkout calling repository (PR / push head)
         if: steps.meta.outputs.checkout_mode == 'caller'
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           path: ${{ env.APP_PATH }}
 
       - name: Checkout remote application repository
         if: steps.meta.outputs.checkout_mode == 'remote'
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           repository: ${{ steps.meta.outputs.app_repository }}
           ref: ${{ steps.meta.outputs.app_ref }}
           path: ${{ env.APP_PATH }}
 
       - name: Setup Python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: true
           cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
@@ -290,7 +292,7 @@ jobs:
           echo "Integration checks passed."
 
       - name: Upload uv project fingerprint
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: integration-metadata
           path: |
@@ -310,25 +312,27 @@ jobs:
     steps:
       - name: Checkout calling repository (PR / push head)
         if: needs.integration.outputs.checkout_mode == 'caller'
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           path: ${{ env.APP_PATH }}
 
       - name: Checkout remote application repository
         if: needs.integration.outputs.checkout_mode == 'remote'
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           repository: ${{ needs.integration.outputs.app_repository }}
           ref: ${{ needs.integration.outputs.app_ref }}
           path: ${{ env.APP_PATH }}
 
       - name: Setup Python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: true
           cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
@@ -370,7 +374,7 @@ jobs:
 
       - name: Upload pytest HTML report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: quality-test-reports
           path: |
@@ -389,14 +393,16 @@ jobs:
     steps:
       - name: Checkout calling repository (PR / push head)
         if: needs.integration.outputs.checkout_mode == 'caller'
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           path: ${{ env.APP_PATH }}
 
       - name: Checkout remote application repository
         if: needs.integration.outputs.checkout_mode == 'remote'
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           repository: ${{ needs.integration.outputs.app_repository }}
           ref: ${{ needs.integration.outputs.app_ref }}
           path: ${{ env.APP_PATH }}
@@ -405,12 +411,12 @@ jobs:
         run: mkdir -p "${GITHUB_WORKSPACE}/security-reports"
 
       - name: Setup Python (Semgrep + uv)
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: true
           cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
@@ -486,7 +492,7 @@ jobs:
         run: echo "week=$(date -u +%Y-W%V)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Trivy DBs
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}/.cache/trivy
           key: trivy-db-${{ runner.os }}-${{ steps.trivy-cache-meta.outputs.week }}
@@ -494,7 +500,7 @@ jobs:
             trivy-db-${{ runner.os }}-
 
       - name: Trivy filesystem scan (SARIF report)
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: ${{ env.APP_PATH }}
@@ -509,7 +515,7 @@ jobs:
 
       - name: Trivy filesystem scan (console table)
         if: always()
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: ${{ env.APP_PATH }}
@@ -522,7 +528,7 @@ jobs:
           cache-dir: ${{ github.workspace }}/.cache/trivy
 
       - name: Trivy SCA gate (CRITICAL)
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: ${{ env.APP_PATH }}
@@ -536,7 +542,7 @@ jobs:
 
       - name: Upload Semgrep SARIF to Code Scanning
         if: always() && hashFiles('security-reports/semgrep.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: security-reports/semgrep.sarif
           checkout_path: ${{ env.APP_PATH }}
@@ -545,7 +551,7 @@ jobs:
 
       - name: Upload Trivy SARIF to Code Scanning
         if: always() && hashFiles('security-reports/trivy-fs.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: security-reports/trivy-fs.sarif
           checkout_path: ${{ env.APP_PATH }}
@@ -554,7 +560,7 @@ jobs:
 
       - name: Upload security reports (SARIF + pip-audit)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: security-reports-sarif
           path: |
@@ -579,27 +585,29 @@ jobs:
     steps:
       - name: Checkout calling repository (PR / push head)
         if: needs.integration.outputs.checkout_mode == 'caller'
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           path: ${{ env.APP_PATH }}
 
       - name: Checkout remote application repository
         if: needs.integration.outputs.checkout_mode == 'remote'
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           repository: ${{ needs.integration.outputs.app_repository }}
           ref: ${{ needs.integration.outputs.app_ref }}
           path: ${{ env.APP_PATH }}
 
       - name: Initialize CodeQL (Python)
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           languages: python
           source-root: ${{ env.APP_PATH }}
           queries: security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           category: "haystack-ci-codeql-python"
 
