@@ -60,7 +60,6 @@ _NUMERIC_DATE = (
     r"|\d{1,2}[./-]\d{1,2}[./-]\d{2,4}"
 )
 _ANY_DATE = rf"(?:{_NAMED_DATE}|{_NUMERIC_DATE})"
-_NAMED_DATE_RX = re.compile(rf"\b({_NAMED_DATE})\b", re.IGNORECASE)
 _ANY_DATE_RX = re.compile(rf"\b({_ANY_DATE})\b", re.IGNORECASE)
 _RANGE_LEAD = r"(?:from|on|start(?:ing)?(?:\s+date)?|begin(?:ning)?)"
 _RANGE_MID = r"(?:to|until|through|till|-|–|—)"
