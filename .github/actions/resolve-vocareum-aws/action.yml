@@ -33,9 +33,10 @@ runs:
         KEY="$(jq -r '.inputs.aws_access_key_id // empty' "$GITHUB_EVENT_PATH")"
         SECRET="$(jq -r '.inputs.aws_secret_access_key // empty' "$GITHUB_EVENT_PATH")"
         TOKEN="$(jq -r '.inputs.aws_session_token // empty' "$GITHUB_EVENT_PATH")"
-        [ -n "${KEY}" ] && echo "::add-mask::${KEY}"
-        [ -n "${SECRET}" ] && echo "::add-mask::${SECRET}"
-        [ -n "${TOKEN}" ] && echo "::add-mask::${TOKEN}"
+        # Form keys are not secrets.*; GitHub will not auto-mask them.
+        [ -n "${KEY}" ] && echo "::add-mask::${KEY}" # nosemgrep: yaml.github-actions.security.audit.unsafe-add-mask-workflow-command.unsafe-add-mask-workflow-command
+        [ -n "${SECRET}" ] && echo "::add-mask::${SECRET}" # nosemgrep: yaml.github-actions.security.audit.unsafe-add-mask-workflow-command.unsafe-add-mask-workflow-command
+        [ -n "${TOKEN}" ] && echo "::add-mask::${TOKEN}" # nosemgrep: yaml.github-actions.security.audit.unsafe-add-mask-workflow-command.unsafe-add-mask-workflow-command
         if [ -z "${KEY}" ] || [ -z "${SECRET}" ] || [ -z "${TOKEN}" ]; then
           KEY="${ENV_KEY}"
           SECRET="${ENV_SECRET}"
@@ -45,9 +46,9 @@ runs:
           echo "::error::Start Lab. Paste AWS Details on the form or set Environment academy secrets."
           exit 1
         fi
-        echo "::add-mask::${KEY}"
-        echo "::add-mask::${SECRET}"
-        echo "::add-mask::${TOKEN}"
+        echo "::add-mask::${KEY}" # nosemgrep: yaml.github-actions.security.audit.unsafe-add-mask-workflow-command.unsafe-add-mask-workflow-command
+        echo "::add-mask::${SECRET}" # nosemgrep: yaml.github-actions.security.audit.unsafe-add-mask-workflow-command.unsafe-add-mask-workflow-command
+        echo "::add-mask::${TOKEN}" # nosemgrep: yaml.github-actions.security.audit.unsafe-add-mask-workflow-command.unsafe-add-mask-workflow-command
         {
           echo "AWS_ACCESS_KEY_ID=${KEY}"
           echo "AWS_SECRET_ACCESS_KEY=${SECRET}"
@@ -55,7 +56,7 @@ runs:
         } >> "$GITHUB_ENV"
 
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v6.2.3
+      uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
       with:
         aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
