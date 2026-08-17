@@ -1,0 +1,81 @@
+# =============================================================================
+# Install into: haystack-fast-api
+# Path:         .github/workflows/haystack-cd-academy-caller.yml
+# =============================================================================
+# Also copy:
+#   deploy-pipeline/haystack-cd-academy.yml → .github/workflows/
+#   deploy-pipeline/resolve-vocareum-aws/action.yml → .github/actions/resolve-vocareum-aws/
+#   deploy-pipeline/ansible/ → deploy-pipeline/ansible/  (keep this path)
+#
+# Haystack app CD (Academy) — branch 2 compose.
+# Not CI. Not terraform. Re-runs guest_base + haystack on existing asg-haystack.
+# No neo4j container.
+# =============================================================================
+
+name: Haystack CD (Academy)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: deploy a CI image, refresh .env, or health only
+        required: true
+        type: choice
+        default: verify
+        options:
+          - deploy
+          - configure-only
+          - verify
+      aws_environment:
+        description: Must be academy (Vocareum Learner Lab)
+        required: true
+        type: environment
+        default: academy
+      image_ref:
+        description: Public GHCR or ECR tag (required for deploy unless HAYSTACK_IMAGE is set)
+        required: false
+        type: string
+        default: ""
+      image_http_url:
+        description: HTTPS or s3:// CI image tar.gz (empty = vars.IMAGE_HTTP_URL)
+        required: false
+        type: string
+        default: ""
+      aws_access_key_id:
+        description: Vocareum AWS Details access key. Empty = Environment academy.
+        required: false
+        type: string
+        default: ""
+      aws_secret_access_key:
+        description: Vocareum secret access key. Empty = Environment academy.
+        required: false
+        type: string
+        default: ""
+      aws_session_token:
+        description: Vocareum session token. Empty = Environment academy.
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: haystack-cd-academy-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  haystack-cd:
+    name: Haystack CD pipeline
+    uses: ./.github/workflows/haystack-cd-academy.yml
+    environment: ${{ inputs.aws_environment }}
+    with:
+      action: ${{ inputs.action }}
+      aws_environment: ${{ inputs.aws_environment }}
+      image_ref: ${{ inputs.image_ref }}
+      image_http_url: ${{ inputs.image_http_url }}
+    # Explicit secrets only (Semgrep: yaml.github-actions.security.secrets-inherit)
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}

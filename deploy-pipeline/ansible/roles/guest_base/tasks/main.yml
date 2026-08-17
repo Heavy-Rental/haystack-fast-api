@@ -1,0 +1,148 @@
+---
+# Copied from estate ansible/roles/guest_base/tasks/main.yml. Keep in sync; do not fork compose.
+# AL2023: Amazon `docker` RPM. `docker-compose-plugin` is sometimes missing
+# (this lab had no package). Try dnf first; otherwise Compose v2 from GitHub.
+- name: Install Docker
+  ansible.builtin.dnf:
+    name: docker
+    state: present
+
+- name: Try Amazon docker-compose-plugin
+  ansible.builtin.dnf:
+    name: docker-compose-plugin
+    state: present
+  register: compose_rpm
+  failed_when: false
+
+- name: Check docker compose v2
+  ansible.builtin.command:
+    argv: [docker, compose, version]
+  register: compose_cli
+  changed_when: false
+  failed_when: false
+
+- name: Docker CLI plugin directory
+  ansible.builtin.file:
+    path: /usr/libexec/docker/cli-plugins
+    state: directory
+    mode: "0755"
+  when: compose_cli.rc != 0
+
+- name: Install Docker Compose v2 plugin from GitHub
+  ansible.builtin.get_url:
+    url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-linux-x86_64"
+    dest: /usr/libexec/docker/cli-plugins/docker-compose
+    mode: "0755"
+    force: true
+  when: compose_cli.rc != 0
+
+- name: Start Docker
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+
+# LabRole can pull ECR. Private GHCR needs a token we do not put on the guest.
+- name: Log in to ECR when a compose image is in this account
+  ansible.builtin.shell: |
+    set -euo pipefail
+    set +x
+    IMAGES="{{ portal_image | default('') }} {{ rest_image | default('') }} {{ haystack_image | default('') }} {{ neo4j_image | default('') }}"
+    REGISTRY="$(printf '%s\n' ${IMAGES} | grep -E '\.dkr\.ecr\.[^/]+\.amazonaws\.com' | head -n1 | cut -d/ -f1 || true)"
+    if [ -z "${REGISTRY}" ]; then
+      exit 0
+    fi
+    aws ecr get-login-password --region "{{ aws_region }}" \
+      | docker login --username AWS --password-stdin "${REGISTRY}"
+  args:
+    executable: /bin/bash
+  no_log: true
+  changed_when: false
+
+- name: Compose and secret directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: "{{ item.mode }}"
+    owner: root
+    group: root
+  loop:
+    - { path: "{{ compose_dir }}", mode: "0755" }
+    - { path: /run/heavy-rental, mode: "0700" }
+
+- name: Fetch this role's app secret only
+  ansible.builtin.command:
+    argv:
+      - aws
+      - secretsmanager
+      - get-secret-value
+      - --secret-id
+      - "{{ app_secret_id }}"
+      - --region
+      - "{{ aws_region }}"
+      - --query
+      - SecretString
+      - --output
+      - text
+  register: app_secret
+  changed_when: false
+  no_log: true
+
+- name: Write secret JSON
+  ansible.builtin.copy:
+    dest: "{{ secret_json_path }}"
+    content: "{{ app_secret.stdout }}"
+    mode: "0600"
+  no_log: true
+
+- name: Map JSON to .env
+  ansible.builtin.shell: |
+    set -euo pipefail
+    python3 - <<'PY'
+    import json
+    from pathlib import Path
+    data = json.loads(Path("{{ secret_json_path }}").read_text())
+    lines = []
+    for key, val in data.items():
+        if val is None:
+            continue
+        lines.append(f"{key}={val}")
+    Path("{{ env_path }}").write_text("\n".join(lines) + "\n")
+    PY
+    chmod 600 "{{ env_path }}"
+  args:
+    executable: /bin/bash
+  no_log: true
+
+- name: Refuse Stripe secret or PEM on portal
+  ansible.builtin.command:
+    argv: [grep, -E, "STRIPE_API_KEY|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|private_key_pem|BEGIN OPENSSH", "{{ env_path }}"]
+  register: portal_leak
+  failed_when: portal_leak.rc == 0
+  changed_when: false
+  when: app_role == "portal"
+
+- name: Load image tar when provided
+  when: (image_http_url | default('')) | length > 0
+  block:
+    - name: Copy tar from lab S3
+      ansible.builtin.command:
+        argv:
+          - aws
+          - s3
+          - cp
+          - "{{ image_http_url }}"
+          - /tmp/app.tar.gz
+      when: image_http_url is match('^s3://')
+    - name: Download HTTPS tar
+      ansible.builtin.get_url:
+        url: "{{ image_http_url }}"
+        dest: /tmp/app.tar.gz
+        mode: "0600"
+        force: true
+      when: image_http_url is not match('^s3://')
+    - name: docker load tar
+      ansible.builtin.command:
+        argv: [docker, load, -i, /tmp/app.tar.gz]
+      register: docker_load
+      changed_when: "'Loaded image' in docker_load.stdout"

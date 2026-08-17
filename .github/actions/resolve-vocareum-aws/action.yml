@@ -1,0 +1,63 @@
+name: Resolve Vocareum AWS
+description: Read form keys from GITHUB_EVENT_PATH, mask them, fall back to Environment secrets, configure AWS.
+
+inputs:
+  aws_access_key_id:
+    description: Environment academy AWS_ACCESS_KEY_ID fallback
+    required: false
+    default: ""
+  aws_secret_access_key:
+    description: Environment academy AWS_SECRET_ACCESS_KEY fallback
+    required: false
+    default: ""
+  aws_session_token:
+    description: Environment academy AWS_SESSION_TOKEN fallback
+    required: false
+    default: ""
+  aws_region:
+    description: AWS region
+    required: false
+    default: us-east-1
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve and mask Vocareum keys
+      shell: bash
+      env:
+        ENV_KEY: ${{ inputs.aws_access_key_id }}
+        ENV_SECRET: ${{ inputs.aws_secret_access_key }}
+        ENV_TOKEN: ${{ inputs.aws_session_token }}
+      run: |
+        set +x
+        KEY="$(jq -r '.inputs.aws_access_key_id // empty' "$GITHUB_EVENT_PATH")"
+        SECRET="$(jq -r '.inputs.aws_secret_access_key // empty' "$GITHUB_EVENT_PATH")"
+        TOKEN="$(jq -r '.inputs.aws_session_token // empty' "$GITHUB_EVENT_PATH")"
+        [ -n "${KEY}" ] && echo "::add-mask::${KEY}"
+        [ -n "${SECRET}" ] && echo "::add-mask::${SECRET}"
+        [ -n "${TOKEN}" ] && echo "::add-mask::${TOKEN}"
+        if [ -z "${KEY}" ] || [ -z "${SECRET}" ] || [ -z "${TOKEN}" ]; then
+          KEY="${ENV_KEY}"
+          SECRET="${ENV_SECRET}"
+          TOKEN="${ENV_TOKEN}"
+        fi
+        if [ -z "${KEY}" ] || [ -z "${SECRET}" ] || [ -z "${TOKEN}" ]; then
+          echo "::error::Start Lab. Paste AWS Details on the form or set Environment academy secrets."
+          exit 1
+        fi
+        echo "::add-mask::${KEY}"
+        echo "::add-mask::${SECRET}"
+        echo "::add-mask::${TOKEN}"
+        {
+          echo "AWS_ACCESS_KEY_ID=${KEY}"
+          echo "AWS_SECRET_ACCESS_KEY=${SECRET}"
+          echo "AWS_SESSION_TOKEN=${TOKEN}"
+        } >> "$GITHUB_ENV"
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v6.2.3
+      with:
+        aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
+        aws-region: ${{ inputs.aws_region }}
