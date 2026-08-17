@@ -73,6 +73,8 @@ from pathlib import Path
 import pytest
 
 from app.agents.neo4j_tools import (
+    _FLEET_NODES_CYPHER,
+    _FLEET_RELS_CYPHER,
     TOOL_NEO4J_CYPHER_READ,
     TOOL_TRIGGER_NEO4J_POPULATE,
     BoltNeo4jBackend,
@@ -80,8 +82,6 @@ from app.agents.neo4j_tools import (
     FreeFormCypherRejected,
     UnavailableNeo4jBackend,
     UnknownNeo4jTemplateError,
-    _FLEET_NODES_CYPHER,
-    _FLEET_RELS_CYPHER,
     map_fleet_graph,
     neo4j_cypher_read,
     trigger_neo4j_populate,

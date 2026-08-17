@@ -70,30 +70,31 @@ def test_build_document_store_pgvector_mocked() -> None:
     fake_instance = MagicMock(name="pgvector_store")
     fake_cls.return_value = fake_instance
 
-    with patch.dict(
-        "sys.modules",
-        {
-            "haystack_integrations.document_stores.pgvector": MagicMock(
-                PgvectorDocumentStore=fake_cls
-            ),
-        },
-    ):
-        # Re-import path: patch the import target used inside the factory
-        with patch(
+    with (
+        patch.dict(
+            "sys.modules",
+            {
+                "haystack_integrations.document_stores.pgvector": MagicMock(
+                    PgvectorDocumentStore=fake_cls
+                ),
+            },
+        ),
+        patch(
             "haystack_integrations.document_stores.pgvector.PgvectorDocumentStore",
             fake_cls,
             create=True,
-        ):
-            store = build_document_store(
-                mode="pgvector",
-                settings=Settings(
-                    indexing_document_store="pgvector",
-                    indexing_embedding_dim=384,
-                    database_url_override=(
-                        "postgresql+psycopg://user:pass@host:5432/heavy_rental"
-                    ),
+        ),
+    ):
+        store = build_document_store(
+            mode="pgvector",
+            settings=Settings(
+                indexing_document_store="pgvector",
+                indexing_embedding_dim=384,
+                database_url_override=(
+                    "postgresql+psycopg://user:pass@host:5432/heavy_rental"
                 ),
-            )
+            ),
+        )
 
     assert store is fake_instance
     assert fake_cls.call_count == 1
@@ -129,12 +130,14 @@ def test_build_document_store_pgvector_import_error() -> None:
                 raise
         return real_import(name, *args, **kwargs)  # type: ignore[arg-type]
 
-    with patch("builtins.__import__", side_effect=_block_pgvector):
-        with pytest.raises(ImportError, match="pgvector-haystack"):
-            build_document_store(
-                mode="pgvector",
-                settings=Settings(indexing_document_store="pgvector"),
-            )
+    with (
+        patch("builtins.__import__", side_effect=_block_pgvector),
+        pytest.raises(ImportError, match="pgvector-haystack"),
+    ):
+        build_document_store(
+            mode="pgvector",
+            settings=Settings(indexing_document_store="pgvector"),
+        )
 
 
 def test_build_document_store_pgvector_empty_connection() -> None:
@@ -143,13 +146,12 @@ def test_build_document_store_pgvector_empty_connection() -> None:
         side_effect=ValueError(
             "pgvector DocumentStore requires a non-empty connection string"
         ),
-    ):
-        with pytest.raises(ValueError, match="connection string"):
-            build_document_store(
-                mode="pgvector",
-                connection_string="",
-                settings=Settings(indexing_document_store="pgvector"),
-            )
+    ), pytest.raises(ValueError, match="connection string"):
+        build_document_store(
+            mode="pgvector",
+            connection_string="",
+            settings=Settings(indexing_document_store="pgvector"),
+        )
 
 
 def test_get_document_store_stays_inmemory_singleton() -> None:
@@ -198,19 +200,18 @@ def test_build_document_store_pgvector_rejects_column_dim_mismatch() -> None:
         patch(
             "app.pipelines.indexing.document_store.existing_pgvector_embedding_dim",
             return_value=384,
-        ),
+        ),pytest.raises(ValueError, match="vector\\(384\\)")
     ):
-        with pytest.raises(ValueError, match="vector\\(384\\)"):
-            build_document_store(
-                mode="pgvector",
-                settings=Settings(
-                    indexing_document_store="pgvector",
-                    indexing_embedding_dim=768,
-                    database_url_override=(
-                        "postgresql+psycopg://user:pass@host:5432/heavy_rental"
-                    ),
+        build_document_store(
+            mode="pgvector",
+            settings=Settings(
+                indexing_document_store="pgvector",
+                indexing_embedding_dim=768,
+                database_url_override=(
+                    "postgresql+psycopg://user:pass@host:5432/heavy_rental"
                 ),
-            )
+            ),
+        )
     fake_cls.assert_not_called()
 
 

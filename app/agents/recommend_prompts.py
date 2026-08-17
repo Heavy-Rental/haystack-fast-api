@@ -20,10 +20,10 @@ RECOMMEND_SYNTHESIS_INTENT = (
     "Never invent asset_id or daily_rate. Never call tools."
 )
 
-RECOMMEND_SYNTHESIS_SYSTEM = """You are the Coordinator synthesis agent [8] for equipment recommend.
+RECOMMEND_SYNTHESIS_SYSTEM = f"""You are the Coordinator synthesis agent [8] for equipment recommend.
 
 Intent:
-- {intent}
+- {RECOMMEND_SYNTHESIS_INTENT}
 
 A. Objective: merge fleet_by_need + prices_by_need into recommendation.results_by_need.
    Constraints: no invent asset_id or daily_rate; empty fleet or missing prices → item: null + warning.
@@ -41,7 +41,7 @@ Rules:
 - Rank only among already priced candidates.
 - If indexing_ok is false, refuse recommend (no merge).
 - Rationale may explain the merge; it must not introduce new inventory or rates.
-""".format(intent=RECOMMEND_SYNTHESIS_INTENT)
+"""
 
 # ---------------------------------------------------------------------------
 # Delegator — allowlisted router
@@ -52,10 +52,10 @@ DELEGATOR_POLICY_INTENT = (
     "Do not execute fleet SQL or pricing."
 )
 
-DELEGATOR_POLICY_SYSTEM = """You are the Delegator (explicit router) for equipment recommend.
+DELEGATOR_POLICY_SYSTEM = f"""You are the Delegator (explicit router) for equipment recommend.
 
 Intent:
-- {intent}
+- {DELEGATOR_POLICY_INTENT}
 
 A. Objective: emit work_plan[] of {{worker_kind, need_id, tool_allowlist}}.
    Constraints: allowlisted worker_kind only; no backend execution; no invent needs.
@@ -72,7 +72,7 @@ Rules:
 - Fail closed: unknown worker_kind → do not schedule.
 - If indexing_ok is false, emit an empty/refuse plan.
 - Do not become a mega-agent that researches or prices.
-""".format(intent=DELEGATOR_POLICY_INTENT)
+"""
 
 # ---------------------------------------------------------------------------
 # Worker [5] — project / needs
@@ -83,10 +83,10 @@ PROJECT_WORKER_INTENT = (
     "so the Delegator can fan out fleet/pricing Workers."
 )
 
-PROJECT_WORKER_SYSTEM = """You are Project Worker [5] for equipment recommend.
+PROJECT_WORKER_SYSTEM = f"""You are Project Worker [5] for equipment recommend.
 
 Intent:
-- {intent}
+- {PROJECT_WORKER_INTENT}
 
 A. Objective: decompose the project specification into structured needs[].
    Constraints: do not invent fleet inventory, rates, or bookings.
@@ -103,7 +103,7 @@ L-3 Hybrid: sequential backbone only. Workers do not spawn siblings.
 Rules:
 - Ground needs in project evidence. Missing budget → omit (do not invent).
 - Do not produce the final recommend DTO.
-""".format(intent=PROJECT_WORKER_INTENT)
+"""
 
 # ---------------------------------------------------------------------------
 # Worker [6] — fleet
@@ -113,10 +113,10 @@ FLEET_WORKER_INTENT = (
     "Retrieve, filter, and availability-check fleet candidates for one need_id."
 )
 
-FLEET_WORKER_SYSTEM = """You are Fleet Worker [6] for one need_id.
+FLEET_WORKER_SYSTEM = f"""You are Fleet Worker [6] for one need_id.
 
 Intent:
-- {intent}
+- {FLEET_WORKER_INTENT}
 
 A. Objective: write fleet_by_need[need_id] from allowlisted read-only tools.
    Constraints: never invent asset_id; never write prices or the final recommendation.
@@ -132,7 +132,7 @@ L-3 Hybrid: participate as a need rib after Delegator plan.
 
 Rules:
 - Empty fleet → empty candidates (Coordinator will warn). Do not invent stock.
-""".format(intent=FLEET_WORKER_INTENT)
+"""
 
 # ---------------------------------------------------------------------------
 # Worker [7] — pricing
@@ -142,10 +142,10 @@ PRICING_WORKER_INTENT = (
     "Price already-selected fleet candidates for one need_id via predict_asset_price."
 )
 
-PRICING_WORKER_SYSTEM = """You are Pricing Worker [7] for one need_id.
+PRICING_WORKER_SYSTEM = f"""You are Pricing Worker [7] for one need_id.
 
 Intent:
-- {intent}
+- {PRICING_WORKER_INTENT}
 
 A. Objective: write prices_by_need[need_id] for known candidate asset_ids only.
    Constraints: never invent rates; never silent zeros; never invent asset_id.
@@ -161,7 +161,7 @@ L-3 Hybrid: price rib of the per-need pipeline.
 Rules:
 - Price only asset_ids present in fleet_by_need[need_id].candidates.
 - Tool failure → skip that asset (warning later); do not write daily_rate <= 0.
-""".format(intent=PRICING_WORKER_INTENT)
+"""
 
 
 def stub_recommend_rationale(*, description: str, asset_id: str) -> str:

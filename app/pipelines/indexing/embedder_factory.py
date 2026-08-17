@@ -179,7 +179,7 @@ def build_document_embedder(
             )
         except ImportError:
             try:
-                from haystack_integrations.components.embedders.sentence_transformers import (  # noqa: E501
+                from haystack_integrations.components.embedders.sentence_transformers import (
                     SentenceTransformersDocumentEmbedder,
                 )
             except ImportError as exc:

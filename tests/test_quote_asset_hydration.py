@@ -13,8 +13,8 @@ from app.schemas.recommendations import (
     DecomposedNeed,
     NeedResult,
     PricingPayload,
-    RecommendFromProjectSpecResponse,
     RecommendationItem,
+    RecommendFromProjectSpecResponse,
 )
 from app.services.project_knowledge_session import ProjectKnowledgeSession
 from app.services.recommendations import RecommendationService

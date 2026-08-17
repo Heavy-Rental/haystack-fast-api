@@ -7,7 +7,7 @@ temporary: delete by ``(user_id, ingest_id)`` or purge rows past ``expires_at``.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.pipelines.indexing.document_store import delete_ingest_chunks
@@ -33,7 +33,7 @@ def _parse_expires_at(raw: Any) -> datetime | None:
     except ValueError:
         return None
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -48,9 +48,9 @@ def purge_expired_chunks(
     """
     if document_store is None:
         return 0
-    clock = now if now is not None else datetime.now(timezone.utc)
+    clock = now if now is not None else datetime.now(UTC)
     if clock.tzinfo is None:
-        clock = clock.replace(tzinfo=timezone.utc)
+        clock = clock.replace(tzinfo=UTC)
 
     try:
         all_docs = list(document_store.filter_documents() or [])

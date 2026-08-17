@@ -1,5 +1,7 @@
 """Public health endpoint."""
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -11,6 +13,6 @@ router = APIRouter(tags=["health"])
 
 
 @router.get("/health", response_model=HealthResponse)
-def health(db: Session = Depends(get_db)) -> HealthResponse:
+def health(db: Annotated[Session, Depends(get_db)]) -> HealthResponse:
     """Liveness / readiness: app is up; database connectivity is reported."""
     return HealthService().check(db)

@@ -13,7 +13,6 @@ from app.pipelines.indexing.pipeline import build_indexing_pipeline
 from app.services.indexing import IndexingIngestService
 from app.services.project_knowledge_session import get_project_knowledge_registry
 
-
 PROJECT_TEXT = (
     "Site preparation for foundation work. "
     "Requires a 20-ton excavator operating on soft clay soil. "

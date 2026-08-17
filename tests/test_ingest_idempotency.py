@@ -23,11 +23,11 @@ from datetime import date
 from fastapi.testclient import TestClient
 
 from app.schemas.indexing import IngestFromProjectSpecResponse
+from app.services.indexing import IndexingIngestService
 from app.services.ingest_idempotency import (
     InMemoryIdempotencyStore,
     normalize_idempotency_key,
 )
-from app.services.indexing import IndexingIngestService
 
 ENDPOINT = "/internal/v1/recommendations/submitprojectspecification"
 

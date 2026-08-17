@@ -1,0 +1,75 @@
+# =============================================================================
+# Install into: haystack-fast-api
+# Path:         .github/workflows/haystack-fast-feedback-caller.yml
+# =============================================================================
+# Fast Feedback CI caller — Integration stage only (no QC / Security / CodeQL).
+# Mirrors the Integration job from integration-pipeline.yml.
+#
+# Place both files in the FastAPI / Haystack application repository:
+#
+#   .github/workflows/haystack-fast-feedback-caller.yml  ← this file (triggers)
+#   .github/workflows/fast-feedback-pipeline.yml         ← reusable pipeline
+#
+# When this runs
+# --------------
+#   Push to any branch EXCEPT master and develop (feature / bugfix / etc.)
+#   Manual workflow_dispatch
+#
+#   Does NOT run on:
+#     - push to master
+#     - push to develop
+#     - pull_request events (full CI: haystack-ci-caller.yml owns PR → develop)
+#
+# Reusable workflow (same repository):
+#   ./.github/workflows/fast-feedback-pipeline.yml
+#
+# Job
+# ---
+#   1. Integration only  (checkout, Python 3.12, uv, Haystack smoke, layout)
+#
+# Setup
+# -----
+# 1. Copy into the haystack-fast-api repo:
+#      .github/workflows/haystack-fast-feedback-caller.yml
+#      .github/workflows/fast-feedback-pipeline.yml
+# 2. No secrets required for this pipeline.
+# =============================================================================
+
+name: Fast Feedback CI
+
+on:
+  push:
+    branches-ignore:
+      - master
+      - develop
+  workflow_dispatch:
+    inputs:
+      app_repository:
+        description: Override application repository (owner/name). Empty = this repo (correct on GitHub; for act against the Haystack app, set Heavy-Rental/haystack-fast-api).
+        required: false
+        type: string
+        default: ""
+      app_ref:
+        description: Override git ref. Empty = this commit.
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: haystack-fast-feedback-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+jobs:
+  fast-feedback-pipeline:
+    name: Fast feedback pipeline
+    uses: ./.github/workflows/fast-feedback-pipeline.yml
+    with:
+      app_repository: ${{ inputs.app_repository }}
+      app_ref: ${{ inputs.app_ref }}
+    # Empty inputs on push: checks out this repo at github.sha (application repo).
+    # For act in pipeline-development, pass app_repository=Heavy-Rental/haystack-fast-api.

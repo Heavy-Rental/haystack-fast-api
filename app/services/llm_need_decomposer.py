@@ -168,8 +168,8 @@ class LlmNeedDecomposer:
             response = self._client.post("/chat/completions", json=body)
             response.raise_for_status()
             payload = response.json()
-        except httpx.HTTPError as exc:
-            logger.exception("LLM need decompose HTTP error: %s", exc)
+        except httpx.HTTPError:
+            logger.exception("LLM need decompose HTTP error")
             return split_needs_from_text(text)
 
         content = _extract_message_content(payload)

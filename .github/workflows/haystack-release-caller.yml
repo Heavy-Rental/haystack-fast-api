@@ -1,0 +1,74 @@
+# =============================================================================
+# Install into: haystack-fast-api
+# Path:         .github/workflows/haystack-release-caller.yml
+# =============================================================================
+# Release caller — runs only when:
+#   1. A GitHub Release is published, or
+#   2. A pull request is opened/updated from develop → master
+#
+# Feature-branch PR validation remains CI (haystack-ci-caller.yml).
+#
+# Place both files in the FastAPI / Haystack application repository:
+#
+#   .github/workflows/haystack-release-caller.yml  ← this file (triggers)
+#   .github/workflows/release-pipeline.yml         ← reusable pipeline (called)
+#
+# When this runs
+# --------------
+#   A) GitHub → Releases → Publish release
+#   B) Pull request whose head is develop and base is master
+#
+#   Does NOT run on:
+#     - push to master/develop alone
+#     - PRs from feature branches (even into master)
+#     - PRs into develop
+#     - tag push alone (publish a GitHub Release, or open develop→master PR)
+#
+# Flow
+# ----
+#   feature → develop (CI) → PR develop→master (this release pipeline)
+#   and/or: publish GitHub Release → this pipeline
+#     → Integration → QC → Security → CodeQL → Packaging (uv build + Docker/GHCR)
+#
+# Reusable workflow (same repository):
+#   ./.github/workflows/release-pipeline.yml
+#
+# Setup
+# -----
+# 1. Copy into the haystack-fast-api repo:
+#      .github/workflows/haystack-release-caller.yml
+#      .github/workflows/release-pipeline.yml
+# 2. GHCR push uses GITHUB_TOKEN (packages: write). No LLM / DB secrets.
+# =============================================================================
+
+name: Release
+
+on:
+  release:
+    types: [published]
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: haystack-release-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  security-events: write
+  actions: read
+  packages: write
+
+jobs:
+  release-pipeline:
+    name: Release pipeline
+    if: >
+      github.event_name == 'release' ||
+      (github.event_name == 'pull_request' &&
+       github.head_ref == 'develop' &&
+       github.base_ref == 'master')
+    uses: ./.github/workflows/release-pipeline.yml
+    # No inputs: checks out this haystack repo at github.sha
+    # GITHUB_TOKEN is implicit for GHCR login on non-PR runs

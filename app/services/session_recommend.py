@@ -29,9 +29,9 @@ from app.schemas.recommend_quote import (
 )
 from app.schemas.recommendations import (
     NeedResult,
+    RecommendationItem,
     RecommendFromProjectSpecResponse,
     RecommendOptions,
-    RecommendationItem,
 )
 from app.services.need_decomposer import NeedDecomposer
 from app.services.project_knowledge_session import (

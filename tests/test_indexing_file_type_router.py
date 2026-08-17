@@ -108,8 +108,9 @@ def test_service_csv_structured() -> None:
 
 
 def test_service_unsupported_raises() -> None:
-    from app.core.exceptions import BadRequestError
     import pytest
+
+    from app.core.exceptions import BadRequestError
 
     service = IndexingIngestService()
     src = byte_stream_from_upload(raw=b"MZ", filename="tool.exe", content_type=None)

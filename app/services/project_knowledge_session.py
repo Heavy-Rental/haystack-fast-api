@@ -11,7 +11,7 @@ affecting other users or (later) equipment KG-2.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
 from typing import Any
@@ -33,7 +33,7 @@ class ProjectKnowledgeSession:
     knowledge_graph: Any | None = None
     kg_artifact_path: str | None = None
     created_at: datetime = field(
-        default_factory=lambda: datetime.now(timezone.utc)
+        default_factory=lambda: datetime.now(UTC)
     )
     meta: dict[str, Any] = field(default_factory=dict)
 

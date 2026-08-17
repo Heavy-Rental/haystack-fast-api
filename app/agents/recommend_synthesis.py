@@ -10,15 +10,12 @@ implementation-plan Stage S7.4.
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from copy import deepcopy
-from typing import Any, Callable
+from typing import Any
 
 from app.agents.recommend_prompts import apply_rationale_only
-from app.pipelines.rank_rationale_generator import (
-    _tie_break,
-    build_evidence_rationale,
-    score_need_match,
-)
 from app.agents.recommend_state import (
     ROLE_COORDINATOR,
     RecommendAgentState,
@@ -26,6 +23,13 @@ from app.agents.recommend_state import (
     indexing_ok,
 )
 from app.agents.recommend_traces import append_tool_trace, elapsed_ms, now
+from app.pipelines.rank_rationale_generator import (
+    _tie_break,
+    build_evidence_rationale,
+    score_need_match,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class SynthesisSchemaError(ValueError):
@@ -209,7 +213,7 @@ def synthesize_recommendation(
                     )
                     item = apply_rationale_only(item, payload)
                 except Exception:
-                    pass
+                    logger.exception("recommend synthesis rationale failed; keeping tool-backed item")
             results.append(
                 {"need_id": need_id, "item": item, "warnings": warnings}
             )

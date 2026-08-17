@@ -39,7 +39,7 @@ def append_tool_trace(
     **extra: Any,
 ) -> list[dict[str, Any]]:
     """Append one trace event and return the new ``tool_traces`` list."""
-    traces = list((dict(state).get("tool_traces") or []))
+    traces = list(dict(state).get("tool_traces") or [])
     event: dict[str, Any] = {
         "role": role,
         "node": node,

@@ -10,9 +10,10 @@ use free-form tool calling.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any, Callable, TypedDict
+from typing import Any, TypedDict
 
 from haystack.dataclasses import ByteStream
 from langgraph.graph import END, START, StateGraph

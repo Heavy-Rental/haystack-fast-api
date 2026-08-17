@@ -89,7 +89,7 @@ def _preferred_schema() -> str:
         from app.config import get_settings
 
         preferred = str(get_settings().pricing_schema or PRIMARY_SCHEMA).strip()
-    except Exception:
+    except Exception:  # noqa: BLE001 — bootstrap fallback when settings are unavailable
         preferred = PRIMARY_SCHEMA
     if preferred == DEGRADED_SCHEMA:
         return DEGRADED_SCHEMA

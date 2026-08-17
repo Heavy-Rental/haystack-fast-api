@@ -6,7 +6,8 @@ Stage 1 uses explicit tool calls (not free-form ReAct) for reliable CI tests.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from app.agents.prompts import (
     GRAPH_AGENT_SYSTEM,

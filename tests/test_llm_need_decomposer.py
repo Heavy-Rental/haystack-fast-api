@@ -10,8 +10,8 @@ import pytest
 
 from app.config import Settings
 from app.services.llm_need_decomposer import LlmNeedDecomposer, parse_needs_json
-from app.services.need_decomposer_factory import create_need_decomposer
 from app.services.need_decomposer import StubNeedDecomposer
+from app.services.need_decomposer_factory import create_need_decomposer
 from app.services.recommendations import RecommendationService
 
 

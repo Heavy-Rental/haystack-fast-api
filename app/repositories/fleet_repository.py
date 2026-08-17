@@ -7,7 +7,7 @@ recommend fleet DTO. Never executes caller-supplied SQL strings.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
 
 from psycopg.errors import UndefinedColumn, UndefinedTable
@@ -20,11 +20,11 @@ from app.models.booking import Booking
 from app.models.booking_item import BookingItem
 from app.pipelines.catalog import is_approved_display_type
 from app.services.pricing.category_mapping import to_feature_name
-from app.services.pricing.repository import LIVE_HOLD_STATUSES
 from app.services.pricing.read_resilience import (
     PricingSchemaResolution,
     resolve_pricing_schema,
 )
+from app.services.pricing.repository import LIVE_HOLD_STATUSES
 
 FLEET_TABLE_ALLOWLIST: tuple[str, ...] = (
     "asset_categories",
@@ -234,7 +234,7 @@ class FleetRepository:
         """
         if asset_pk is None:
             return None
-        start = start_date or date.today()
+        start = start_date or datetime.now(UTC).date()
         end = end_date or start
         schema = resolution or resolve_pricing_schema(session)
         try:

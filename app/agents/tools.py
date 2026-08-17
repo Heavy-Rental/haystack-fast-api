@@ -7,9 +7,10 @@ Pricing tool [7] is in-process only — same entrypoint as service recommend pat
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Callable
+from typing import Any
 
 from haystack.dataclasses import ByteStream
 from sqlalchemy.orm import Session
