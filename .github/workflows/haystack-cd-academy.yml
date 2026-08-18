@@ -5,7 +5,7 @@
 # Reusable only. Sole caller: haystack-cd-academy-caller.yml
 # =============================================================================
 
-name: Haystack CD pipeline
+name: Haystack CD Academy pipeline
 
 on:
   workflow_call:
@@ -30,6 +30,8 @@ on:
       AWS_SECRET_ACCESS_KEY:
         required: false
       AWS_SESSION_TOKEN:
+        required: false
+      LLM_API_KEY:
         required: false
 
 permissions:
@@ -275,6 +277,35 @@ jobs:
           IMAGE_HTTP_INPUT: ${{ inputs.image_http_url }}
           AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
           BUCKET: ${{ needs.assert-lab.outputs.bucket }}
+          APP_NAME: ${{ vars.APP_NAME }}
+          APP_ENV: ${{ vars.APP_ENV }}
+          LOG_LEVEL: ${{ vars.LOG_LEVEL }}
+          NEED_DECOMPOSER: ${{ vars.NEED_DECOMPOSER }}
+          LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_MODEL: ${{ vars.LLM_MODEL }}
+          LLM_TIMEOUT_SECONDS: ${{ vars.LLM_TIMEOUT_SECONDS }}
+          LLM_TEMPERATURE: ${{ vars.LLM_TEMPERATURE }}
+          INDEXING_EMBEDDER: ${{ vars.INDEXING_EMBEDDER }}
+          INDEXING_EMBEDDING_DIM: ${{ vars.INDEXING_EMBEDDING_DIM }}
+          INDEXING_SPLIT_LENGTH: ${{ vars.INDEXING_SPLIT_LENGTH }}
+          INDEXING_SPLIT_OVERLAP: ${{ vars.INDEXING_SPLIT_OVERLAP }}
+          INDEXING_OPENAI_EMBEDDING_MODEL: ${{ vars.INDEXING_OPENAI_EMBEDDING_MODEL }}
+          INDEXING_ST_MODEL: ${{ vars.INDEXING_ST_MODEL }}
+          INDEXING_DOCUMENT_STORE: ${{ vars.INDEXING_DOCUMENT_STORE }}
+          INDEXING_CHUNK_TTL_SECONDS: ${{ vars.INDEXING_CHUNK_TTL_SECONDS }}
+          IDEMPOTENCY_TTL_SECONDS: ${{ vars.IDEMPOTENCY_TTL_SECONDS }}
+          INDEXING_VIA_AGENT_GATE: ${{ vars.INDEXING_VIA_AGENT_GATE }}
+          FLEET_BACKEND: ${{ vars.FLEET_BACKEND }}
+          PRICING_SCHEMA: ${{ vars.PRICING_SCHEMA }}
+          NEO4J_BACKEND: ${{ vars.NEO4J_BACKEND }}
+          NEO4J_POPULATE_TIMEOUT_SECONDS: ${{ vars.NEO4J_POPULATE_TIMEOUT_SECONDS }}
+          RECOMMEND_VIA_AGENT_GRAPH: ${{ vars.RECOMMEND_VIA_AGENT_GRAPH }}
+          RECOMMEND_FANOUT_CAP: ${{ vars.RECOMMEND_FANOUT_CAP }}
+          KG_ARTIFACT_DIR: ${{ vars.KG_ARTIFACT_DIR }}
+          KG_APPLY_TRANSFORMS: ${{ vars.KG_APPLY_TRANSFORMS }}
+          PROJECT_AGENT_MODE: ${{ vars.PROJECT_AGENT_MODE }}
+          PROJECT_AGENT_TOP_K: ${{ vars.PROJECT_AGENT_TOP_K }}
         working-directory: deploy-pipeline/ansible
         run: |
           set -euo pipefail
@@ -298,12 +329,37 @@ jobs:
             echo "::error::haystack_image is empty."
             exit 1
           fi
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          keys = (
+              "APP_NAME", "APP_ENV", "LOG_LEVEL",
+              "NEED_DECOMPOSER", "LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL",
+              "LLM_TIMEOUT_SECONDS", "LLM_TEMPERATURE",
+              "INDEXING_EMBEDDER", "INDEXING_EMBEDDING_DIM", "INDEXING_SPLIT_LENGTH",
+              "INDEXING_SPLIT_OVERLAP", "INDEXING_OPENAI_EMBEDDING_MODEL",
+              "INDEXING_ST_MODEL",
+              "INDEXING_DOCUMENT_STORE", "INDEXING_CHUNK_TTL_SECONDS",
+              "IDEMPOTENCY_TTL_SECONDS", "INDEXING_VIA_AGENT_GATE",
+              "FLEET_BACKEND", "PRICING_SCHEMA", "NEO4J_BACKEND",
+              "NEO4J_POPULATE_TIMEOUT_SECONDS",
+              "RECOMMEND_VIA_AGENT_GRAPH", "RECOMMEND_FANOUT_CAP",
+              "KG_ARTIFACT_DIR", "KG_APPLY_TRANSFORMS",
+              "PROJECT_AGENT_MODE", "PROJECT_AGENT_TOP_K",
+          )
+          overlay = {k: os.environ[k] for k in keys if os.environ.get(k, "").strip()}
+          path = Path("haystack-profile-overlay.json")
+          path.write_text(json.dumps({"haystack_profile_overlay": overlay}))
+          path.chmod(0o600)
+          print(f"Profile overlay keys: {', '.join(sorted(overlay)) or '(none — SM/app defaults)'}")
+          PY
           ansible-playbook playbooks/haystack.yml \
             --limit haystack \
             -e "haystack_image=${HAY}" \
             -e "image_http_url=${HTTP_URL}" \
             -e "aws_region=${AWS_REGION}" \
-            -e "ansible_aws_ssm_bucket_name=${BUCKET}"
+            -e "ansible_aws_ssm_bucket_name=${BUCKET}" \
+            -e @haystack-profile-overlay.json
           {
             echo "### Ansible haystack"
             echo ""

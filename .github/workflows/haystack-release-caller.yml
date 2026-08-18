@@ -28,7 +28,8 @@
 # ----
 #   feature → develop (CI) → PR develop→master (this release pipeline)
 #   and/or: publish GitHub Release → this pipeline
-#     → Integration → QC → Security → CodeQL → Packaging (uv build + Docker/GHCR)
+#     → Integration → QC → Security → CodeQL → Packaging
+#       (uv build + GHCR haystack_recommender:<semver> and :latest)
 #
 # Reusable workflow (same repository):
 #   ./.github/workflows/release-pipeline.yml
@@ -39,6 +40,7 @@
 #      .github/workflows/haystack-release-caller.yml
 #      .github/workflows/release-pipeline.yml
 # 2. GHCR push uses GITHUB_TOKEN (packages: write). No LLM / DB secrets.
+#    Image: ghcr.io/<owner>/haystack_recommender:<x.y.z> and :latest.
 # =============================================================================
 
 name: Haystack Release Pipeline Invoke
