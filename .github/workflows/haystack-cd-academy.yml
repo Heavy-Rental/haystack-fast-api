@@ -1,0 +1,389 @@
+# =============================================================================
+# Install into: haystack-fast-api
+# Path:         .github/workflows/haystack-cd-academy.yml
+# =============================================================================
+# Reusable only. Sole caller: haystack-cd-academy-caller.yml
+# =============================================================================
+
+name: Haystack CD Academy pipeline
+
+on:
+  workflow_call:
+    inputs:
+      action:
+        required: true
+        type: string
+      aws_environment:
+        required: true
+        type: string
+      image_ref:
+        required: false
+        type: string
+        default: ""
+      image_http_url:
+        required: false
+        type: string
+        default: ""
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: false
+      AWS_SECRET_ACCESS_KEY:
+        required: false
+      AWS_SESSION_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  assert-lab:
+    name: Assert Vocareum session
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.aws_environment }}
+    timeout-minutes: 5
+    outputs:
+      account_id: ${{ steps.sts.outputs.account_id }}
+      bucket: ${{ steps.sts.outputs.bucket }}
+    steps:
+      - name: Refuse paid Environment
+        env:
+          ENV_NAME: ${{ inputs.aws_environment }}
+        run: |
+          set -euo pipefail
+          if [ "${ENV_NAME}" != "academy" ]; then
+            echo "::error::This workflow is AWS Academy / Vocareum only. Use Environment academy (got '${ENV_NAME}')."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/resolve-vocareum-aws
+        with:
+          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Prove the Vocareum session is live
+        id: sts
+        env:
+          ACTION: ${{ inputs.action }}
+        run: |
+          set -euo pipefail
+          if ! ARN=$(aws sts get-caller-identity --query Arn --output text); then
+            echo "::error::sts failed. Start Lab and paste a fresh session token."
+            exit 1
+          fi
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          echo "account_id=${ACCOUNT}" >> "$GITHUB_OUTPUT"
+          echo "bucket=heavy-rental-tfstate-${ACCOUNT}-academy" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Vocareum / Academy"
+            echo ""
+            echo "Caller: \`${ARN}\`"
+            echo "Account: \`${ACCOUNT}\`"
+            echo "Action: \`${ACTION}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  discover-targets:
+    name: Discover asg-haystack
+    needs: [assert-lab]
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.aws_environment }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/resolve-vocareum-aws
+        with:
+          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: asg-haystack InService + SSM Online + secret shell
+        run: |
+          set -euo pipefail
+          ASG=asg-haystack
+          if ! aws autoscaling describe-auto-scaling-groups \
+            --auto-scaling-group-names "${ASG}" \
+            --query 'AutoScalingGroups[0].AutoScalingGroupName' \
+            --output text | grep -qx "${ASG}"; then
+            echo "::error::${ASG} is missing. Run infra CD action=apply first."
+            exit 1
+          fi
+          DESIRED="$(aws autoscaling describe-auto-scaling-groups \
+            --auto-scaling-group-names "${ASG}" \
+            --query 'AutoScalingGroups[0].DesiredCapacity' --output text)"
+          if [ "${DESIRED}" = "0" ]; then
+            echo "::error::${ASG} desired=0. Scale via infra (not this CD). Start Lab if the session ended."
+            exit 1
+          fi
+          mapfile -t IDS < <(aws autoscaling describe-auto-scaling-groups \
+            --auto-scaling-group-names "${ASG}" \
+            --query 'AutoScalingGroups[0].Instances[?LifecycleState==`InService`].InstanceId' \
+            --output text | tr '\t' '\n' | awk 'NF')
+          if [ "${#IDS[@]}" -eq 0 ]; then
+            echo "::error::No InService instances on ${ASG}. Start Lab or wait for the ASG."
+            exit 1
+          fi
+          ONLINE=0
+          for id in "${IDS[@]}"; do
+            ping="$(aws ssm describe-instance-information \
+              --filters "Key=InstanceIds,Values=${id}" \
+              --query 'InstanceInformationList[?PingStatus==`Online`].InstanceId' \
+              --output text || true)"
+            if [ -n "${ping}" ] && [ "${ping}" != "None" ]; then
+              ONLINE=$((ONLINE + 1))
+            fi
+          done
+          if [ "${ONLINE}" -eq 0 ]; then
+            echo "::error::No SSM Online guests on ${ASG}. Start Lab or run infra configure-only."
+            exit 1
+          fi
+          if ! aws secretsmanager describe-secret --secret-id heavy-rental/haystack >/dev/null; then
+            echo "::error::heavy-rental/haystack is missing. Run infra sync-secrets / apply first."
+            exit 1
+          fi
+          {
+            echo "### Discover asg-haystack"
+            echo ""
+            echo "InService instances: ${#IDS[@]}"
+            echo "SSM Online: ${ONLINE}"
+            echo "Secret \`heavy-rental/haystack\`: present (SecretString not printed)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  resolve-image:
+    name: Resolve CI image
+    needs: [assert-lab]
+    if: inputs.action == 'deploy'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.aws_environment }}
+    timeout-minutes: 10
+    outputs:
+      haystack_image: ${{ steps.resolve.outputs.haystack_image }}
+      image_http_url: ${{ steps.resolve.outputs.image_http_url }}
+    steps:
+      - name: Choose tar URL or registry tag
+        id: resolve
+        env:
+          IMAGE_REF_INPUT: ${{ inputs.image_ref }}
+          IMAGE_HTTP_INPUT: ${{ inputs.image_http_url }}
+          IMAGE_HTTP_VAR: ${{ vars.IMAGE_HTTP_URL }}
+          HAYSTACK_IMAGE_VAR: ${{ vars.HAYSTACK_IMAGE }}
+        run: |
+          set -euo pipefail
+          HTTP_URL="${IMAGE_HTTP_INPUT:-}"
+          if [ -z "${HTTP_URL}" ]; then
+            HTTP_URL="${IMAGE_HTTP_VAR:-}"
+          fi
+          TAG="${IMAGE_REF_INPUT:-}"
+          if [ -z "${TAG}" ]; then
+            TAG="${HAYSTACK_IMAGE_VAR:-}"
+          fi
+          if [ -z "${HTTP_URL}" ] && [ -z "${TAG}" ]; then
+            echo "::error::action=deploy needs image_ref, Environment HAYSTACK_IMAGE, or image_http_url / IMAGE_HTTP_URL. There is no stock uvicorn."
+            exit 1
+          fi
+          if [ -n "${TAG}" ] && [[ "${TAG}" =~ ^https?:// ]]; then
+            echo "::error::image_ref is an HTTP URL. Put the tar on image_http_url instead."
+            exit 1
+          fi
+          if [ -z "${TAG}" ]; then
+            echo "::error::docker load still needs a compose tag (image_ref or HAYSTACK_IMAGE) that matches the loaded image name."
+            exit 1
+          fi
+          if [[ "${TAG}" == ghcr.io/* ]]; then
+            OWNER_REPO_TAG="${TAG#ghcr.io/}"
+            REPO="${OWNER_REPO_TAG%:*}"
+            REF="${OWNER_REPO_TAG##*:}"
+            if [ "${REF}" = "${OWNER_REPO_TAG}" ]; then
+              REF=latest
+            fi
+            TOKEN="$(curl -fsSL "https://ghcr.io/token?service=ghcr.io&scope=repository:${REPO}:pull" | jq -r '.token // empty' || true)"
+            CODE="$(curl -sS -o /dev/null -w '%{http_code}' \
+              -H "Authorization: Bearer ${TOKEN}" \
+              -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+              "https://ghcr.io/v2/${REPO}/manifests/${REF}" || echo 000)"
+            if [ "${CODE}" = "401" ] || [ "${CODE}" = "403" ]; then
+              echo "::error::${TAG} is not pullable without a token (private GHCR). Copy to ECR or pass image_http_url. Do not put a PAT on the guest."
+              exit 1
+            fi
+            if [ "${CODE}" != "200" ]; then
+              echo "::error::Cannot read ${TAG} from GHCR (HTTP ${CODE}). Use a public tag, ECR, or image_http_url."
+              exit 1
+            fi
+          fi
+          echo "haystack_image=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "image_http_url=${HTTP_URL}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Resolve image"
+            echo ""
+            echo "haystack_image: \`${TAG}\`"
+            if [ -n "${HTTP_URL}" ]; then
+              echo "image_http_url: set (not printed)."
+            else
+              echo "image_http_url: empty (registry pull)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  ansible-haystack:
+    name: Compose playbook on asg-haystack
+    needs: [assert-lab, discover-targets, resolve-image]
+    if: always() && needs.assert-lab.result == 'success' && needs.discover-targets.result == 'success' && (inputs.action == 'deploy' || inputs.action == 'configure-only') && (needs.resolve-image.result == 'success' || needs.resolve-image.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.aws_environment }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/resolve-vocareum-aws
+        with:
+          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Session Manager plugin
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o /tmp/ssm.deb
+          sudo dpkg -i /tmp/ssm.deb
+
+      - name: Install Ansible 14.3.1
+        run: |
+          set -euo pipefail
+          python3 -m pip install --user "ansible==14.3.1" "boto3>=1.35.0" "botocore>=1.35.0"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
+          ansible-galaxy collection install -r deploy-pipeline/ansible/requirements.yml
+
+      - name: ansible-playbook --limit haystack
+        env:
+          ACTION: ${{ inputs.action }}
+          RESOLVED_IMAGE: ${{ needs.resolve-image.outputs.haystack_image }}
+          RESOLVED_HTTP: ${{ needs.resolve-image.outputs.image_http_url }}
+          HAYSTACK_IMAGE_VAR: ${{ vars.HAYSTACK_IMAGE }}
+          IMAGE_REF_INPUT: ${{ inputs.image_ref }}
+          IMAGE_HTTP_VAR: ${{ vars.IMAGE_HTTP_URL }}
+          IMAGE_HTTP_INPUT: ${{ inputs.image_http_url }}
+          AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+          BUCKET: ${{ needs.assert-lab.outputs.bucket }}
+        working-directory: deploy-pipeline/ansible
+        run: |
+          set -euo pipefail
+          chmod +x inventory/aws_ssm.py
+          if [ "${ACTION}" = "deploy" ]; then
+            HAY="${RESOLVED_IMAGE:-}"
+            HTTP_URL="${RESOLVED_HTTP:-}"
+          else
+            HAY="${IMAGE_REF_INPUT:-}"
+            if [ -z "${HAY}" ]; then HAY="${HAYSTACK_IMAGE_VAR:-}"; fi
+            HTTP_URL="${IMAGE_HTTP_INPUT:-}"
+            if [ -z "${HTTP_URL}" ]; then
+              HTTP_URL="${IMAGE_HTTP_VAR:-}"
+            fi
+            if [ -z "${HAY}" ]; then
+              echo "::error::action=configure-only needs Environment HAYSTACK_IMAGE or image_ref. There is no stock uvicorn."
+              exit 1
+            fi
+          fi
+          if [ -z "${HAY}" ]; then
+            echo "::error::haystack_image is empty."
+            exit 1
+          fi
+          ansible-playbook playbooks/haystack.yml \
+            --limit haystack \
+            -e "haystack_image=${HAY}" \
+            -e "image_http_url=${HTTP_URL}" \
+            -e "aws_region=${AWS_REGION}" \
+            -e "ansible_aws_ssm_bucket_name=${BUCKET}"
+          {
+            echo "### Ansible haystack"
+            echo ""
+            echo "Compose via SSM, \`--limit haystack\`. Image: \`${HAY}\`. No neo4j service."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  verify:
+    name: Health GET :8000
+    needs: [assert-lab, discover-targets, ansible-haystack]
+    if: >-
+      always()
+      && needs.assert-lab.result == 'success'
+      && needs.discover-targets.result == 'success'
+      && (
+        (inputs.action == 'verify' && needs.ansible-haystack.result == 'skipped')
+        || ((inputs.action == 'deploy' || inputs.action == 'configure-only') && needs.ansible-haystack.result == 'success')
+      )
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.aws_environment }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/resolve-vocareum-aws
+        with:
+          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: SSM GET :8000 on asg-haystack
+        run: |
+          set -euo pipefail
+          ASG=asg-haystack
+          mapfile -t IDS < <(aws autoscaling describe-auto-scaling-groups \
+            --auto-scaling-group-names "${ASG}" \
+            --query 'AutoScalingGroups[0].Instances[?LifecycleState==`InService`].InstanceId' \
+            --output text | tr '\t' '\n' | awk 'NF')
+          ONLINE=()
+          for id in "${IDS[@]}"; do
+            ping="$(aws ssm describe-instance-information \
+              --filters "Key=InstanceIds,Values=${id}" \
+              --query 'InstanceInformationList[?PingStatus==`Online`].InstanceId' \
+              --output text || true)"
+            if [ -n "${ping}" ] && [ "${ping}" != "None" ]; then
+              ONLINE+=("${id}")
+            fi
+          done
+          if [ "${#ONLINE[@]}" -eq 0 ]; then
+            echo "::error::No SSM Online guests to health-check."
+            exit 1
+          fi
+          OK=0
+          for id in "${ONLINE[@]}"; do
+            CMD_ID="$(aws ssm send-command \
+              --instance-ids "${id}" \
+              --document-name AWS-RunShellScript \
+              --parameters 'commands=["code=$(curl -sS -o /dev/null -w %{http_code} http://127.0.0.1:8000/docs || true); if [ \"$code\" = \"000\" ]; then curl -sS -o /dev/null -w %{http_code} http://127.0.0.1:8000/health; else echo -n \"$code\"; fi"]' \
+              --query Command.CommandId --output text)"
+            if ! aws ssm wait command-executed --command-id "${CMD_ID}" --instance-id "${id}"; then
+              echo "::warning::SSM command did not finish on a guest (id omitted)."
+              continue
+            fi
+            CODE="$(aws ssm get-command-invocation \
+              --command-id "${CMD_ID}" \
+              --instance-id "${id}" \
+              --query StandardOutputContent --output text | tr -d '[:space:]')"
+            case "${CODE}" in
+              200|301|302) OK=$((OK + 1)) ;;
+              *) echo "::warning::GET :8000 returned '${CODE}' on a guest (id omitted)." ;;
+            esac
+          done
+          if [ "${OK}" -eq 0 ]; then
+            echo "::error::No Haystack guest answered GET :8000/docs or /health with 200–302. SoR/Bolt down does not fail this job by itself if uvicorn answers."
+            exit 1
+          fi
+          {
+            echo "### Verify Haystack :8000"
+            echo ""
+            echo "Guests with GET :8000 accepted: ${OK} / ${#ONLINE[@]}"
+          } >> "$GITHUB_STEP_SUMMARY"

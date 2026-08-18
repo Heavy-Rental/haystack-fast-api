@@ -1,0 +1,14 @@
+---
+# Haystack app CD only. Do not add portal / rest / neo4j plays.
+- name: Shared guest bootstrap
+  hosts: haystack
+  become: true
+  gather_facts: true
+  roles:
+    - guest_base
+
+- name: Haystack (no Neo4j container)
+  hosts: haystack
+  become: true
+  roles:
+    - haystack

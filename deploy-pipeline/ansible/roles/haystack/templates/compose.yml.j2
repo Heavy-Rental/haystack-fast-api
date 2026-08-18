@@ -1,0 +1,28 @@
+services:
+  haystack:
+    image: {{ haystack_image }}
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    mem_limit: 768m
+    cpus: "1.0"
+    restart: unless-stopped
+
+  postgres-haystack-sync:
+    image: {{ haystack_image }}
+    env_file:
+      - .env
+    mem_limit: 256m
+    cpus: "0.25"
+    restart: on-failure
+    command: ["uv", "run", "python", "-m", "postgres_haystack_sync"]
+
+  neo4j-populate:
+    image: {{ haystack_image }}
+    env_file:
+      - .env
+    mem_limit: 256m
+    cpus: "0.25"
+    restart: on-failure
+    command: ["uv", "run", "python", "-m", "neo4j_populate"]
