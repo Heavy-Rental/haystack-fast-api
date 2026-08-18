@@ -43,6 +43,7 @@ def _try_store(dim: int = 8):
         return store
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"pgvector store unavailable: {exc}")
+        return None
 
 
 def _write(store, *, content: str, user_id: str, ingest_id: str, dim: int = 8) -> None:
