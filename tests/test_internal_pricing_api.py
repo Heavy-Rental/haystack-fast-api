@@ -70,7 +70,7 @@ def _request_body(**overrides) -> dict:
 @pytest.fixture
 def api_client() -> TestClient:
     app = create_app()
-    app.dependency_overrides[get_db] = lambda: MagicMock()
+    app.dependency_overrides[get_db] = MagicMock
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()
