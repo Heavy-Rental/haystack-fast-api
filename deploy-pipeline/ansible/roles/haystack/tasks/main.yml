@@ -12,6 +12,7 @@
   ansible.builtin.shell: |
     set -euo pipefail
     python3 - <<'PY'
+    import json
     from pathlib import Path
     path = Path("{{ env_path }}")
     data = {}
@@ -37,6 +38,28 @@
             data[key] = val
             if key not in order:
                 order.append(key)
+    # Haystack Environment academy overlay (project Profile knobs). Empty = keep SM.
+    # Never take estate hosts from the project.
+    overlay = json.loads('''{{ haystack_profile_overlay | default({}) | to_json }}''')
+    forbidden = {
+        "NEO4J_URI", "NEO4J_PASSWORD", "NEO4J_USER", "NEO4J_POPULATE_URL",
+        "POSTGRES_HOST", "POSTGRES_HOSTNAME", "POSTGRES_PORT",
+        "POSTGRES_DATABASE", "POSTGRES_DB", "POSTGRES_USERNAME", "POSTGRES_USER",
+        "POSTGRES_PASSWORD", "POSTGRES_URL", "DATABASE_URL",
+        "SOURCE_HOST", "SOURCE_PORT", "SOURCE_DATABASE",
+        "TARGET_HOST", "TARGET_PORT", "TARGET_DATABASE",
+    }
+    if not isinstance(overlay, dict):
+        overlay = {}
+    for key, val in overlay.items():
+        if key in forbidden:
+            continue
+        text = "" if val is None else str(val).strip()
+        if not text:
+            continue
+        data[key] = text
+        if key not in order:
+            order.append(key)
     path.write_text("".join(f"{k}={data[k]}\n" for k in order))
     PY
     chmod 600 "{{ env_path }}"
