@@ -929,9 +929,10 @@ jobs:
             echo "LABEL org.opencontainers.image.version=\"${VERSION}\""
             echo ""
             echo "WORKDIR /app"
-            echo "COPY pyproject.toml uv.lock ./"
-            echo "RUN uv sync --frozen --no-dev --extra neo4j"
+            echo "COPY pyproject.toml uv.lock README.md ./"
+            echo "RUN uv sync --frozen --no-dev --extra neo4j --no-install-project"
             echo "COPY app ./app"
+            echo "RUN uv sync --frozen --no-dev --extra neo4j"
             echo "COPY haystack.prod.env .env"
             if [ -d postgres_haystack_sync ]; then
               echo "COPY postgres_haystack_sync ./postgres_haystack_sync"
