@@ -26,7 +26,9 @@ import pytest
 import app.services.pricing.model as pricing_model
 from app.services.pricing import pricing_tables as pt
 from app.services.pricing.feature_schema import CATEGORIES
-from app.services.pricing.model import PricePrediction, predict_price
+
+PricePrediction = pricing_model.PricePrediction
+predict_price = pricing_model.predict_price
 
 _WIDE_OPEN = {"min_daily_rate": 1.0, "max_daily_rate": 100_000.0}
 

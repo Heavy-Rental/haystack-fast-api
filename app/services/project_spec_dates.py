@@ -9,8 +9,7 @@ import calendar
 import re
 from datetime import UTC, date, datetime
 
-_ISO = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2})?)?\b")
-_YMD_SEP = re.compile(r"\b(\d{4})[/.](\d{1,2})[/.](\d{1,2})\b")
+_unused_ymd_sep = re.compile(r"\b(\d{4})[/.](\d{1,2})[/.](\d{1,2})\b")
 _DMY = re.compile(r"\b(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})\b")
 
 _MONTH_ALT = (

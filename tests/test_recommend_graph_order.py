@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import sys
 from pathlib import Path
 
 from app.agents.graph import build_project_knowledge_graph
@@ -154,7 +155,7 @@ def test_gate_fail_refuses_fleet_and_price() -> None:
 
 def test_qa_graph_does_not_import_recommend_graph() -> None:
     """Scenario: Stage-1 Q&A graph still isolated."""
-    import app.agents.graph as qa_graph
+    qa_graph = sys.modules[build_project_knowledge_graph.__module__]
 
     source = inspect.getsource(qa_graph)
     assert "recommend_graph" not in source
