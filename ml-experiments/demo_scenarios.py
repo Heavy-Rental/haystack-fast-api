@@ -40,9 +40,9 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-
 from predict_price import PricePrediction
 from predict_price import predict_price as _predict_price
+
 # Single import site; swap to app.services.pricing.model.predict_price once
 # Phase 2/2b lands (SPEC-dynamic-pricing.md §5.1) -- same swap point
 # app/services/pricing_client.py already frames its own import around.
@@ -90,13 +90,13 @@ def build_condition_pair(
     asset: dict, *, duration_days: float = 7, distance_km: float = 15
 ) -> list[Scenario]:
     """Same asset, only condition differs. Goal: condition up -> price up."""
-    common = dict(
-        category=asset["category"],
-        duration_days=duration_days,
-        capacity=asset["capacity"],
-        distance_km=distance_km,
-        platform_height=asset["platform_height"],
-    )
+    common = {
+        "category": asset["category"],
+        "duration_days": duration_days,
+        "capacity": asset["capacity"],
+        "distance_km": distance_km,
+        "platform_height": asset["platform_height"],
+    }
     return [
         Scenario(label="NEEDS_REPAIR", condition="NEEDS_REPAIR", **common),
         Scenario(label="EXCELLENT", condition="EXCELLENT", **common),
@@ -115,13 +115,13 @@ def build_duration_pair(
     discount on longer rentals -- predict_price() already returns a per-day
     rate, so comparing raw/clamped_price directly compares price_per_day, not
     total price."""
-    common = dict(
-        category=asset["category"],
-        condition=condition,
-        capacity=asset["capacity"],
-        distance_km=distance_km,
-        platform_height=asset["platform_height"],
-    )
+    common = {
+        "category": asset["category"],
+        "condition": condition,
+        "capacity": asset["capacity"],
+        "distance_km": distance_km,
+        "platform_height": asset["platform_height"],
+    }
     return [
         Scenario(label=f"{short_days:g}-day rental", duration_days=short_days, **common),
         Scenario(label=f"{long_days:g}-day rental", duration_days=long_days, **common),
@@ -139,7 +139,9 @@ def describe_pair_fixed(scenarios: list[Scenario], varying: str) -> str:
         "capacity": f"capacity={s.capacity:g}kg",
         "distance_km": f"distance_km={s.distance_km:g}km",
         "platform_height": (
-            f"platform_height={s.platform_height:g}m" if s.platform_height is not None else "platform_height=n/a"
+            f"platform_height={s.platform_height:g}m"
+            if s.platform_height is not None
+            else "platform_height=n/a"
         ),
     }
     fields.pop(varying, None)
@@ -167,7 +169,9 @@ def plot_pair_comparison(
             ax.annotate(
                 f"{bar.get_height():.0f}",
                 (bar.get_x() + bar.get_width() / 2, bar.get_height()),
-                ha="center", va="bottom", fontsize=9,
+                ha="center",
+                va="bottom",
+                fontsize=9,
             )
     ax.set_xticks(x)
     ax.set_xticklabels(labels)
@@ -202,9 +206,11 @@ def run_pair(
 
     print(f"  {'scenario':<18} {'raw':>8} {'clamped':>8} {'clamped?':>9}")
     for s, r in zip(scenarios, results):
-        print(f"  {s.label:<18} {r.raw_price:>8.2f} {r.clamped_price:>8.2f} {str(r.was_clamped):>9}")
+        print(f"  {s.label:<18} {r.raw_price:>8.2f} {r.clamped_price:>8.2f} {r.was_clamped!s:>9}")
 
-    plot_pair_comparison(scenarios, results, title, describe_pair_fixed(scenarios, varying), out_path)
+    plot_pair_comparison(
+        scenarios, results, title, describe_pair_fixed(scenarios, varying), out_path
+    )
 
 
 def parse_args() -> argparse.Namespace:

@@ -120,9 +120,7 @@ def test_request_dates_override_text_extract(client: TestClient) -> None:
             "user_id": "user_override",
             "start_date": "2026-10-01",
             "end_date": "2026-10-20",
-            "project_text": (
-                "Hire from 2026-09-01 to 2026-09-12 for earthworks."
-            ),
+            "project_text": ("Hire from 2026-09-01 to 2026-09-12 for earthworks."),
         },
     )
     assert response.status_code == 200
@@ -165,9 +163,7 @@ def test_missing_user_id_returns_400(client: TestClient) -> None:
 
 
 def test_empty_project_text_returns_400(client: TestClient) -> None:
-    response = client.post(
-        ENDPOINT, json={"user_id": "u1", "project_text": "   "}
-    )
+    response = client.post(ENDPOINT, json={"user_id": "u1", "project_text": "   "})
     assert response.status_code == 400
     body = response.json()
     assert body["error"] == "bad_request"
@@ -315,8 +311,7 @@ def test_multipart_json_file_structured(client: TestClient) -> None:
 def test_multipart_caption_plus_file_splits_two_needs(client: TestClient) -> None:
     """Placeholder caption must not hide the file brief from needs_summary."""
     brief = (
-        b"Need one forklift for loading bay and indoor elevated work "
-        b"about 8m for scissors lift."
+        b"Need one forklift for loading bay and indoor elevated work about 8m for scissors lift."
     )
     response = client.post(
         ENDPOINT,

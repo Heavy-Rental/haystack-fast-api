@@ -67,9 +67,7 @@ AgentMode = Literal["stub", "llm"]
 WORKER_KIND_FLEET = "fleet_worker"
 WORKER_KIND_PRICING = "pricing_worker"
 
-ALLOWED_WORKER_KINDS: frozenset[str] = frozenset(
-    {WORKER_KIND_FLEET, WORKER_KIND_PRICING}
-)
+ALLOWED_WORKER_KINDS: frozenset[str] = frozenset({WORKER_KIND_FLEET, WORKER_KIND_PRICING})
 
 WORKER_TOOL_ALLOWLISTS: dict[str, tuple[str, ...]] = {
     WORKER_KIND_FLEET: (
@@ -83,6 +81,7 @@ WORKER_TOOL_ALLOWLISTS: dict[str, tuple[str, ...]] = {
 
 class UnknownWorkerKindError(ValueError):
     """Delegator / execute_needs rejected a worker_kind outside the allowlist."""
+
 
 # Full recommend-mode allowlist (fleet tools + already-shipped tools).
 RECOMMEND_TOOL_ALLOWLIST: frozenset[str] = frozenset(
@@ -131,9 +130,7 @@ def _wrap(
     func: Callable[..., Any],
     description: str | None = None,
 ) -> ProjectTool:
-    desc = description or TOOL_DESCRIPTIONS.get(name) or NEO4J_TOOL_DESCRIPTIONS.get(
-        name, name
-    )
+    desc = description or TOOL_DESCRIPTIONS.get(name) or NEO4J_TOOL_DESCRIPTIONS.get(name, name)
 
     def _run(*args: Any, **kwargs: Any) -> Any:
         return func(*args, **kwargs)
@@ -208,9 +205,7 @@ def build_recommend_tool_catalog(
     """
     if isinstance(backend, str):
         kind: BackendKind = backend
-        be = build_fleet_backend(
-            kind, assets=assets, bookings=bookings, session=session
-        )
+        be = build_fleet_backend(kind, assets=assets, bookings=bookings, session=session)
     else:
         kind = "fake" if isinstance(backend, FakeFleetBackend) else "sql"
         be = backend
@@ -220,9 +215,7 @@ def build_recommend_tool_catalog(
     tools: dict[str, ProjectTool] = {
         TOOL_DECOMPOSE_PROJECT_NEEDS: _wrap(
             TOOL_DECOMPOSE_PROJECT_NEEDS,
-            lambda source_text, **kw: decompose_project_needs(
-                source_text, decomposer=dec, **kw
-            ),
+            lambda source_text, **kw: decompose_project_needs(source_text, decomposer=dec, **kw),
         ),
         TOOL_RETRIEVE_FLEET_ASSETS: _wrap(
             TOOL_RETRIEVE_FLEET_ASSETS,
@@ -230,15 +223,11 @@ def build_recommend_tool_catalog(
         ),
         TOOL_FILTER_FLEET_CANDIDATES: _wrap(
             TOOL_FILTER_FLEET_CANDIDATES,
-            lambda assets=None, **kw: filter_fleet_candidates(
-                assets, backend=be, **kw
-            ),
+            lambda assets=None, **kw: filter_fleet_candidates(assets, backend=be, **kw),
         ),
         TOOL_CHECK_BOOKING_AVAILABILITY: _wrap(
             TOOL_CHECK_BOOKING_AVAILABILITY,
-            lambda candidates=None, **kw: check_booking_availability(
-                candidates, backend=be, **kw
-            ),
+            lambda candidates=None, **kw: check_booking_availability(candidates, backend=be, **kw),
         ),
     }
 
@@ -264,15 +253,16 @@ def build_recommend_tool_catalog(
         )
 
     cfg = settings if settings is not None else get_settings()
-    kind_neo4j = str(
-        neo4j_kind if neo4j_kind is not None else getattr(cfg, "neo4j_backend", "fake")
-        or "fake"
-    ).strip().lower()
-    graph = (
-        neo4j
-        if neo4j is not None
-        else build_neo4j_backend(kind_neo4j, settings=cfg)
+    kind_neo4j = (
+        str(
+            neo4j_kind
+            if neo4j_kind is not None
+            else getattr(cfg, "neo4j_backend", "fake") or "fake"
+        )
+        .strip()
+        .lower()
     )
+    graph = neo4j if neo4j is not None else build_neo4j_backend(kind_neo4j, settings=cfg)
     url = populate_url
     if url is None and kind_neo4j == "bolt":
         url = str(getattr(cfg, "neo4j_populate_url", "") or "") or None
@@ -293,9 +283,7 @@ def build_recommend_tool_catalog(
             ),
         )
 
-    return RecommendToolCatalog(
-        tools=tools, backend_kind=kind, backend=be, neo4j=graph
-    )
+    return RecommendToolCatalog(tools=tools, backend_kind=kind, backend=be, neo4j=graph)
 
 
 def get_recommend_tool(
@@ -311,8 +299,7 @@ def tools_for_worker(kind: str) -> tuple[str, ...]:
     name = str(kind or "").strip()
     if name not in ALLOWED_WORKER_KINDS:
         raise UnknownWorkerKindError(
-            f"unknown worker_kind={name!r}; "
-            f"allowed={sorted(ALLOWED_WORKER_KINDS)}"
+            f"unknown worker_kind={name!r}; allowed={sorted(ALLOWED_WORKER_KINDS)}"
         )
     return WORKER_TOOL_ALLOWLISTS[name]
 
@@ -328,8 +315,7 @@ def validate_work_plan(plan: Any) -> None:
         kind = str(item.get("worker_kind") or "").strip()
         if kind not in ALLOWED_WORKER_KINDS:
             raise UnknownWorkerKindError(
-                f"unknown worker_kind={kind!r}; "
-                f"allowed={sorted(ALLOWED_WORKER_KINDS)}"
+                f"unknown worker_kind={kind!r}; allowed={sorted(ALLOWED_WORKER_KINDS)}"
             )
 
 
@@ -366,21 +352,25 @@ def build_recommend_runtime(
     mode = str(agent_mode or "stub").strip().lower()
     if mode not in {"stub", "llm"}:
         mode = "stub"
-    tools = catalog if catalog is not None else build_recommend_tool_catalog(
-        backend=backend,
-        assets=assets,
-        bookings=bookings,
-        decomposer=decomposer,
-        include_pricing_tool=include_pricing_tool,
-        neo4j=neo4j,
-        include_neo4j_tools=include_neo4j_tools,
-        session=session,
-        settings=settings,
-        neo4j_kind=neo4j_kind,
-        populate_url=populate_url,
-        populate_http=populate_http,
-        project_session=project_session,
-        project_vector_tool=project_vector_tool,
-        project_kg_tool=project_kg_tool,
+    tools = (
+        catalog
+        if catalog is not None
+        else build_recommend_tool_catalog(
+            backend=backend,
+            assets=assets,
+            bookings=bookings,
+            decomposer=decomposer,
+            include_pricing_tool=include_pricing_tool,
+            neo4j=neo4j,
+            include_neo4j_tools=include_neo4j_tools,
+            session=session,
+            settings=settings,
+            neo4j_kind=neo4j_kind,
+            populate_url=populate_url,
+            populate_http=populate_http,
+            project_session=project_session,
+            project_vector_tool=project_vector_tool,
+            project_kg_tool=project_kg_tool,
+        )
     )
     return RecommendRuntime(catalog=tools, agent_mode=mode)  # type: ignore[arg-type]

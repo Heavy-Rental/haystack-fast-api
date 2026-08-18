@@ -6,9 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-SCRIPT_PATH = (
-    Path(__file__).resolve().parents[1] / "ml-experiments" / "phase2e_serving_smoke.py"
-)
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "ml-experiments" / "phase2e_serving_smoke.py"
 SPEC = importlib.util.spec_from_file_location("phase2e_serving_smoke", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None
 smoke = importlib.util.module_from_spec(SPEC)

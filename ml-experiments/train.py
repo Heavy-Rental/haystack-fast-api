@@ -14,13 +14,12 @@ import datetime as dt
 import json
 from pathlib import Path
 
+import feature_schema as fs
 import joblib
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
-
-import feature_schema as fs
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -36,7 +35,9 @@ XGB_PARAMS = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data", type=Path, default=SCRIPT_DIR / "data" / "synthetic_pricing_data.csv")
+    parser.add_argument(
+        "--data", type=Path, default=SCRIPT_DIR / "data" / "synthetic_pricing_data.csv"
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--test-size", type=float, default=0.2)
     parser.add_argument("--model-out", type=Path, default=SCRIPT_DIR / "artifacts" / "model.pkl")
@@ -73,7 +74,7 @@ def main() -> None:
     joblib.dump(model, args.model_out)
 
     meta = {
-        "trained_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "trained_at": dt.datetime.now(dt.UTC).isoformat(),
         "feature_columns": fs.FEATURE_COLUMNS,
         "condition_order": fs.CONDITION_ORDER,
         "categories": fs.CATEGORIES,

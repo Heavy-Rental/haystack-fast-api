@@ -137,9 +137,7 @@ class Settings(BaseSettings):
 
     # Fleet + pricing SQL schema. Models are mapped to primary_snapshot;
     # ``public`` is applied via schema_translate_map (same tables).
-    pricing_schema: str = Field(
-        default="primary_snapshot", alias="PRICING_SCHEMA"
-    )
+    pricing_schema: str = Field(default="primary_snapshot", alias="PRICING_SCHEMA")
 
     @field_validator("pricing_schema", mode="before")
     @classmethod

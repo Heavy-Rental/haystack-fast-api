@@ -61,9 +61,7 @@ def _is_undefined_table(exc: BaseException) -> bool:
     return isinstance(getattr(exc, "orig", None), UndefinedTable)
 
 
-def _ranges_overlap(
-    a_start: date, a_end: date, b_start: date, b_end: date
-) -> bool:
+def _ranges_overlap(a_start: date, a_end: date, b_start: date, b_end: date) -> bool:
     return a_start <= b_end and b_start <= a_end
 
 
@@ -291,9 +289,7 @@ class FleetRepository:
                 {
                     "booking_id": str(booking_id) if booking_id is not None else "",
                     "asset_id": asset_id,
-                    "start_date": start.isoformat()
-                    if isinstance(start, date)
-                    else start,
+                    "start_date": start.isoformat() if isinstance(start, date) else start,
                     "end_date": end.isoformat() if isinstance(end, date) else end,
                     "status": status,
                 }

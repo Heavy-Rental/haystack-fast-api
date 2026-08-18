@@ -83,9 +83,7 @@ def _state_with_fleet_and_price() -> dict:
 
 def test_qa_prompts_still_forbid_invent_fleet() -> None:
     """Scenario: Q&A prompts still forbid invent fleet."""
-    qa_blob = (
-        f"{RESEARCH_AGENT_SYSTEM}\n{GRAPH_AGENT_SYSTEM}\n{SYNTHESIS_AGENT_SYSTEM}"
-    ).lower()
+    qa_blob = (f"{RESEARCH_AGENT_SYSTEM}\n{GRAPH_AGENT_SYSTEM}\n{SYNTHESIS_AGENT_SYSTEM}").lower()
     assert "do not invent" in qa_blob or "not invent" in qa_blob
     assert "fleet" in qa_blob or "inventory" in qa_blob or "stock" in qa_blob
     assert "retrieve_fleet_assets" not in qa_blob
@@ -128,15 +126,18 @@ def test_stub_synthesis_path_is_deterministic() -> None:
     state = _state_with_fleet_and_price()
     first = synthesize_recommendation(state)
     second = synthesize_recommendation(state)
-    golden = json.loads(
-        (FIXTURES / "golden_results_by_need.json").read_text(encoding="utf-8")
-    )["results_by_need"]
+    golden = json.loads((FIXTURES / "golden_results_by_need.json").read_text(encoding="utf-8"))[
+        "results_by_need"
+    ]
 
-    for actual in (first["recommendation"]["results_by_need"], second["recommendation"]["results_by_need"]):
+    for actual in (
+        first["recommendation"]["results_by_need"],
+        second["recommendation"]["results_by_need"],
+    ):
         assert actual[0]["item"]["asset_id"] == golden[0]["item"]["asset_id"]
-        assert actual[0]["item"]["pricing"]["daily_rate"] == golden[0]["item"]["pricing"][
-            "daily_rate"
-        ]
+        assert (
+            actual[0]["item"]["pricing"]["daily_rate"] == golden[0]["item"]["pricing"]["daily_rate"]
+        )
         assert actual[0]["item"]["rationale"] == golden[0]["item"]["rationale"]
 
     assert first["recommendation"] == second["recommendation"]

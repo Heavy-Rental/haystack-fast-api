@@ -19,7 +19,7 @@ import json
 import os
 import shutil
 import sys
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -45,12 +45,12 @@ os.environ.update(
     }
 )
 
-from app.config import get_settings  # noqa: E402
+from app.config import get_settings
 
 get_settings.cache_clear()
 
-from tests.eval.metrics import aggregate_report  # noqa: E402
-from tests.test_call1_call2_eval_pack import (  # noqa: E402
+from tests.eval.metrics import aggregate_report
+from tests.test_call1_call2_eval_pack import (
     _load_fleet,
     _load_pack,
     _run_call1,
@@ -80,7 +80,7 @@ def main() -> None:
     DOCS_EVAL.mkdir(parents=True, exist_ok=True)
     test_data_dir = DOCS_EVAL / "test-data"
     test_data_dir.mkdir(parents=True, exist_ok=True)
-    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    generated_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     for name in ("call1_call2_cases.json", "eval_fleet.json", "README.md"):
         src = FIXTURES / name
@@ -94,9 +94,7 @@ def main() -> None:
 
     for case in pack["cases"]:
         ingest = _run_call1(case)
-        quote = _run_call2(
-            case, user_id=ingest.user_id, ingest_id=ingest.ingest_id
-        )
+        quote = _run_call2(case, user_id=ingest.user_id, ingest_id=ingest.ingest_id)
         metrics = _score_case(case)
         scores.append(metrics)
         detailed.append(
@@ -106,12 +104,8 @@ def main() -> None:
                 "input": {
                     "project_text": case.get("project_text"),
                     "call1_request_dates": {
-                        "start_date": case.get("call1_expected", {}).get(
-                            "start_date"
-                        ),
-                        "end_date": case.get("call1_expected", {}).get(
-                            "end_date"
-                        ),
+                        "start_date": case.get("call1_expected", {}).get("start_date"),
+                        "end_date": case.get("call1_expected", {}).get("end_date"),
                     },
                 },
                 "expected": {
@@ -239,10 +233,7 @@ def main() -> None:
         text = (case.get("project_text") or "").replace("|", "/").replace("\n", " ")
         if len(text) > 72:
             text = text[:69] + "..."
-        gold_types = (
-            ", ".join(case.get("call1_expected", {}).get("equipment_types") or [])
-            or "—"
-        )
+        gold_types = ", ".join(case.get("call1_expected", {}).get("equipment_types") or []) or "—"
         gold_assets: list[str] = []
         for g in case.get("call2_expected", {}).get("gold_by_need") or []:
             gold_assets.extend(g.get("gold_asset_ids") or [])

@@ -108,9 +108,7 @@ def discard_project_knowledge_session(
     deleted_n = 0
     if delete_chunks and store is not None:
         try:
-            deleted_n = delete_ingest_chunks(
-                store, user_id=uid, ingest_id=iid
-            )
+            deleted_n = delete_ingest_chunks(store, user_id=uid, ingest_id=iid)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "discard_session chunk delete failed user_id=%s ingest_id=%s: %s",

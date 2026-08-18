@@ -104,9 +104,7 @@ def resolve_pricing_schema(session: Session) -> PricingSchemaResolution:
     ``primary_snapshot`` then degrade to ``public``.
     """
     preferred = _preferred_schema()
-    fallback = (
-        PRIMARY_SCHEMA if preferred == DEGRADED_SCHEMA else DEGRADED_SCHEMA
-    )
+    fallback = PRIMARY_SCHEMA if preferred == DEGRADED_SCHEMA else DEGRADED_SCHEMA
     last_exc: Exception | None = None
     for backoff in _TRANSIENT_RETRY_BACKOFF_SECONDS:
         if backoff:

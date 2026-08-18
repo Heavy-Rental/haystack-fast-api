@@ -12,15 +12,11 @@ from app.pipelines.indexing.embedder_factory import build_document_embedder
 from app.pipelines.indexing.pipeline import build_indexing_pipeline
 from app.services.indexing import IndexingIngestService
 
-PROJECT_TEXT = (
-    "Requires a 20-ton excavator on soft clay. Timeline is 8 weeks."
-)
+PROJECT_TEXT = "Requires a 20-ton excavator on soft clay. Timeline is 8 weeks."
 
 
 @pytest.fixture
-def api_client(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> TestClient:
+def api_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     get_settings.cache_clear()
     monkeypatch.setenv("KG_ARTIFACT_DIR", str(tmp_path / "kg"))
     monkeypatch.setenv("PROJECT_AGENT_MODE", "stub")

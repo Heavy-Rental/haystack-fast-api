@@ -26,25 +26,19 @@ class EquipmentQuote(BaseModel):
     baseDailyRate: float | None = Field(
         default=None, description="Predicted daily rate for rental window"
     )
-    weekly: float | None = Field(
-        default=None, description="Optional weekly rate if known"
-    )
+    weekly: float | None = Field(default=None, description="Optional weekly rate if known")
     capacity: float | None = Field(
         default=None, description="assets.capacity when the row resolves"
     )
     purchaseYear: int | None = Field(
         default=None, description="assets.purchase_year when the row resolves"
     )
-    location: str | None = Field(
-        default=None, description="assets.location when the column exists"
-    )
+    location: str | None = Field(default=None, description="assets.location when the column exists")
     available: bool | None = Field(
         default=None,
         description="False when a live-hold booking overlaps the rental window",
     )
-    desc: str | None = Field(
-        default=None, description="assets.description when the row resolves"
-    )
+    desc: str | None = Field(default=None, description="assets.description when the row resolves")
     platformHeight: float | None = Field(
         default=None,
         description=(

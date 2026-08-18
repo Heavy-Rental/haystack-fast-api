@@ -51,13 +51,12 @@ import argparse
 import textwrap
 from pathlib import Path
 
+import feature_schema as fs
 import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import shap
-
-import feature_schema as fs
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 VIOLATION_TOLERANCE = 0.1
@@ -70,7 +69,9 @@ STEP_NOISE_TOLERANCE = 0.03
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data", type=Path, default=SCRIPT_DIR / "data" / "synthetic_pricing_data.csv")
+    parser.add_argument(
+        "--data", type=Path, default=SCRIPT_DIR / "data" / "synthetic_pricing_data.csv"
+    )
     parser.add_argument("--model", type=Path, default=SCRIPT_DIR / "artifacts" / "model.pkl")
     parser.add_argument("--plots-dir", type=Path, default=SCRIPT_DIR / "outputs")
     parser.add_argument(
@@ -93,11 +94,13 @@ def representative_row(X: pd.DataFrame, category: str | None = None) -> pd.Serie
     row = X.median(numeric_only=True)
 
     category_cols = [c for c in X.columns if c.startswith("category_")]
-    target_category_col = f"category_{category}" if category is not None else X[category_cols].sum().idxmax()
+    target_category_col = (
+        f"category_{category}" if category is not None else X[category_cols].sum().idxmax()
+    )
     for col in category_cols:
         row[col] = 1 if col == target_category_col else 0
 
-    row["condition_ordinal"] = int(round(row["condition_ordinal"]))
+    row["condition_ordinal"] = round(row["condition_ordinal"])
 
     # X.median(numeric_only=True) above is a dataset-wide median, which can be
     # out of range for the frozen category -- capacity in particular varies
@@ -213,7 +216,9 @@ def plot_category_ranking(ranking: pd.DataFrame, frozen_description: str, out_pa
         ax.annotate(
             f"{price:.0f}",
             (bar.get_x() + bar.get_width() / 2, bar.get_height()),
-            ha="center", va="bottom", fontsize=9,
+            ha="center",
+            va="bottom",
+            fontsize=9,
         )
     fig.suptitle("Predicted price by category (ranked)", fontsize=12)
     wrapped_frozen = "\n".join(textwrap.wrap(frozen_description, width=55))
@@ -267,64 +272,130 @@ def main() -> None:
 
     base_row = representative_row(X)
 
-    print("[2/9] Duration check (holding category/condition/capacity/distance_km/period_utilization/lead_time_days fixed)")
-    durations = np.linspace(df["duration_days"].min(), df["duration_days"].max(), 30).round().astype(int)
+    print(
+        "[2/9] Duration check (holding category/condition/capacity/distance_km/period_utilization/lead_time_days fixed)"
+    )
+    durations = (
+        np.linspace(df["duration_days"].min(), df["duration_days"].max(), 30).round().astype(int)
+    )
     duration_passed = run_sweep_check(
-        model, base_row, "duration_days", durations, durations, "decreasing",
-        "duration_days", "Predicted price vs duration", args.plots_dir / "shap_duration_check.png",
+        model,
+        base_row,
+        "duration_days",
+        durations,
+        durations,
+        "decreasing",
+        "duration_days",
+        "Predicted price vs duration",
+        args.plots_dir / "shap_duration_check.png",
     )
 
-    print("[3/9] Condition check (holding category/duration_days/capacity/distance_km/period_utilization/lead_time_days fixed)")
+    print(
+        "[3/9] Condition check (holding category/duration_days/capacity/distance_km/period_utilization/lead_time_days fixed)"
+    )
     condition_levels = np.array(sorted(fs.CONDITION_ORDER.values()))
     condition_labels = [k for k, v in sorted(fs.CONDITION_ORDER.items(), key=lambda kv: kv[1])]
     condition_passed = run_sweep_check(
-        model, base_row, "condition_ordinal", condition_levels, condition_labels, "increasing",
-        "condition", "Predicted price vs condition", args.plots_dir / "shap_condition_check.png",
+        model,
+        base_row,
+        "condition_ordinal",
+        condition_levels,
+        condition_labels,
+        "increasing",
+        "condition",
+        "Predicted price vs condition",
+        args.plots_dir / "shap_condition_check.png",
     )
 
-    print("[4/9] Capacity check (holding category/condition/duration_days/distance_km/period_utilization/lead_time_days fixed)")
+    print(
+        "[4/9] Capacity check (holding category/condition/duration_days/distance_km/period_utilization/lead_time_days fixed)"
+    )
     category_capacity = df.loc[df["category"] == active_category(base_row), "capacity"]
     capacities = np.linspace(category_capacity.min(), category_capacity.max(), 30)
     capacity_passed = run_sweep_check(
-        model, base_row, "capacity", capacities, capacities, "increasing",
-        "capacity (kg)", "Predicted price vs capacity", args.plots_dir / "shap_capacity_check.png",
+        model,
+        base_row,
+        "capacity",
+        capacities,
+        capacities,
+        "increasing",
+        "capacity (kg)",
+        "Predicted price vs capacity",
+        args.plots_dir / "shap_capacity_check.png",
     )
 
-    print("[5/9] Distance check (holding category/condition/duration_days/capacity/period_utilization/lead_time_days fixed)")
+    print(
+        "[5/9] Distance check (holding category/condition/duration_days/capacity/period_utilization/lead_time_days fixed)"
+    )
     distances = np.linspace(df["distance_km"].min(), df["distance_km"].max(), 30)
     distance_passed = run_sweep_check(
-        model, base_row, "distance_km", distances, distances, "increasing",
-        "distance_km (km)", "Predicted price vs distance", args.plots_dir / "shap_distance_check.png",
+        model,
+        base_row,
+        "distance_km",
+        distances,
+        distances,
+        "increasing",
+        "distance_km (km)",
+        "Predicted price vs distance",
+        args.plots_dir / "shap_distance_check.png",
     )
 
-    print("[6/9] Period utilization check (holding category/condition/duration_days/capacity/distance_km/lead_time_days fixed)")
+    print(
+        "[6/9] Period utilization check (holding category/condition/duration_days/capacity/distance_km/lead_time_days fixed)"
+    )
     utilizations = np.linspace(0, 1, 30)
     utilization_passed = run_sweep_check(
-        model, base_row, "period_utilization", utilizations, utilizations, "increasing",
-        "period_utilization", "Predicted price vs period utilization",
+        model,
+        base_row,
+        "period_utilization",
+        utilizations,
+        utilizations,
+        "increasing",
+        "period_utilization",
+        "Predicted price vs period utilization",
         args.plots_dir / "shap_period_utilization_check.png",
     )
 
-    print("[7/9] Lead time check (holding category/condition/duration_days/capacity/distance_km/period_utilization fixed)")
+    print(
+        "[7/9] Lead time check (holding category/condition/duration_days/capacity/distance_km/period_utilization fixed)"
+    )
     lead_times = np.linspace(df["lead_time_days"].min(), df["lead_time_days"].max(), 30)
     lead_time_passed = run_sweep_check(
-        model, base_row, "lead_time_days", lead_times, lead_times, "decreasing",
-        "lead_time_days (days)", "Predicted price vs lead time",
+        model,
+        base_row,
+        "lead_time_days",
+        lead_times,
+        lead_times,
+        "decreasing",
+        "lead_time_days (days)",
+        "Predicted price vs lead time",
         args.plots_dir / "shap_lead_time_check.png",
     )
 
-    print("[8/9] Platform height check (holding category/condition/duration_days/capacity/distance_km/period_utilization/lead_time_days fixed)")
+    print(
+        "[8/9] Platform height check (holding category/condition/duration_days/capacity/distance_km/period_utilization/lead_time_days fixed)"
+    )
     aerial_category = mode_aerial_category(X)
     platform_base_row = representative_row(X, category=aerial_category)
     category_platform_height = df.loc[df["category"] == aerial_category, "platform_height"]
-    platform_heights = np.linspace(category_platform_height.min(), category_platform_height.max(), 30)
+    platform_heights = np.linspace(
+        category_platform_height.min(), category_platform_height.max(), 30
+    )
     platform_height_passed = run_sweep_check(
-        model, platform_base_row, "platform_height", platform_heights, platform_heights, "increasing",
-        "platform_height (m)", "Predicted price vs platform height",
+        model,
+        platform_base_row,
+        "platform_height",
+        platform_heights,
+        platform_heights,
+        "increasing",
+        "platform_height (m)",
+        "Predicted price vs platform height",
         args.plots_dir / "shap_platform_height_check.png",
     )
 
-    print("[9/9] Category ranking (shared condition/duration_days/distance_km, each category's own capacity/platform_height)")
+    print(
+        "[9/9] Category ranking (shared condition/duration_days/distance_km, each category's own capacity/platform_height)"
+    )
     ranking = category_ranking(model, X)
     print(ranking.to_string(index=False))
     condition_name_by_ordinal = {v: k for k, v in fs.CONDITION_ORDER.items()}

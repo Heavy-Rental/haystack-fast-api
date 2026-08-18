@@ -121,9 +121,7 @@ def test_tool_always_scopes_to_session_tenant() -> None:
         ingest_id="ing_a",
         document_store=store,
     )
-    tool = build_project_vector_search_tool(
-        session_a, settings=settings, default_top_k=5
-    )
+    tool = build_project_vector_search_tool(session_a, settings=settings, default_top_k=5)
     hits = tool("crane excavator brief")
     assert hits
     for hit in hits:

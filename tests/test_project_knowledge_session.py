@@ -40,9 +40,7 @@ def test_registry_put_get_delete() -> None:
 
 def test_load_kg_from_artifact(tmp_path: Path) -> None:
     docs = [Document(content="Need 20-ton excavator on soft clay")]
-    kg = KnowledgeGraphGenerator(apply_transforms=False).run(documents=docs)[
-        "knowledge_graph"
-    ]
+    kg = KnowledgeGraphGenerator(apply_transforms=False).run(documents=docs)["knowledge_graph"]
     path = KnowledgeGraphSaver(artifact_dir=str(tmp_path)).run(
         knowledge_graph=kg,
         user_id="u1",

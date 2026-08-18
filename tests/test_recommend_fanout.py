@@ -72,9 +72,7 @@ def _price_fn(**kwargs):
 
 def _run(*, fanout_cap: int):
     assets, bookings = _seed()
-    catalog = build_recommend_tool_catalog(
-        backend="fake", assets=assets, bookings=bookings
-    )
+    catalog = build_recommend_tool_catalog(backend="fake", assets=assets, bookings=bookings)
     return run_recommend_graph(
         user_id="u-test",
         ingest_id="ing-test",

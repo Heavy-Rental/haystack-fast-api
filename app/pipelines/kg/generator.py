@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 def _import_ragas_graph():
+    from app.pipelines.kg.ragas_compat import ensure_langchain_community_vertexai_chat
+
+    ensure_langchain_community_vertexai_chat()
     from ragas.testset.graph import KnowledgeGraph, Node, NodeType
 
     return KnowledgeGraph, Node, NodeType

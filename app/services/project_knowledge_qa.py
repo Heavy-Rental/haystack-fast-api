@@ -102,8 +102,7 @@ class ProjectKnowledgeQAService:
         except Exception as exc:
             logger.warning("session resolve failed: %s", exc)
             raise NotFoundError(
-                f"project knowledge session not found for user_id={uid!r} "
-                f"ingest_id={iid!r}"
+                f"project knowledge session not found for user_id={uid!r} ingest_id={iid!r}"
             ) from exc
 
         mode = str(self._settings.project_agent_mode or "stub").strip().lower()
@@ -125,16 +124,8 @@ class ProjectKnowledgeQAService:
                 score=h.get("score"),
                 meta={
                     **dict(h.get("meta") or {}),
-                    **(
-                        {"node_type": h["node_type"]}
-                        if h.get("node_type") is not None
-                        else {}
-                    ),
-                    **(
-                        {"node_id": h["node_id"]}
-                        if h.get("node_id") is not None
-                        else {}
-                    ),
+                    **({"node_type": h["node_type"]} if h.get("node_type") is not None else {}),
+                    **({"node_id": h["node_id"]} if h.get("node_id") is not None else {}),
                 },
             )
             for h in list(result.get("research_hits") or [])
@@ -143,11 +134,7 @@ class ProjectKnowledgeQAService:
             ProjectKnowledgeHit(
                 content=str(h.get("content_preview") or h.get("content") or ""),
                 score=h.get("score"),
-                meta={
-                    k2: h[k2]
-                    for k2 in ("node_id", "node_type")
-                    if h.get(k2) is not None
-                }
+                meta={k2: h[k2] for k2 in ("node_id", "node_type") if h.get(k2) is not None}
                 | dict(h.get("properties") or {}),
             )
             for h in list(result.get("graph_hits") or [])

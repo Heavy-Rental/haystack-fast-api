@@ -105,12 +105,10 @@ def test_golden_merge_exact_asset_and_rates() -> None:
     assert len(actual) == 1
     assert actual[0]["need_id"] == golden[0]["need_id"]
     assert actual[0]["item"]["asset_id"] == golden[0]["item"]["asset_id"]
-    assert actual[0]["item"]["pricing"]["daily_rate"] == golden[0]["item"]["pricing"][
-        "daily_rate"
-    ]
-    assert actual[0]["item"]["pricing"]["total_price"] == golden[0]["item"]["pricing"][
-        "total_price"
-    ]
+    assert actual[0]["item"]["pricing"]["daily_rate"] == golden[0]["item"]["pricing"]["daily_rate"]
+    assert (
+        actual[0]["item"]["pricing"]["total_price"] == golden[0]["item"]["pricing"]["total_price"]
+    )
     assert actual[0]["item"]["pricing"]["currency"] == "SGD"
     assert actual[0]["item"]["rank"] == 1
     assert actual[0]["warnings"] == []
@@ -120,9 +118,7 @@ def test_golden_merge_exact_asset_and_rates() -> None:
 
 def test_empty_fleet_yields_null_item_and_warning() -> None:
     """Scenario: Empty fleet yields null item and warning."""
-    state = empty_recommend_state(
-        user_id="u-test", ingest_id="ing-test", indexing_ok=True
-    )
+    state = empty_recommend_state(user_id="u-test", ingest_id="ing-test", indexing_ok=True)
     state["project"]["needs"] = [
         {
             "need_id": "need_earthwork",

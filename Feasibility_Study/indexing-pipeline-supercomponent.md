@@ -116,6 +116,7 @@ from haystack import Pipeline, super_component
 from haystack.dataclasses import ByteStream
 from app.pipelines.indexing.pipeline import build_indexing_pipeline
 
+
 @super_component
 class IndexingPipelineSuperComponent:
     """Dual-branch file-type indexing as a single component."""

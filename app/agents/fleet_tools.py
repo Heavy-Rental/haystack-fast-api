@@ -91,12 +91,8 @@ class FakeFleetBackend:
         assets: list[dict[str, Any]] | None = None,
         bookings: list[dict[str, Any]] | None = None,
     ) -> None:
-        self._assets = (
-            deepcopy(assets) if assets is not None else get_seed_assets()
-        )
-        self._bookings = (
-            deepcopy(bookings) if bookings is not None else get_seed_bookings()
-        )
+        self._assets = deepcopy(assets) if assets is not None else get_seed_assets()
+        self._bookings = deepcopy(bookings) if bookings is not None else get_seed_bookings()
 
     def list_assets(self) -> list[dict[str, Any]]:
         return deepcopy(self._assets)
@@ -153,8 +149,7 @@ def _reject_freeform_sql(**kwargs: Any) -> None:
     for key in ("sql", "query_sql", "cypher", "raw_sql", "statement"):
         if key in kwargs and kwargs[key] is not None:
             raise FreeFormSqlRejected(
-                f"free-form SQL/Cypher rejected (got {key!r}); "
-                "use allowlisted fleet tools only"
+                f"free-form SQL/Cypher rejected (got {key!r}); use allowlisted fleet tools only"
             )
 
 
@@ -169,9 +164,7 @@ def _parse_date(value: Any) -> date | None:
     return date.fromisoformat(text)
 
 
-def _ranges_overlap(
-    a_start: date, a_end: date, b_start: date, b_end: date
-) -> bool:
+def _ranges_overlap(a_start: date, a_end: date, b_start: date, b_end: date) -> bool:
     return a_start <= b_end and b_start <= a_end
 
 
@@ -225,11 +218,7 @@ def retrieve_fleet_assets(
     if category is None or not str(category).strip():
         return assets
     cat = str(category).strip().lower()
-    return [
-        a
-        for a in assets
-        if str(a.get("category") or "").strip().lower() == cat
-    ]
+    return [a for a in assets if str(a.get("category") or "").strip().lower() == cat]
 
 
 def filter_fleet_candidates(
@@ -247,9 +236,7 @@ def filter_fleet_candidates(
     Unrecognized equipment signal → [].
     """
     _reject_freeform_sql(**kwargs)
-    pool = list(assets) if assets is not None else retrieve_fleet_assets(
-        backend=backend
-    )
+    pool = list(assets) if assets is not None else retrieve_fleet_assets(backend=backend)
     if not pool:
         return []
 
@@ -260,16 +247,12 @@ def filter_fleet_candidates(
         cat = str(category).strip().lower()
         categories = [cat]
     else:
-        hints = [
-            str(h).strip()
-            for h in (need.get("equipment_hints") or [])
-            if str(h).strip()
-        ]
+        hints = [str(h).strip() for h in (need.get("equipment_hints") or []) if str(h).strip()]
         if hints:
             # Hints win: do not let a shared description pull extra types.
-            categories = infer_model_categories(
-                {"equipment_hints": hints, "description": ""}
-            ) or [h.lower() for h in hints]
+            categories = infer_model_categories({"equipment_hints": hints, "description": ""}) or [
+                h.lower() for h in hints
+            ]
         else:
             categories = infer_model_categories(need)
 
@@ -290,9 +273,7 @@ def filter_fleet_candidates(
                 continue
         # Also honour constraints on unit_need.
         constraints = need.get("constraints") or {}
-        min_h = constraints.get("platform_height_m") or constraints.get(
-            "min_platform_height"
-        )
+        min_h = constraints.get("platform_height_m") or constraints.get("min_platform_height")
         if min_h is not None:
             height = asset.get("platform_height")
             if height is None or float(height) < float(min_h):

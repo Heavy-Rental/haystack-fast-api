@@ -23,10 +23,9 @@ separately; see predict_price()'s own docstring.
 from dataclasses import dataclass
 from pathlib import Path
 
+import feature_schema as fs
 import joblib
 import pandas as pd
-
-import feature_schema as fs
 import pricing_tables as pt
 
 _MODEL_PATH = Path(__file__).parent / "artifacts" / "model.pkl"
@@ -105,16 +104,20 @@ def predict_price(
     if period_utilization is None:
         period_utilization = pt.CATEGORY_UTILIZATION[category]
 
-    row = pd.DataFrame([{
-        "category": category,
-        "condition": condition,
-        "duration_days": duration_days,
-        "capacity": capacity,
-        "distance_km": distance_km,
-        "platform_height": float("nan") if platform_height is None else platform_height,
-        "period_utilization": period_utilization,
-        "lead_time_days": lead_time_days,
-    }])
+    row = pd.DataFrame(
+        [
+            {
+                "category": category,
+                "condition": condition,
+                "duration_days": duration_days,
+                "capacity": capacity,
+                "distance_km": distance_km,
+                "platform_height": float("nan") if platform_height is None else platform_height,
+                "period_utilization": period_utilization,
+                "lead_time_days": lead_time_days,
+            }
+        ]
+    )
     features = fs.build_features(row)
     raw_price = float(_model.predict(features)[0])
 
@@ -147,7 +150,7 @@ if __name__ == "__main__":
         )
         print(
             f"{category:<14} {'GOOD':<12} {result.raw_price:>8.2f} "
-            f"{result.clamped_price:>8.2f} {str(result.was_clamped):>9}"
+            f"{result.clamped_price:>8.2f} {result.was_clamped!s:>9}"
         )
 
     # One call relying on the period_utilization/lead_time_days fallback
@@ -163,5 +166,5 @@ if __name__ == "__main__":
     )
     print(
         f"\n{'excavator':<14} {'GOOD':<12} {fallback_result.raw_price:>8.2f} "
-        f"{fallback_result.clamped_price:>8.2f} {str(fallback_result.was_clamped):>9}  (defaults)"
+        f"{fallback_result.clamped_price:>8.2f} {fallback_result.was_clamped!s:>9}  (defaults)"
     )

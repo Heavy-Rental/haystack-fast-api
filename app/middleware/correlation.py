@@ -21,9 +21,7 @@ from starlette.types import ASGIApp
 CORRELATION_HEADER = "X-Correlation-Id"
 TRACEPARENT_HEADER = "traceparent"
 
-correlation_id_ctx: ContextVar[str | None] = ContextVar(
-    "correlation_id", default=None
-)
+correlation_id_ctx: ContextVar[str | None] = ContextVar("correlation_id", default=None)
 traceparent_ctx: ContextVar[str | None] = ContextVar("traceparent", default=None)
 
 logger = logging.getLogger("app.request")

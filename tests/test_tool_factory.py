@@ -68,9 +68,7 @@ def test_allowlist_rejects_unknown_tool_name() -> None:
 def test_fake_catalog_exposes_fleet_tools() -> None:
     """Scenario: Fake catalog exposes fleet tools."""
     assets, bookings = _seed()
-    catalog = build_recommend_tool_catalog(
-        backend="fake", assets=assets, bookings=bookings
-    )
+    catalog = build_recommend_tool_catalog(backend="fake", assets=assets, bookings=bookings)
 
     for name in (
         TOOL_DECOMPOSE_PROJECT_NEEDS,
@@ -95,9 +93,7 @@ def test_fake_catalog_exposes_fleet_tools() -> None:
 
 def test_sql_backend_empty_dtos() -> None:
     """Scenario: SQL backend uses injected DTOs only (empty → [])."""
-    catalog = build_recommend_tool_catalog(
-        backend="sql", assets=[], bookings=[]
-    )
+    catalog = build_recommend_tool_catalog(backend="sql", assets=[], bookings=[])
     assert catalog.backend_kind == "sql"
     result = catalog.get(TOOL_RETRIEVE_FLEET_ASSETS)()
     assert result == []
@@ -105,9 +101,7 @@ def test_sql_backend_empty_dtos() -> None:
 
 def test_sql_backend_with_injected_rows() -> None:
     assets, bookings = _seed()
-    catalog = build_recommend_tool_catalog(
-        backend="sql", assets=assets, bookings=bookings
-    )
+    catalog = build_recommend_tool_catalog(backend="sql", assets=assets, bookings=bookings)
     result = catalog.get(TOOL_RETRIEVE_FLEET_ASSETS)(category="excavator")
     assert {a["asset_id"] for a in result} == {"AST-EX-001", "AST-EX-002"}
 
@@ -121,9 +115,7 @@ def test_sql_backend_with_injected_rows() -> None:
 
 
 def test_catalog_without_pricing_tool() -> None:
-    catalog = build_recommend_tool_catalog(
-        backend="fake", include_pricing_tool=False
-    )
+    catalog = build_recommend_tool_catalog(backend="fake", include_pricing_tool=False)
     assert TOOL_PREDICT_ASSET_PRICE not in catalog
     # Still allowlisted globally, but not registered → specific error
     with pytest.raises(UnknownToolError, match="not registered"):
@@ -155,9 +147,7 @@ def test_sql_backend_with_session_is_live() -> None:
 
 
 def test_catalog_without_neo4j_tools() -> None:
-    catalog = build_recommend_tool_catalog(
-        backend="fake", include_neo4j_tools=False
-    )
+    catalog = build_recommend_tool_catalog(backend="fake", include_neo4j_tools=False)
     assert TOOL_NEO4J_CYPHER_READ not in catalog
     with pytest.raises(UnknownToolError, match="not registered"):
         catalog.get(TOOL_NEO4J_CYPHER_READ)

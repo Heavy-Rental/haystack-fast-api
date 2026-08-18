@@ -111,9 +111,7 @@ def test_ingest_maps_pgvector_dimension_error() -> None:
     from app.services.indexing import _reraise_embedding_dimension_error
 
     with pytest.raises(BadRequestError, match="Embedding dimension mismatch"):
-        _reraise_embedding_dimension_error(
-            RuntimeError("expected 384 dimensions, not 768")
-        )
+        _reraise_embedding_dimension_error(RuntimeError("expected 384 dimensions, not 768"))
 
 
 def test_pipeline_writes_embedded_chunks() -> None:

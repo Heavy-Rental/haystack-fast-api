@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import sys
 from pathlib import Path
 
 from app.agents.graph import build_project_knowledge_graph
@@ -93,9 +94,7 @@ def _worker_starts(traces: list[dict]) -> list[tuple[str, str]]:
 def test_never_price_before_fleet_for_same_need() -> None:
     """Scenario: Never price before fleet for the same need."""
     assets, bookings = _seed()
-    catalog = build_recommend_tool_catalog(
-        backend="fake", assets=assets, bookings=bookings
-    )
+    catalog = build_recommend_tool_catalog(backend="fake", assets=assets, bookings=bookings)
     price_calls: list[tuple[str, str]] = []
 
     state = run_recommend_graph(
@@ -117,9 +116,7 @@ def test_never_price_before_fleet_for_same_need() -> None:
         if node == "fleet_worker":
             seen_fleet.add(need_id)
         elif node == "pricing_worker":
-            assert need_id in seen_fleet, (
-                f"price for {need_id!r} before fleet; starts={starts}"
-            )
+            assert need_id in seen_fleet, f"price for {need_id!r} before fleet; starts={starts}"
 
     assert {"need_access", "need_earthwork"} <= seen_fleet
     assert price_calls  # pricing worker invoked
@@ -128,9 +125,7 @@ def test_never_price_before_fleet_for_same_need() -> None:
 def test_gate_fail_refuses_fleet_and_price() -> None:
     """Scenario: Gate fail refuses fleet and price."""
     assets, bookings = _seed()
-    catalog = build_recommend_tool_catalog(
-        backend="fake", assets=assets, bookings=bookings
-    )
+    catalog = build_recommend_tool_catalog(backend="fake", assets=assets, bookings=bookings)
     price_calls: list[tuple[str, str]] = []
 
     state = run_recommend_graph(
@@ -160,7 +155,7 @@ def test_gate_fail_refuses_fleet_and_price() -> None:
 
 def test_qa_graph_does_not_import_recommend_graph() -> None:
     """Scenario: Stage-1 Q&A graph still isolated."""
-    import app.agents.graph as qa_graph
+    qa_graph = sys.modules[build_project_knowledge_graph.__module__]
 
     source = inspect.getsource(qa_graph)
     assert "recommend_graph" not in source

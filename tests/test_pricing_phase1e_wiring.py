@@ -9,7 +9,6 @@ from datetime import date
 from unittest.mock import MagicMock
 
 import app.pipelines.predict_price_adapter as ppa
-from app.pipelines.predict_price_adapter import PredictPriceAdapter
 from app.schemas.recommendations import DecomposedNeed
 from app.services.recommendations import RecommendationService
 
@@ -31,7 +30,7 @@ def test_predict_price_adapter_threads_db_and_dates(monkeypatch) -> None:
     monkeypatch.setattr(ppa, "predict_price_for_asset", _fake_predict_price_for_asset)
     fake_db = MagicMock()
 
-    PredictPriceAdapter().run(
+    ppa.PredictPriceAdapter().run(
         candidates=[
             {
                 "asset_id": "AST-EX-001",
@@ -63,18 +62,20 @@ def test_predict_price_adapter_parses_string_dates(monkeypatch) -> None:
     monkeypatch.setattr(
         ppa,
         "predict_price_for_asset",
-        lambda **kwargs: captured.append(kwargs)
-        or MagicMock(
-            daily_rate=1.0,
-            total_price=1.0,
-            currency="SGD",
-            deposit_rate=0.3,
-            model_version="t",
-            explanation="t",
+        lambda **kwargs: (
+            captured.append(kwargs)
+            or MagicMock(
+                daily_rate=1.0,
+                total_price=1.0,
+                currency="SGD",
+                deposit_rate=0.3,
+                model_version="t",
+                explanation="t",
+            )
         ),
     )
 
-    PredictPriceAdapter().run(
+    ppa.PredictPriceAdapter().run(
         candidates=[
             {
                 "asset_id": "A1",

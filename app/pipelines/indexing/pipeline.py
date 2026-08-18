@@ -277,10 +277,7 @@ def run_indexing_pipeline(
     chunk_documents = list(
         embed_out.get("documents")
         or final_doc_joiner_documents
-        or (
-            list(split_text.get("documents") or [])
-            + list(split_csv.get("documents") or [])
-        )
+        or (list(split_text.get("documents") or []) + list(split_csv.get("documents") or []))
         or []
     )
     documents_written = int(write_out.get("documents_written") or 0)

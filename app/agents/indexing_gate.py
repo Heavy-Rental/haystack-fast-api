@@ -107,9 +107,7 @@ def make_index_gate_node(
             }
         except BadRequestError as exc:
             msg = exc.message
-            traces.append(
-                _gate_trace(indexing_ok=False, error_message=msg)
-            )
+            traces.append(_gate_trace(indexing_ok=False, error_message=msg))
             return {
                 "indexing_ok": False,
                 "ingest_id": "",
@@ -119,9 +117,7 @@ def make_index_gate_node(
             }
         except Exception as exc:  # noqa: BLE001 — gate must not invent success
             msg = f"indexing gate failed: {exc}"
-            traces.append(
-                _gate_trace(indexing_ok=False, error_message=msg)
-            )
+            traces.append(_gate_trace(indexing_ok=False, error_message=msg))
             return {
                 "indexing_ok": False,
                 "ingest_id": "",

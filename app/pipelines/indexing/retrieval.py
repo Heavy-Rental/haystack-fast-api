@@ -73,9 +73,7 @@ def build_text_embedder(
             "model": sentence_transformers_model,
             "progress_bar": False,
         }
-        st_kwargs.update(
-            _maybe_st_truncate_kwargs(SentenceTransformersTextEmbedder, dimension)
-        )
+        st_kwargs.update(_maybe_st_truncate_kwargs(SentenceTransformersTextEmbedder, dimension))
         inner = SentenceTransformersTextEmbedder(**st_kwargs)
         return DimensionEnforcingTextEmbedder(inner, dimension)
     raise ValueError(f"unsupported indexing embedder mode: {mode!r}")
@@ -91,13 +89,9 @@ def build_tenant_filters(
     uid = (user_id or "").strip()
     iid = (ingest_id or "").strip()
     if uid:
-        conditions.append(
-            {"field": "meta.user_id", "operator": "==", "value": uid}
-        )
+        conditions.append({"field": "meta.user_id", "operator": "==", "value": uid})
     if iid:
-        conditions.append(
-            {"field": "meta.ingest_id", "operator": "==", "value": iid}
-        )
+        conditions.append({"field": "meta.ingest_id", "operator": "==", "value": iid})
     if not conditions:
         return None
     if len(conditions) == 1:
@@ -118,9 +112,7 @@ def _build_retriever(
     top_k: int,
     filters: dict[str, Any] | None,
 ) -> Any:
-    if isinstance(document_store, InMemoryDocumentStore) or not _is_pgvector_store(
-        document_store
-    ):
+    if isinstance(document_store, InMemoryDocumentStore) or not _is_pgvector_store(document_store):
         return InMemoryEmbeddingRetriever(
             document_store=document_store,
             top_k=top_k,
@@ -166,9 +158,7 @@ def build_vector_retrieval_pipeline(
         if filters is not None
         else build_tenant_filters(user_id=user_id, ingest_id=ingest_id)
     )
-    retriever = _build_retriever(
-        document_store, top_k=top_k, filters=resolved_filters
-    )
+    retriever = _build_retriever(document_store, top_k=top_k, filters=resolved_filters)
     pipeline = Pipeline()
     pipeline.add_component("text_embedder", embedder)
     pipeline.add_component("retriever", retriever)

@@ -27,9 +27,7 @@ _CODE_BEFORE = re.compile(
     rf"(?P<currency>{_CURRENCY_CODES})\s*"
     rf"{_AMOUNT}\b"
 )
-_CODE_AFTER = re.compile(
-    rf"(?i)\b{_AMOUNT}\s*(?P<currency>{_CURRENCY_CODES})\b"
-)
+_CODE_AFTER = re.compile(rf"(?i)\b{_AMOUNT}\s*(?P<currency>{_CURRENCY_CODES})\b")
 _SYMBOL_BEFORE = re.compile(
     rf"(?i)(?:{_CUE})?\s*[:\-]?\s*"
     r"(?P<symbol>S\$|\$|€|£|¥|￥)\s*"
@@ -39,9 +37,7 @@ _SPOKEN = re.compile(
     rf"(?i)\b{_AMOUNT}\s+"
     r"(?P<spoken>singapore\s+dollars?|us\s+dollars?|dollars?|euros?|pounds?)\b"
 )
-_CUE_NUMBER = re.compile(
-    rf"(?i)\b(?:{_CUE})\s*(?:of|is|at|:|-)?\s*{_AMOUNT}\b"
-)
+_CUE_NUMBER = re.compile(rf"(?i)\b(?:{_CUE})\s*(?:of|is|at|:|-)?\s*{_AMOUNT}\b")
 
 _SYMBOL_TO_CURRENCY = {
     "S$": "SGD",
@@ -63,9 +59,7 @@ _SPOKEN_TO_CURRENCY = {
     "pound": "GBP",
     "pounds": "GBP",
 }
-_WINDOW_CURRENCY = re.compile(
-    rf"(?i)\b(?P<code>{_CURRENCY_CODES})\b|S\$|singapore|\bRM\b"
-)
+_WINDOW_CURRENCY = re.compile(rf"(?i)\b(?P<code>{_CURRENCY_CODES})\b|S\$|singapore|\bRM\b")
 
 
 def _parse_amount(raw: str, scale: str | None) -> float | None:

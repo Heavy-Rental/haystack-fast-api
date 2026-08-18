@@ -69,9 +69,7 @@ def test_delegates_to_production_predict_price_with_all_args(_fake_predict_price
     assert "degraded" not in result.explanation
 
 
-def test_threads_db_and_dates_through(
-    monkeypatch: pytest.MonkeyPatch, _fake_predict_price
-) -> None:
+def test_threads_db_and_dates_through(monkeypatch: pytest.MonkeyPatch, _fake_predict_price) -> None:
     captured, _ = _fake_predict_price
     fake_db = MagicMock()
 

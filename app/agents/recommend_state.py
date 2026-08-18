@@ -286,15 +286,12 @@ def validate_state_transition(
     # Unknown top-level keys are never allowed.
     unknown = changed - STATE_TOP_LEVEL_KEYS
     if unknown:
-        raise StateTransitionError(
-            f"role={role!r} proposed unknown state keys: {sorted(unknown)}"
-        )
+        raise StateTransitionError(f"role={role!r} proposed unknown state keys: {sorted(unknown)}")
 
     illegal = changed - allowed
     if illegal:
         raise StateTransitionError(
-            f"role={role!r} cannot write partitions {sorted(illegal)}; "
-            f"allowed={sorted(allowed)}"
+            f"role={role!r} cannot write partitions {sorted(illegal)}; allowed={sorted(allowed)}"
         )
 
     # --- Fleet Worker rules ---
@@ -312,8 +309,7 @@ def validate_state_transition(
                     continue
                 if prop_fleet.get(other_id) != cur_fleet.get(other_id):
                     raise StateTransitionError(
-                        f"fleet_worker need_id={need_id!r} cannot write "
-                        f"fleet_by_need[{other_id!r}]"
+                        f"fleet_worker need_id={need_id!r} cannot write fleet_by_need[{other_id!r}]"
                     )
 
     # --- Pricing Worker rules ---
@@ -328,8 +324,7 @@ def validate_state_transition(
             if need_id is not None and nid != need_id:
                 if rows != cur_prices.get(nid):
                     raise StateTransitionError(
-                        f"pricing_worker need_id={need_id!r} cannot write "
-                        f"prices_by_need[{nid!r}]"
+                        f"pricing_worker need_id={need_id!r} cannot write prices_by_need[{nid!r}]"
                     )
                 continue
             known = candidate_asset_ids(current, nid)
@@ -349,17 +344,16 @@ def validate_state_transition(
                 rate = row.get("daily_rate")
                 if rate is not None and float(rate) <= 0:
                     raise StateTransitionError(
-                        f"silent zero forbidden: daily_rate={rate!r} "
-                        f"asset_id={asset_id!r}"
+                        f"silent zero forbidden: daily_rate={rate!r} asset_id={asset_id!r}"
                     )
 
     # --- Coordinator: no invent asset_id outside fleet candidates ---
     if role == ROLE_COORDINATOR and "recommendation" in changed:
         prop_rec = _as_dict(proposed).get("recommendation") or {}
         results = prop_rec.get("results_by_need") or []
-        fleet = _as_dict(proposed).get("fleet_by_need") or _as_dict(current).get(
-            "fleet_by_need"
-        ) or {}
+        fleet = (
+            _as_dict(proposed).get("fleet_by_need") or _as_dict(current).get("fleet_by_need") or {}
+        )
         all_candidate_ids: set[str] = set()
         for slice_ in fleet.values():
             for c in (slice_ or {}).get("candidates") or []:
@@ -423,9 +417,7 @@ def write_fleet_slice(
         slice_["graph_notes"] = list(graph_notes)
     fleet[need_id] = slice_
     proposed["fleet_by_need"] = fleet
-    return apply_partition_write(
-        ROLE_FLEET_WORKER, current, proposed, need_id=need_id
-    )
+    return apply_partition_write(ROLE_FLEET_WORKER, current, proposed, need_id=need_id)
 
 
 def write_price_rows(
@@ -438,6 +430,4 @@ def write_price_rows(
     prices = dict(proposed.get("prices_by_need") or {})
     prices[need_id] = list(rows)
     proposed["prices_by_need"] = prices
-    return apply_partition_write(
-        ROLE_PRICING_WORKER, current, proposed, need_id=need_id
-    )
+    return apply_partition_write(ROLE_PRICING_WORKER, current, proposed, need_id=need_id)

@@ -48,9 +48,7 @@ ALLOWED_NEO4J_TEMPLATES: frozenset[str] = frozenset(
     }
 )
 
-FLEET_LABELS: frozenset[str] = frozenset(
-    {"Asset", "Booking", "Category", "Attachment"}
-)
+FLEET_LABELS: frozenset[str] = frozenset({"Asset", "Booking", "Category", "Attachment"})
 DOCUMENT_LABELS: frozenset[str] = frozenset({"Document"})
 
 TOOL_DESCRIPTIONS: dict[str, str] = {
@@ -124,9 +122,7 @@ class FakeNeo4jBackend:
         relationships: list[dict[str, Any]] | None = None,
     ) -> None:
         self._nodes = deepcopy(nodes) if nodes is not None else []
-        self._relationships = (
-            deepcopy(relationships) if relationships is not None else []
-        )
+        self._relationships = deepcopy(relationships) if relationships is not None else []
 
     @classmethod
     def from_fixture(cls, path: str | Path) -> FakeNeo4jBackend:
@@ -252,9 +248,7 @@ def _rel_type(raw: Any) -> str:
     return ""
 
 
-def _rel_endpoints(
-    raw: Any, start: Any | None, end: Any | None
-) -> tuple[Any, Any]:
+def _rel_endpoints(raw: Any, start: Any | None, end: Any | None) -> tuple[Any, Any]:
     if start is not None and end is not None:
         return start, end
     if isinstance(raw, dict):
@@ -292,9 +286,7 @@ def map_fleet_graph(
 
     rels: list[dict[str, Any]] = []
     for raw in raw_relationships:
-        if isinstance(raw, dict) and (
-            "from" in raw or "type" in raw or raw.get("r") is None
-        ):
+        if isinstance(raw, dict) and ("from" in raw or "type" in raw or raw.get("r") is None):
             start, end = _rel_endpoints(raw, raw.get("a"), raw.get("b"))
             if start is None and raw.get("from") is not None:
                 start, end = raw.get("from"), raw.get("to")
@@ -400,9 +392,7 @@ class BoltNeo4jBackend:
         with self._driver.session() as session:
             node_rows = [record["n"] for record in session.run(_FLEET_NODES_CYPHER, params)]
             rel_rows = list(session.run(_FLEET_RELS_CYPHER, params))
-        raw_rels = [
-            {"a": record["a"], "r": record["r"], "b": record["b"]} for record in rel_rows
-        ]
+        raw_rels = [{"a": record["a"], "r": record["r"], "b": record["b"]} for record in rel_rows]
         self._cache = map_fleet_graph(node_rows, raw_rels)
         return self._cache
 
@@ -503,8 +493,7 @@ def neo4j_cypher_read(
     name = str(template or "").strip()
     if name not in ALLOWED_NEO4J_TEMPLATES:
         raise UnknownNeo4jTemplateError(
-            f"unknown neo4j template {name!r}; "
-            f"allowed={sorted(ALLOWED_NEO4J_TEMPLATES)}"
+            f"unknown neo4j template {name!r}; allowed={sorted(ALLOWED_NEO4J_TEMPLATES)}"
         )
     if getattr(graph, "is_empty", True):
         return []
@@ -552,9 +541,7 @@ def trigger_neo4j_populate(
     job_id = f"neo4j_pop_{uuid.uuid4().hex}"
     url = str(populate_url or "").strip()
     if url:
-        poster = http_post or (
-            lambda target: _default_http_post(target, timeout=timeout_seconds)
-        )
+        poster = http_post or (lambda target: _default_http_post(target, timeout=timeout_seconds))
         try:
             payload = poster(url) or {}
         except Exception:

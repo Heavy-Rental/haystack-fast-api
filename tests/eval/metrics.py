@@ -286,10 +286,7 @@ def recompute_confidence_from_quote(
             has_dates=bool(conf_has_dates),
         )
     raw_items = list(quote.get("items") or [])
-    items = [
-        RecommendQuoteItem.model_validate(x) if isinstance(x, dict) else x
-        for x in raw_items
-    ]
+    items = [RecommendQuoteItem.model_validate(x) if isinstance(x, dict) else x for x in raw_items]
     if has_dates is None:
         has_dates = quote.get("days") is not None
     return compute_confidence_score(
@@ -319,9 +316,7 @@ def aggregate_report(case_results: Sequence[dict[str, Any]]) -> dict[str, Any]:
         vals = [
             float(r[key])
             for r in case_results
-            if r.get(key) is not None and not (
-                isinstance(r[key], float) and math.isnan(r[key])
-            )
+            if r.get(key) is not None and not (isinstance(r[key], float) and math.isnan(r[key]))
         ]
         if not vals:
             return None

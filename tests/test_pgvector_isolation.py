@@ -43,6 +43,7 @@ def _try_store(dim: int = 8):
         return store
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"pgvector store unavailable: {exc}")
+        return None
 
 
 def _write(store, *, content: str, user_id: str, ingest_id: str, dim: int = 8) -> None:
@@ -136,7 +137,5 @@ def test_pgvector_table_name_stable() -> None:
     _skip_unless_enabled()
     store = _try_store(8)
     # Attribute may vary by integration version; table_name is constructor kw.
-    name = getattr(store, "table_name", None) or getattr(
-        store, "_table_name", PGVECTOR_TABLE_NAME
-    )
+    name = getattr(store, "table_name", None) or getattr(store, "_table_name", PGVECTOR_TABLE_NAME)
     assert name == PGVECTOR_TABLE_NAME

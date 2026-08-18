@@ -59,9 +59,7 @@ def test_availability_filters_overlapping_booking() -> None:
 
 def test_availability_pass_through_without_dates() -> None:
     candidates = [{"asset_id": "AST-EX-002"}]
-    out = BookingAvailabilityFilter().run(
-        candidates=candidates, start_date=None, end_date=None
-    )
+    out = BookingAvailabilityFilter().run(candidates=candidates, start_date=None, end_date=None)
     assert len(out["available_candidates"]) == 1
 
 
@@ -89,9 +87,7 @@ def test_price_adapter_attaches_pricing() -> None:
     assert pricing["daily_rate"] is not None
     assert "weekly_rate" not in pricing
     assert pricing["total_price"] is not None
-    assert pricing["total_price"] == round(
-        float(pricing["daily_rate"]) * duration_days, 2
-    )
+    assert pricing["total_price"] == round(float(pricing["daily_rate"]) * duration_days, 2)
     assert pricing["currency"] == "SGD"
     assert pricing["deposit_rate"] == 0.30
 
