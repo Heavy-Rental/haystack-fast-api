@@ -45,7 +45,7 @@
 # 3. No repository secrets required for v1.
 # =============================================================================
 
-name: CI
+name: HayStack CI Pipeline Invoke
 
 on:
   pull_request:

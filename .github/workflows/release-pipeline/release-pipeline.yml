@@ -49,7 +49,7 @@
 # This family does not provision infrastructure, deploy, or operate production.
 # =============================================================================
 
-name: Haystack FastAPI Release CI
+name: Haystack Release Pipeline
 
 on:
   workflow_call:

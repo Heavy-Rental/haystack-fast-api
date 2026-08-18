@@ -31,7 +31,7 @@
 # No secrets required.
 # =============================================================================
 
-name: Haystack FastAPI Fast Feedback CI
+name: Haystack Fast Feedback CI Pipeline
 
 on:
   workflow_call:

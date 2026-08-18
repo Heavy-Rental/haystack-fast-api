@@ -41,7 +41,7 @@
 # 2. GHCR push uses GITHUB_TOKEN (packages: write). No LLM / DB secrets.
 # =============================================================================
 
-name: Release
+name: Haystack Release Pipeline Invoke
 
 on:
   release:
