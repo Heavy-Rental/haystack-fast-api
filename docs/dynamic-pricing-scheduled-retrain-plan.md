@@ -6,15 +6,14 @@
 > duplicate reasoning here; link back to that instead.
 >
 > **Runs in parallel with the existing `dynamic-pricing-execution-plan.md`**
-> (Phase 2e — promoting the Phase 2d candidate to production — is still open
-> there). This file and that one touch a disjoint set of files: this feature
+> (Phase 2e promotion completed 2026-08-17; its artifact swap remains separate from this Phase 3 plan). This file and that one touch a disjoint set of files: this feature
 > only adds new modules plus additive changes to `app/config.py`/
 > `app/main.py`/`pyproject.toml`/`.gitignore`. No merge risk between the two
 > efforts. `openspec/specs/dynamic-pricing/{spec.md,design.md}` (the live,
 > authoritative specs) are touched only once, at the very end (Phase 3e,
 > below), not mid-flight.
 
-Last updated: 2026-08-15
+Last updated: 2026-08-17
 
 Naming: this feature claims the "**Phase 3**" name `openspec/specs/dynamic-pricing/spec.md`'s
 own Status field already reserves for "real-data blend + scheduled retrain" —

@@ -39,8 +39,7 @@ Investigation confirms real per-booking price data (`booking_items.daily_rate`)
 now exists in the schema Haystack already reads — so this change builds the
 blend/cutover mechanism as part of the same feature, not a separate future ask.
 
-**Runs in parallel with Phase 2e** (promoting the Phase 2d candidate to
-production), which is still open on `dynamic-pricing-execution-plan.md`. This
+**Originally planned in parallel with Phase 2e**, which completed separately on 2026-08-17. This
 change touches an entirely disjoint set of files — new modules, plus additive
 changes to `app/config.py`/`app/main.py`/`pyproject.toml`/`.gitignore` — so
 there is no merge risk between the two efforts. `openspec/specs/dynamic-pricing/

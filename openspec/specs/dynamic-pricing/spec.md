@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | Phase 2a/2b/2c **implemented**. Phase 6 / S6 **as-built (2026-08-12)** — in-process agent tool `predict_asset_price` → `pricing_client` (same entrypoint as pipeline); never silent zeros; `tests/test_predict_asset_price_tool.py`. Phase 2d-i/2d-ii/2d-iii **done**; the Phase 2d-iii candidate gate passed 2026-08-13, while Phase 2e promotion remains a separate, not-yet-executed action. Phase 3 (real-data blend + scheduled retrain) not yet implemented. Phase 7 Pricing Workers [7]×N **as-built S7.3**; Call 2 graph enrich **as-built S7.5** (`RECOMMEND_VIA_AGENT_GRAPH`) |
+| **Status** | Phase 2a/2b/2c **implemented**. Phase 6 / S6 **as-built (2026-08-12)** — in-process agent tool `predict_asset_price` → `pricing_client` (same entrypoint as pipeline); never silent zeros; `tests/test_predict_asset_price_tool.py`. Phase 2d-i/2d-ii/2d-iii **done**; Phase 2e promotion **done (2026-08-17)** with v1 rollback artifacts and a 27-asset production-path smoke. Phase 3 (real-data blend + scheduled retrain) not yet implemented. Phase 7 Pricing Workers [7]×N **as-built S7.3**; Call 2 graph enrich **as-built S7.5** (`RECOMMEND_VIA_AGENT_GRAPH`) |
 | **Feature module** | `app/services/pricing/` — **implemented** (2026-08-11): `model.py`, `train.py`, `feature_schema.py`, `pricing_tables.py`, `category_mapping.py`, `repository.py`, `read_resilience.py`, `artifacts/` |
 | **Standards** | OpenSpec · Spec-kit user stories · OpenSPDD (see [`design.md`](./design.md)) |
 | **Depends on** | [`../project-setup/spec.md`](../project-setup/spec.md); [`../domain-seed-data/spec.md`](../domain-seed-data/spec.md) (Phase 2 prep dependency — data executed/verified and category-name normalization implemented 2026-08-11) |
@@ -353,6 +353,37 @@ The system SHALL provide a standalone validation command that directly loads the
 - **AND** the command does not invoke `reload_model()`
 - **AND** promotion remains a separate Phase 2e action
 
+### Requirement: Phase 2e promotion is recoverable and identity-verifiable
+
+The system SHALL preserve the pre-promotion serving model and metadata as v1 rollback artifacts before the validated Phase 2d candidate becomes the serving artifact. After promotion, the serving model and metadata SHALL be byte-for-byte identical to the validated v2 candidate artifacts.
+
+#### Scenario: Promotion preserves both generations
+
+- **GIVEN** the Phase 2d-iii gate passed for `model_v2.pkl` and `current_v2.json`
+- **WHEN** Phase 2e promotes the candidate
+- **THEN** the former serving artifact bytes are preserved as the v1 rollback pair
+- **AND** the serving pair matches the reviewed v2 pair byte-for-byte
+- **AND** both versioned generations remain available for audit and rollback
+
+### Requirement: Phase 2e verifies the production prediction path
+
+The system SHALL reload the promoted serving artifacts through the production model loader and SHALL verify predictions through `predict_price()`, including all supported categories and the documented excavator watch case. Verification SHALL confirm finite positive predictions, per-asset guardrail enforcement, and the promoted metadata version.
+
+#### Scenario: Hot reload activates the promoted model
+
+- **WHEN** the serving singleton is reloaded after promotion
+- **THEN** a new model object is loaded from the serving artifacts
+- **AND** returned predictions report `prod-2026-08-13`
+
+#### Scenario: Serving smoke reproduces candidate behavior
+
+- **GIVEN** all 27 live pricing assets and the fixed Phase 2d-iii inputs
+- **WHEN** the promoted model is exercised through `predict_price()` at 1/7/14/30 days
+- **THEN** every raw prediction is finite and positive
+- **AND** every returned daily rate remains inside its per-asset guardrails
+- **AND** aggregate clamp rates are 11.11%/25.93%/29.63%/29.63%
+- **AND** excavator clamp rates are 0%/42.86%/57.14%/57.14%
+
 ---
 
 ## Verification
@@ -370,6 +401,7 @@ The system SHALL provide a standalone validation command that directly loads the
 - Agent tool tests (US-5 / S6): golden shape from real model; SoT parity with `predict_price_for_asset`; `was_clamped` pass-through; silent zero / non-positive rate raises; tool name `"predict_asset_price"`; optional `asset_id` echo. **Implemented** (2026-08-12): `tests/test_predict_asset_price_tool.py`.
 - Phase 2d-iii candidate-validation tests: shared-row construction and production fallbacks; below/above guardrail direction; non-finite/inverted guardrail rejection; direct clamp-rate summaries; both models scored on the same v2 holdout; missing-data regeneration guidance; SHA/row-count/candidate-metric provenance; artifact-schema mismatch rejection; gate pass/fail across clamp, accuracy, and 27-asset completeness. **Implemented** (2026-08-13): `tests/test_candidate_validation_check.py`, 8 tests. The live run loaded 27 undegraded `primary_snapshot` assets; candidate clamp rates at 7/14 days were 25.93%/29.63% vs. current 92.59%/100%, and common-holdout MAE/R² were 16.6376/0.9866 vs. current 151.2595/0.1165. All Phase 2e gates and candidate-data provenance checks passed; serving artifacts were hash-verified unchanged.
 - Phase 2d-iii chart verification: `candidate_validation_check.png` shows overall current/candidate clamp rates in the upper grouped bars and category-level `current − candidate` reduction in the lower heatmap. All category cells improved. At 7/14/30 days, reductions were boom lift `71.43/71.43/71.43`, excavator `57.14/42.86/42.86`, forklift `83.33/83.33/83.33`, and scissor lift `57.14/85.71/85.71` percentage points. Excavator remains the post-promotion watch item because its candidate clamp rate is `42.86%` at 7 days and `57.14%` at 14/30 days. Final verification: 8 focused tests and 391 full-suite tests passed; 5 tests skipped; Ruff and diff hygiene passed.
+- Phase 2e promotion verification: `tests/test_pricing_phase2e_promotion.py` locks v1 rollback and v2 serving identities and exercises all categories through the reloaded production model. `ml-experiments/phase2e_serving_smoke.py` live-verified 27 undegraded `primary_snapshot` assets through `predict_price()`; clamp rates exactly reproduced the candidate at 1/7/14/30 days, including the excavator watch case. Phase 2e focused tests, scoped Ruff, and diff hygiene passed; the repository default suite finished with 420 passed and 5 skipped. **Implemented 2026-08-17.**
 
 ---
 
@@ -383,7 +415,9 @@ Maps to `docs/dynamic-pricing-execution-plan.md` Day 4–5 subtasks:
 3. ☑ `feature/ml-6-internal-pricing-api` — **done (2026-08-11).** Built ahead of `feature/ml-4-integration-tests` (lean Phase 2b), not alongside/after it — resequenced the same day since this endpoint's only real dependency is task 1 (Phase 2a), already satisfied; it never touches `pricing_client.py`/`predict_price_adapter.py`/`recommendations.py`, task 2's exclusive surface. See `docs/dynamic-pricing-masterplan.md` "Phase 2b/2c sequencing and lean 2b scope". Adds `app/api/internal_pricing.py` (`POST /internal/v1/pricing/quote`, registered directly on the app, not via `api_router`), `app/schemas/pricing.py` (request/response models), and `app/services/pricing/repository.py::get_asset_for_pricing()` (new — resolves category/condition/capacity/platform_height/guardrail bounds server-side from `asset_id`, through the same tiered `read_resilience` resolver as every other pricing read). Reuses `predict_price(...)` — no second prediction path. 5 new tests (`tests/test_internal_pricing_api.py`), 149 total passing. Contract: `design.md` "Internal quote API".
 4. ☑ **Phase 6 / S6 — `predict_asset_price` agent tool (2026-08-12).** `app/agents/tools.py`: `TOOL_PREDICT_ASSET_PRICE` + `predict_asset_price(...)` → `pricing_client.predict_price_for_asset` (single SoT with pipeline); silent-zero guard; optional `asset_id` echo. Tests: `tests/test_predict_asset_price_tool.py`. Phase 7 Pricing Workers graph **not** in this task. OpenSpec archive: `openspec/changes/archive/2026-08-12-s6-predict-asset-price-tool/`.
 
-5. ☑ **Phase 2d-iii candidate validation — done (2026-08-13), `HR-146-ml-candidate-validation`.** Added the direct-artifact, common-input validation script and 8 focused tests. The formal gate locks 27 assets/20 km/fallback utilization/zero lead time, verifies the ignored v2 CSV's SHA-256, row counts, and candidate metrics, and reports an actionable regeneration command when it is absent. The live 1/7/14/30-day run and common-v2-holdout comparison passed every explicit promotion gate. No artifact was renamed, copied, overwritten, or reloaded; Phase 2e remains separate. The ignored chart shows no category regression; excavator is the documented residual watch item.
+5. ☑ **Phase 2d-iii candidate validation — done (2026-08-13), `HR-146-ml-candidate-validation`.** Added the direct-artifact, common-input validation script and 8 focused tests. The formal gate locks 27 assets/20 km/fallback utilization/zero lead time, verifies the ignored v2 CSV's SHA-256, row counts, and candidate metrics, and reports an actionable regeneration command when it is absent. The live 1/7/14/30-day run and common-v2-holdout comparison passed every explicit promotion gate. No artifact was renamed, copied, overwritten, or reloaded by Phase 2d-iii; the separate Phase 2e promotion subsequently completed. The ignored chart shows no category regression; excavator is the documented residual watch item.
+
+6. ☑ **Phase 2e model promotion — done (2026-08-17), `HR-177-ml-promote-calibrated-model-to-production`.** Preserved the former serving pair as `model_v1.pkl`/`current_v1.json`, retained the reviewed v2 pair, and copied v2 byte-for-byte onto `model.pkl`/`current.json`. Added artifact-identity and production-path tests plus a live smoke that calls `reload_model()` and `predict_price()` over all 27 real assets at 1/7/14/30 days. The serving model reports `prod-2026-08-13`; aggregate and excavator clamp rates exactly match Phase 2d-iii. Final verification: 420 tests passed, 5 skipped; Phase 2e scoped Ruff and diff hygiene passed.
 
 **External dependency — resolved (2026-08-11):** richer Spring Boot seed data per [`../domain-seed-data/spec.md`](../domain-seed-data/spec.md) landed same-day and was independently verified (8→27 assets, 20→90 bookings, full status/condition coverage, 0 orphaned bookings). Combined with task 1's category-mapping fix (also done same-day), `period_utilization` now genuinely reflects live bookings — both halves of what Phase 2's own verification needed are in place.
 
@@ -445,5 +479,6 @@ Full rationale: `docs/dynamic-pricing-masterplan.md`. Summary for implementers:
 | 2.10.0 | 2026-08-13 (Phase 2d-ii implemented) | Recalibrated synthetic anchors (`80/220`, `230/985`, `85/205`, `120/500`), guardrail bands (`0.74–0.88` / `1.12–1.33`), and duration curve (floor/rate `0.84/0.18`) jointly. Generated the ignored 5,000-row `synthetic_pricing_data_v2.csv` and tracked candidate `model_v2.pkl`/`current_v2.json`; strict checks passed with 35.3% generation-time target clipping. Candidate holdout MAE/RMSE/R²: 16.6376/26.1103/0.9866. Serving artifacts stayed unchanged; 2d-iii validation and 2e promotion remain gated. |
 | 2.11.0 | 2026-08-13 (Phase 2d-iii implemented) | Added `candidate_validation_check.py` plus 5 focused tests; directly compared current/candidate artifacts over identical production-schema rows for all 27 live assets at 1/7/14/30 days and over the same deterministic v2 holdout. Candidate 7/14-day clamp rates were 25.93%/29.63% vs. current 92.59%/100%; common-holdout MAE/R² were 16.6376/0.9866 vs. 151.2595/0.1165. Every explicit gate passed. Artifact hashes stayed unchanged and no reload/promotion occurred; Phase 2e is unblocked but separate. |
 | 2.11.1 | 2026-08-13 (Phase 2d-iii gap audit/final convergence) | Restored the approved Phase 2d-ii calibration constants that were documented and used for candidate generation but missing from tracked `ml-experiments/pricing_tables.py`; fresh seed-42 generation byte-matches the ignored candidate CSV (`sha256=3b2b79d28f42fe62e2971f48b055af0cabecadc3b5fb0b7463a58929766e2d05`). Locked artifact/data/input/output identities, added CSV hash/row-count/candidate-metric provenance, actionable missing-data guidance, invalid-guardrail and non-finite-prediction rejection, and expanded focused coverage 5→8. The category heatmap showed improvement everywhere, with excavator retained as the residual watch item. Final verification: 8 focused tests and 391 full-suite tests passed and 5 tests skipped; Ruff and diff hygiene passed. Live gate results and serving artifacts are unchanged. |
+| 2.12.0 | 2026-08-17 (Phase 2e implemented) | Promoted the validated v2 candidate to the serving filenames after preserving byte-exact v1 rollback artifacts; retained both versioned generations. Added an identity-checked serving smoke and tests, called `reload_model()`, and verified all 27 undegraded live assets through `predict_price()` at 1/7/14/30 days. Serving clamp rates exactly reproduce the candidate (11.11%/25.93%/29.63%/29.63% overall; 0%/42.86%/57.14%/57.14% for excavator), with model version `prod-2026-08-13`. |
 
 **Design / feature schema / artifacts / Phase 3 cutover:** [`design.md`](./design.md)
