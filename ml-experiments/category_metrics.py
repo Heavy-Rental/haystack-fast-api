@@ -18,13 +18,12 @@ evaluated against, not train-set performance.
 import argparse
 from pathlib import Path
 
+import feature_schema as fs
 import joblib
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.model_selection import train_test_split
-
-import feature_schema as fs
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 

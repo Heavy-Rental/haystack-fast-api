@@ -51,13 +51,12 @@ import argparse
 import textwrap
 from pathlib import Path
 
+import feature_schema as fs
 import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import shap
-
-import feature_schema as fs
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 VIOLATION_TOLERANCE = 0.1
@@ -97,7 +96,7 @@ def representative_row(X: pd.DataFrame, category: str | None = None) -> pd.Serie
     for col in category_cols:
         row[col] = 1 if col == target_category_col else 0
 
-    row["condition_ordinal"] = int(round(row["condition_ordinal"]))
+    row["condition_ordinal"] = round(row["condition_ordinal"])
 
     # X.median(numeric_only=True) above is a dataset-wide median, which can be
     # out of range for the frozen category -- capacity in particular varies

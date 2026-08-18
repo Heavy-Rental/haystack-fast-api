@@ -43,14 +43,13 @@ import argparse
 import datetime as dt
 from pathlib import Path
 
+import feature_schema as fs
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pricing_tables as pt
 import seaborn as sns
 from faker import Faker
-
-import feature_schema as fs
-import pricing_tables as pt
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -59,7 +58,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rows", type=int, default=5000)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--reference-year", type=int, default=dt.date.today().year)
+    parser.add_argument(
+        "--reference-year",
+        type=int,
+        default=dt.datetime.now(tz=dt.UTC).date().year,
+    )
     parser.add_argument(
         "--output", type=Path, default=SCRIPT_DIR / "data" / "synthetic_pricing_data.csv"
     )
