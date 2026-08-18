@@ -77,6 +77,11 @@ markers = [
     "neo4j: needs a live Neo4j Bolt endpoint (optional; skip unless RUN_NEO4J_TESTS=1)",
 ]
 
+[tool.uv]
+# CVE-2025-69872: diskcache <=5.6.3 pickles cache files and has no patched release.
+# ragas lists it only for optional DiskCacheBackend; this app never enables that path.
+exclude-dependencies = ["diskcache"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

@@ -408,7 +408,6 @@ def test_eval_pack_macro_thresholds() -> None:
     assert report["cases"] == len(pack["cases"])
     assert report["confidence_consistency_rate"] == CONFIDENCE_CONSISTENCY_MIN
 
-    invent_rate = sum(r["budget_invented"] for r in results) / max(1, len(results))
     # Only count invent when label forbids it
     forbidden = [
         r
@@ -436,6 +435,3 @@ def test_eval_pack_macro_thresholds() -> None:
     bins = report["confidence_bin_hit_rate"]
     if bins.get("high") is not None and bins.get("none") is not None:
         assert bins["high"] >= bins["none"]
-
-    # Silence unused invent_rate when no forbidden cases
-    del invent_rate

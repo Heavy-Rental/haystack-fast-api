@@ -89,7 +89,6 @@ def compute_confidence_score(
     available = (
         sum(1 for item in items if item.equipment.available is True) / n
     )
-    priced = 0.0
     priced_hits = 0
     for item in items:
         raw = item.mlPredictedPrice

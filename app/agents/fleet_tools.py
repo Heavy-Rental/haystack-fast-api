@@ -77,10 +77,10 @@ class FleetBackend(Protocol):
     """Read-only fleet data source (fake seed or SQL mirror DTOs)."""
 
     def list_assets(self) -> list[dict[str, Any]]:
-        ...
+        """Return all fleet assets as dict rows."""
 
     def list_bookings(self) -> list[dict[str, Any]]:
-        ...
+        """Return all bookings as dict rows."""
 
 
 class FakeFleetBackend:
