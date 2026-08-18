@@ -1,0 +1,1865 @@
+{
+  "generated_at": "2026-08-14T02:31:52Z",
+  "eval_seed": 42,
+  "description": "Full export of eval pack test data (inputs + gold labels) and predicted Call 1 / Call 2 outputs with metrics.",
+  "config_isolation": {
+    "INDEXING_EMBEDDER": "mock",
+    "INDEXING_EMBEDDING_DIM": "384",
+    "INDEXING_DOCUMENT_STORE": "memory",
+    "NEED_DECOMPOSER": "stub",
+    "FLEET_BACKEND": "fake",
+    "RECOMMEND_VIA_AGENT_GRAPH": "false",
+    "NEO4J_BACKEND": "fake",
+    "PRICING_SCHEMA": "primary_snapshot",
+    "PROJECT_AGENT_MODE": "stub"
+  },
+  "sources": {
+    "cases_fixture": "tests/fixtures/eval/call1_call2_cases.json",
+    "fleet_fixture": "tests/fixtures/eval/eval_fleet.json",
+    "copied_to": "docs/eval/test-data/",
+    "runner": "tests/test_call1_call2_eval_pack.py"
+  },
+  "fleet": {
+    "assets": [
+      {
+        "asset_id": "AST-SL-001",
+        "equipment_type": "Scissors Lift",
+        "category": "scissor lift",
+        "condition": "GOOD",
+        "capacity": 300.0,
+        "platform_height": 10.0,
+        "min_daily_rate": 120.0,
+        "max_daily_rate": 280.0
+      },
+      {
+        "asset_id": "AST-SL-002",
+        "equipment_type": "Scissors Lift",
+        "category": "scissor lift",
+        "condition": "EXCELLENT",
+        "capacity": 350.0,
+        "platform_height": 12.0,
+        "min_daily_rate": 140.0,
+        "max_daily_rate": 320.0
+      },
+      {
+        "asset_id": "AST-EX-001",
+        "equipment_type": "Excavator",
+        "category": "excavator",
+        "condition": "GOOD",
+        "capacity": 5000.0,
+        "platform_height": null,
+        "min_daily_rate": 250.0,
+        "max_daily_rate": 600.0
+      },
+      {
+        "asset_id": "AST-EX-002",
+        "equipment_type": "Excavator",
+        "category": "excavator",
+        "condition": "FAIR",
+        "capacity": 4000.0,
+        "platform_height": null,
+        "min_daily_rate": 200.0,
+        "max_daily_rate": 500.0
+      },
+      {
+        "asset_id": "AST-FL-001",
+        "equipment_type": "Fork Lift",
+        "category": "forklift",
+        "condition": "GOOD",
+        "capacity": 2500.0,
+        "platform_height": null,
+        "min_daily_rate": 100.0,
+        "max_daily_rate": 220.0
+      },
+      {
+        "asset_id": "AST-BL-001",
+        "equipment_type": "Boom Lift",
+        "category": "boom lift",
+        "condition": "GOOD",
+        "capacity": 250.0,
+        "platform_height": 18.0,
+        "min_daily_rate": 180.0,
+        "max_daily_rate": 400.0
+      }
+    ],
+    "bookings": [
+      {
+        "booking_id": "BKG-001",
+        "asset_id": "AST-EX-002",
+        "start_date": "2026-09-01",
+        "end_date": "2026-09-30"
+      }
+    ]
+  },
+  "macro": {
+    "cases": 12,
+    "mean_need_f1": 0.9722,
+    "mean_hit_at_1": 1.0,
+    "mean_coverage": 0.8333,
+    "mean_confidence": 0.765,
+    "mean_match_score": 0.85,
+    "mean_ndcg": 0.9692,
+    "mean_price_mape": 0.0,
+    "budget_invent_rate": 0.0,
+    "confidence_consistency_rate": 1.0,
+    "confidence_bin_hit_rate": {
+      "none": 1.0,
+      "low": null,
+      "medium": null,
+      "high": 1.0
+    }
+  },
+  "cases": [
+    {
+      "case_id": "happy_scissors",
+      "kind": "happy",
+      "input": {
+        "project_text": "Need one scissors lift for indoor elevated work ~8m. From 1 Sep 2026 to 14 Sep 2026. Budget SGD 12000.",
+        "call1_request_dates": {
+          "start_date": "2026-09-01",
+          "end_date": "2026-09-14"
+        }
+      },
+      "expected": {
+        "call1": {
+          "equipment_types": [
+            "scissor lift"
+          ],
+          "start_date": "2026-09-01",
+          "end_date": "2026-09-14",
+          "budget_amount": 12000,
+          "budget_currency": "SGD",
+          "must_not_invent_budget": false
+        },
+        "call2": {
+          "need_count": 1,
+          "gold_by_need": [
+            {
+              "need_id": "need_1",
+              "description": "Need scissors lift for indoor elevated work ~8m",
+              "equipment_hints": [
+                "scissor lift"
+              ],
+              "quantity": 1,
+              "gold_asset_ids": [
+                "AST-SL-001",
+                "AST-SL-002"
+              ],
+              "gold_categories": [
+                "Scissors Lift"
+              ],
+              "available": true,
+              "price_daily": 185.0
+            }
+          ],
+          "confidence_min": 0.55,
+          "hit_at_1_required": true,
+          "expect_empty_items": false
+        }
+      },
+      "predicted": {
+        "call1": {
+          "ingest_id": "ing_c6e7e24078824869a7f41b65df490d28",
+          "user_id": "eval_happy_scissors",
+          "user_requirement_summary": "Need one scissors lift for indoor elevated work ~8m. From 1 Sep 2026 to 14 Sep 2026. Budget SGD 12000.\nNeed one scissors lift for indoor elevated work ~8m. From 1 Sep 2026 to 14 Sep 2026. Budget SGD 12000.",
+          "tentative_start_date": "2026-09-01",
+          "tentative_end_date": "2026-09-14",
+          "needs_summary": [
+            {
+              "need_id": "need_1",
+              "description": "Need one scissors lift for indoor elevated work ~8m.",
+              "equipment_hints": [
+                "scissor lift"
+              ],
+              "quantity": 1
+            }
+          ],
+          "expected_budget": {
+            "amount": 12000.0,
+            "currency": "SGD",
+            "source": "extracted"
+          },
+          "warnings": []
+        },
+        "call2": {
+          "user_id": "eval_happy_scissors",
+          "ingest_id": "ing_c6e7e24078824869a7f41b65df490d28",
+          "query": null,
+          "quoteRef": "QUO-4FD5B757",
+          "confidenceScore": 0.8,
+          "days": 14,
+          "estimatedTotal": 2590.0,
+          "specSummary": "Need one scissors lift for indoor elevated work ~8m. From 1 Sep 2026 to 14 Sep 2026. Budget SGD 12000.\nNeed one scissors lift for indoor elevated work ~8m. From 1 Sep 2026 to 14 Sep 2026. Budget SGD 12000.",
+          "rationale": "Matched scissor lift to AST-SL-002 (category scissor lift, available=available, daily_rate=185.0, platform_height=12.0m, match_score=1.0).",
+          "items": [
+            {
+              "rankOrder": 1,
+              "matchScore": 1.0,
+              "reason": "Matched scissor lift to AST-SL-002 (category scissor lift, available=available, daily_rate=185.0, platform_height=12.0m, match_score=1.0).",
+              "lineTotal": 2590.0,
+              "quantity": 1,
+              "needId": "need_1",
+              "mlPredictedPrice": 185.0,
+              "equipment": {
+                "id": "AST-SL-002",
+                "name": "Scissors Lift",
+                "category": "Scissors Lift",
+                "baseDailyRate": 185.0,
+                "weekly": null,
+                "capacity": null,
+                "purchaseYear": null,
+                "location": null,
+                "available": true,
+                "desc": null,
+                "platformHeight": 12.0,
+                "tags": [],
+                "extra": {
+                  "availability": "available",
+                  "currency": "SGD",
+                  "model_version": "eval-fixture",
+                  "was_clamped": false,
+                  "explanation": "eval fixed price"
+                }
+              }
+            }
+          ],
+          "warnings": [],
+          "recommendationId": "rec_894799064e874f15929e690129403c1a"
+        }
+      },
+      "metrics": {
+        "case_id": "happy_scissors",
+        "kind": "happy",
+        "ingest_ok": 1.0,
+        "summary_ok": 1.0,
+        "need_f1": 1.0,
+        "need_precision": 1.0,
+        "need_recall": 1.0,
+        "date_start_ok": 1.0,
+        "date_end_ok": 1.0,
+        "budget_match": 1.0,
+        "budget_invented": 0.0,
+        "hit_at_1": true,
+        "hit_at_1_rate": 1.0,
+        "coverage": 1.0,
+        "ndcg": 1.0,
+        "mean_match_score": 1.0,
+        "confidence": 0.8,
+        "confidence_recomputed": 0.8,
+        "confidence_consistent": 1.0,
+        "price_mape": 0.0,
+        "item_count": 1,
+        "expect_empty": false,
+        "confidence_min": 0.55
+      }
+    },
+    {
+      "case_id": "happy_excavator",
+      "kind": "happy",
+      "input": {
+        "project_text": "Need an excavator for site prep and trenching. Rental 2026-10-01 to 2026-10-10. Budget SGD 8000.",
+        "call1_request_dates": {
+          "start_date": "2026-10-01",
+          "end_date": "2026-10-10"
+        }
+      },
+      "expected": {
+        "call1": {
+          "equipment_types": [
+            "excavator"
+          ],
+          "start_date": "2026-10-01",
+          "end_date": "2026-10-10",
+          "budget_amount": 8000,
+          "budget_currency": "SGD",
+          "must_not_invent_budget": false
+        },
+        "call2": {
+          "need_count": 1,
+          "gold_by_need": [
+            {
+              "need_id": "need_1",
+              "description": "Need excavator for site prep",
+              "equipment_hints": [
+                "excavator"
+              ],
+              "quantity": 1,
+              "gold_asset_ids": [
+                "AST-EX-001",
+                "AST-EX-002"
+              ],
+              "gold_categories": [
+                "Excavator"
+              ],
+              "available": true,
+              "price_daily": 185.0
+            }
+          ],
+          "confidence_min": 0.55,
+          "hit_at_1_required": true,
+          "expect_empty_items": false
+        }
+      },
+      "predicted": {
+        "call1": {
+          "ingest_id": "ing_debc612c6c1d49c2a3ccbd50724acabb",
+          "user_id": "eval_happy_excavator",
+          "user_requirement_summary": "Need an excavator for site prep and trenching. Rental 2026-10-01 to 2026-10-10. Budget SGD 8000.\nNeed an excavator for site prep and trenching. Rental 2026-10-01 to 2026-10-10. Budget SGD 8000.",
+          "tentative_start_date": "2026-10-01",
+          "tentative_end_date": "2026-10-10",
+          "needs_summary": [
+            {
+              "need_id": "need_1",
+              "description": "Need an excavator for site prep and trenching.",
+              "equipment_hints": [
+                "excavator"
+              ],
+              "quantity": 1
+            }
+          ],
+          "expected_budget": {
+            "amount": 8000.0,
+            "currency": "SGD",
+            "source": "extracted"
+          },
+          "warnings": []
+        },
+        "call2": {
+          "user_id": "eval_happy_excavator",
+          "ingest_id": "ing_debc612c6c1d49c2a3ccbd50724acabb",
+          "query": null,
+          "quoteRef": "QUO-A9DC46F8",
+          "confidenceScore": 0.76,
+          "days": 10,
+          "estimatedTotal": 1850.0,
+          "specSummary": "Need an excavator for site prep and trenching. Rental 2026-10-01 to 2026-10-10. Budget SGD 8000.\nNeed an excavator for site prep and trenching. Rental 2026-10-01 to 2026-10-10. Budget SGD 8000.",
+          "rationale": "Matched excavator to AST-EX-001 (category excavator, available=available, daily_rate=185.0, match_score=0.8).",
+          "items": [
+            {
+              "rankOrder": 1,
+              "matchScore": 0.8,
+              "reason": "Matched excavator to AST-EX-001 (category excavator, available=available, daily_rate=185.0, match_score=0.8).",
+              "lineTotal": 1850.0,
+              "quantity": 1,
+              "needId": "need_1",
+              "mlPredictedPrice": 185.0,
+              "equipment": {
+                "id": "AST-EX-001",
+                "name": "Excavator",
+                "category": "Excavator",
+                "baseDailyRate": 185.0,
+                "weekly": null,
+                "capacity": null,
+                "purchaseYear": null,
+                "location": null,
+                "available": true,
+                "desc": null,
+                "tags": [],
+                "extra": {
+                  "availability": "available",
+                  "currency": "SGD",
+                  "model_version": "eval-fixture",
+                  "was_clamped": false,
+                  "explanation": "eval fixed price"
+                }
+              }
+            }
+          ],
+          "warnings": [],
+          "recommendationId": "rec_f64834987633479eb2b7fa5971cf6cb8"
+        }
+      },
+      "metrics": {
+        "case_id": "happy_excavator",
+        "kind": "happy",
+        "ingest_ok": 1.0,
+        "summary_ok": 1.0,
+        "need_f1": 1.0,
+        "need_precision": 1.0,
+        "need_recall": 1.0,
+        "date_start_ok": 1.0,
+        "date_end_ok": 1.0,
+        "budget_match": 1.0,
+        "budget_invented": 0.0,
+        "hit_at_1": true,
+        "hit_at_1_rate": 1.0,
+        "coverage": 1.0,
+        "ndcg": 1.0,
+        "mean_match_score": 0.8,
+        "confidence": 0.76,
+        "confidence_recomputed": 0.76,
+        "confidence_consistent": 1.0,
+        "price_mape": 0.0,
+        "item_count": 1,
+        "expect_empty": false,
+        "confidence_min": 0.55
+      }
+    },
+    {
+      "case_id": "happy_forklift",
+      "kind": "happy",
+      "input": {
+        "project_text": "Warehouse loading bay needs a forklift. From 2026-11-01 to 2026-11-07. Budget SGD 5000.",
+        "call1_request_dates": {
+          "start_date": "2026-11-01",
+          "end_date": "2026-11-07"
+        }
+      },
+      "expected": {
+        "call1": {
+          "equipment_types": [
+            "forklift"
+          ],
+          "start_date": "2026-11-01",
+          "end_date": "2026-11-07",
+          "budget_amount": 5000,
+          "budget_currency": "SGD",
+          "must_not_invent_budget": false
+        },
+        "call2": {
+          "need_count": 1,
+          "gold_by_need": [
+            {
+              "need_id": "need_1",
+              "description": "Need forklift for warehouse loading",
+              "equipment_hints": [
+                "forklift"
+              ],
+              "quantity": 1,
+              "gold_asset_ids": [
+                "AST-FL-001"
+              ],
+              "gold_categories": [
+                "Fork Lift"
+              ],
+              "available": true,
+              "price_daily": 185.0
+            }
+          ],
+          "confidence_min": 0.55,
+          "hit_at_1_required": true,
+          "expect_empty_items": false
+        }
+      },
+      "predicted": {
+        "call1": {
+          "ingest_id": "ing_50d45a11f83440ed855fdd1261d7fa98",
+          "user_id": "eval_happy_forklift",
+          "user_requirement_summary": "Warehouse loading bay needs a forklift. From 2026-11-01 to 2026-11-07. Budget SGD 5000.\nWarehouse loading bay needs a forklift. From 2026-11-01 to 2026-11-07. Budget SGD 5000.",
+          "tentative_start_date": "2026-11-01",
+          "tentative_end_date": "2026-11-07",
+          "needs_summary": [
+            {
+              "need_id": "need_1",
+              "description": "Warehouse loading bay needs a forklift.",
+              "equipment_hints": [
+                "forklift"
+              ],
+              "quantity": 1
+            }
+          ],
+          "expected_budget": {
+            "amount": 5000.0,
+            "currency": "SGD",
+            "source": "extracted"
+          },
+          "warnings": []
+        },
+        "call2": {
+          "user_id": "eval_happy_forklift",
+          "ingest_id": "ing_50d45a11f83440ed855fdd1261d7fa98",
+          "query": null,
+          "quoteRef": "QUO-A551E3A8",
+          "confidenceScore": 0.76,
+          "days": 7,
+          "estimatedTotal": 1295.0,
+          "specSummary": "Warehouse loading bay needs a forklift. From 2026-11-01 to 2026-11-07. Budget SGD 5000.\nWarehouse loading bay needs a forklift. From 2026-11-01 to 2026-11-07. Budget SGD 5000.",
+          "rationale": "Matched forklift to AST-FL-001 (category forklift, available=available, daily_rate=185.0, match_score=0.8).",
+          "items": [
+            {
+              "rankOrder": 1,
+              "matchScore": 0.8,
+              "reason": "Matched forklift to AST-FL-001 (category forklift, available=available, daily_rate=185.0, match_score=0.8).",
+              "lineTotal": 1295.0,
+              "quantity": 1,
+              "needId": "need_1",
+              "mlPredictedPrice": 185.0,
+              "equipment": {
+                "id": "AST-FL-001",
+                "name": "Fork Lift",
+                "category": "Fork Lift",
+                "baseDailyRate": 185.0,
+                "weekly": null,
+                "capacity": null,
+                "purchaseYear": null,
+                "location": null,
+                "available": true,
+                "desc": null,
+                "tags": [],
+                "extra": {
+                  "availability": "available",
+                  "currency": "SGD",
+                  "model_version": "eval-fixture",
+                  "was_clamped": false,
+                  "explanation": "eval fixed price"
+                }
+              }
+            }
+          ],
+          "warnings": [],
+          "recommendationId": "rec_3f302e6e6b8f46d399cadb23bf6c1b72"
+        }
+      },
+      "metrics": {
+        "case_id": "happy_forklift",
+        "kind": "happy",
+        "ingest_ok": 1.0,
+        "summary_ok": 1.0,
+        "need_f1": 1.0,
+        "need_precision": 1.0,
+        "need_recall": 1.0,
+        "date_start_ok": 1.0,
+        "date_end_ok": 1.0,
+        "budget_match": 1.0,
+        "budget_invented": 0.0,
+        "hit_at_1": true,
+        "hit_at_1_rate": 1.0,
+        "coverage": 1.0,
+        "ndcg": 1.0,
+        "mean_match_score": 0.8,
+        "confidence": 0.76,
+        "confidence_recomputed": 0.76,
+        "confidence_consistent": 1.0,
+        "price_mape": 0.0,
+        "item_count": 1,
+        "expect_empty": false,
+        "confidence_min": 0.55
+      }
+    },
+    {
+      "case_id": "happy_boom",
+      "kind": "happy",
+      "input": {
+        "project_text": "Outdoor facade work requires a boom lift / aerial platform. 2026-08-15 to 2026-08-25. Budget SGD 15000.",
+        "call1_request_dates": {
+          "start_date": "2026-08-15",
+          "end_date": "2026-08-25"
+        }
+      },
+      "expected": {
+        "call1": {
+          "equipment_types": [
+            "boom lift"
+          ],
+          "start_date": "2026-08-15",
+          "end_date": "2026-08-25",
+          "budget_amount": 15000,
+          "budget_currency": "SGD",
+          "must_not_invent_budget": false
+        },
+        "call2": {
+          "need_count": 1,
+          "gold_by_need": [
+            {
+              "need_id": "need_1",
+              "description": "Need boom lift for facade work",
+              "equipment_hints": [
+                "boom lift"
+              ],
+              "quantity": 1,
+              "gold_asset_ids": [
+                "AST-BL-001"
+              ],
+              "gold_categories": [
+                "Boom Lift"
+              ],
+              "available": true,
+              "price_daily": 185.0
+            }
+          ],
+          "confidence_min": 0.55,
+          "hit_at_1_required": true,
+          "expect_empty_items": false
+        }
+      },
+      "predicted": {
+        "call1": {
+          "ingest_id": "ing_8423978938e443589ea1407d30be68e0",
+          "user_id": "eval_happy_boom",
+          "user_requirement_summary": "Outdoor facade work requires a boom lift / aerial platform. 2026-08-15 to 2026-08-25. Budget SGD 15000.\nOutdoor facade work requires a boom lift / aerial platform. 2026-08-15 to 2026-08-25. Budget SGD 15000.",
+          "tentative_start_date": "2026-08-15",
+          "tentative_end_date": "2026-08-25",
+          "needs_summary": [
+            {
+              "need_id": "need_1",
+              "description": "Outdoor facade work requires a boom lift / aerial platform.",
+              "equipment_hints": [
+                "boom lift"
+              ],
+              "quantity": 1
+            },
+            {
+              "need_id": "need_2",
+              "description": "Outdoor facade work requires a boom lift / aerial platform.",
+              "equipment_hints": [
+                "scissor lift"
+              ],
+              "quantity": 1
+            }
+          ],
+          "expected_budget": {
+            "amount": 15000.0,
+            "currency": "SGD",
+            "source": "extracted"
+          },
+          "warnings": []
+        },
+        "call2": {
+          "user_id": "eval_happy_boom",
+          "ingest_id": "ing_8423978938e443589ea1407d30be68e0",
+          "query": null,
+          "quoteRef": "QUO-EA9AA193",
+          "confidenceScore": 0.76,
+          "days": 11,
+          "estimatedTotal": 2035.0,
+          "specSummary": "Outdoor facade work requires a boom lift / aerial platform. 2026-08-15 to 2026-08-25. Budget SGD 15000.\nOutdoor facade work requires a boom lift / aerial platform. 2026-08-15 to 2026-08-25. Budget SGD 15000.",
+          "rationale": "Matched boom lift to AST-BL-001 (category boom lift, available=available, daily_rate=185.0, platform_height=18.0m, match_score=0.8).",
+          "items": [
+            {
+              "rankOrder": 1,
+              "matchScore": 0.8,
+              "reason": "Matched boom lift to AST-BL-001 (category boom lift, available=available, daily_rate=185.0, platform_height=18.0m, match_score=0.8).",
+              "lineTotal": 2035.0,
+              "quantity": 1,
+              "needId": "need_1",
+              "mlPredictedPrice": 185.0,
+              "equipment": {
+                "id": "AST-BL-001",
+                "name": "Boom Lift",
+                "category": "Boom Lift",
+                "baseDailyRate": 185.0,
+                "weekly": null,
+                "capacity": null,
+                "purchaseYear": null,
+                "location": null,
+                "available": true,
+                "desc": null,
+                "platformHeight": 18.0,
+                "tags": [],
+                "extra": {
+                  "availability": "available",
+                  "currency": "SGD",
+                  "model_version": "eval-fixture",
+                  "was_clamped": false,
+                  "explanation": "eval fixed price"
+                }
+              }
+            }
+          ],
+          "warnings": [],
+          "recommendationId": "rec_0d4a44c1bd6843a8841e1fcc136c8383"
+        }
+      },
+      "metrics": {
+        "case_id": "happy_boom",
+        "kind": "happy",
+        "ingest_ok": 1.0,
+        "summary_ok": 1.0,
+        "need_f1": 0.6667,
+        "need_precision": 0.5,
+        "need_recall": 1.0,
+        "date_start_ok": 1.0,
+        "date_end_ok": 1.0,
+        "budget_match": 1.0,
+        "budget_invented": 0.0,
+        "hit_at_1": true,
+        "hit_at_1_rate": 1.0,
+        "coverage": 1.0,
+        "ndcg": 1.0,
+        "mean_match_score": 0.8,
+        "confidence": 0.76,
+        "confidence_recomputed": 0.76,
+        "confidence_consistent": 1.0,
+        "price_mape": 0.0,
+        "item_count": 1,
+        "expect_empty": false,
+        "confidence_min": 0.55
+      }
+    },
+    {
+      "case_id": "multi_scissors_excavator",
+      "kind": "happy",
+      "input": {
+        "project_text": "Need a scissors lift for indoor elevated work ~8m and an excavator for site prep. From 1 Sep 2026 to 20 Sep 2026. Budget SGD 20000.",
+        "call1_request_dates": {
+          "start_date": "2026-09-01",
+          "end_date": "2026-09-20"
+        }
+      },
+      "expected": {
+        "call1": {
+          "equipment_types": [
+            "scissor lift",
+            "excavator"
+          ],
+          "start_date": "2026-09-01",
+          "end_date": "2026-09-20",
+          "budget_amount": 20000,
+          "budget_currency": "SGD",
+          "must_not_invent_budget": false
+        },
+        "call2": {
+          "need_count": 2,
+          "gold_by_need": [
+            {
+              "need_id": "need_access",
+              "description": "Need scissors lift for indoor elevated work ~8m",
+              "equipment_hints": [
+                "scissor lift"
+              ],
+              "quantity": 1,
+              "gold_asset_ids": [
+                "AST-SL-001",
+                "AST-SL-002"
+              ],
+              "gold_categories": [
+                "Scissors Lift"
+              ],
+              "available": true,
+              "price_daily": 185.0
+            },
+            {
+              "need_id": "need_earthwork",
+              "description": "Need excavator for site prep",
+              "equipment_hints": [
+                "excavator"
+              ],
+              "quantity": 1,
+              "gold_asset_ids": [
+                "AST-EX-001",
+                "AST-EX-002"
+              ],
+              "gold_categories": [
+                "Excavator"
+              ],
+              "available": true,
+              "price_daily": 185.0
+            }
+          ],
+          "confidence_min": 0.55,
+          "hit_at_1_required": true,
+          "expect_empty_items": false
+        }
+      },
+      "predicted": {
+        "call1": {
+          "ingest_id": "ing_11f3a5fa5c2548858031f962843f0abc",
+          "user_id": "eval_multi_scissors_excavator",
+          "user_requirement_summary": "Need a scissors lift for indoor elevated work ~8m and an excavator for site prep. From 1 Sep 2026 to 20 Sep 2026. Budget SGD 20000.\nNeed a scissors lift for indoor elevated work ~8m and an excavator for site prep. From 1 Sep 2026 to 20 Sep 2026. Budget SGD 20000.",
+          "tentative_start_date": "2026-09-01",
+          "tentative_end_date": "2026-09-20",
+          "needs_summary": [
+            {
+              "need_id": "need_1",
+              "description": "Need a scissors lift for indoor elevated work ~8m and an excavator for site prep.",
+              "equipment_hints": [
+                "scissor lift"
+              ],
+              "quantity": 1
+            },
+            {
+              "need_id": "need_2",
+              "description": "Need a scissors lift for indoor elevated work ~8m and an excavator for site prep.",
+              "equipment_hints": [
+                "excavator"
+              ],
+              "quantity": 1
+            }
+          ],
+          "expected_budget": {
+            "amount": 20000.0,
+            "currency": "SGD",
+            "source": "extracted"
+          },
+          "warnings": []
+        },
+        "call2": {
+          "user_id": "eval_multi_scissors_excavator",
+          "ingest_id": "ing_11f3a5fa5c2548858031f962843f0abc",
+          "query": null,
+          "quoteRef": "QUO-DE086963",
+          "confidenceScore": 0.78,
+          "days": 20,
+          "estimatedTotal": 7400.0,
+          "specSummary": "Need a scissors lift for indoor elevated work ~8m and an excavator for site prep. From 1 Sep 2026 to 20 Sep 2026. Budget SGD 20000.\nNeed a scissors lift for indoor elevated work ~8m and an excavator for site prep. From 1 Sep 2026 to 20 Sep 2026. Budget SGD 20000.",
+          "rationale": "Matched scissor lift to AST-SL-002 (category scissor lift, available=available, daily_rate=185.0, platform_height=12.0m, match_score=1.0). Matched excavator to AST-EX-001 (category excavator, available=available, daily_rate=185.0, match_score=0.8).",
+          "items": [
+            {
+              "rankOrder": 1,
+              "matchScore": 1.0,
+              "reason": "Matched scissor lift to AST-SL-002 (category scissor lift, available=available, daily_rate=185.0, platform_height=12.0m, match_score=1.0).",
+              "lineTotal": 3700.0,
+              "quantity": 1,
+              "needId": "need_access",
+              "mlPredictedPrice": 185.0,
+              "equipment": {
+                "id": "AST-SL-002",
+                "name": "Scissors Lift",
+                "category": "Scissors Lift",
+                "baseDailyRate": 185.0,
+                "weekly": null,
+                "capacity": null,
+                "purchaseYear": null,
+                "location": null,
+                "available": true,
+                "desc": null,
+                "platformHeight": 12.0,
+                "tags": [],
+                "extra": {
+                  "availability": "available",
+                  "currency": "SGD",
+                  "model_version": "eval-fixture",
+                  "was_clamped": false,
+                  "explanation": "eval fixed price"
+                }
+              }
+            },
+            {
+              "rankOrder": 2,
+              "matchScore": 0.8,
+              "reason": "Matched excavator to AST-EX-001 (category excavator, available=available, daily_rate=185.0, match_score=0.8).",
+              "lineTotal": 3700.0,
+              "quantity": 1,
+              "needId": "need_earthwork",
+              "mlPredictedPrice": 185.0,
+              "equipment": {
+                "id": "AST-EX-001",
+                "name": "Excavator",
+                "category": "Excavator",
+                "baseDailyRate": 185.0,
+                "weekly": null,
+                "capacity": null,
+                "purchaseYear": null,
+                "location": null,
+                "available": true,
+                "desc": null,
+                "tags": [],
+                "extra": {
+                  "availability": "available",
+                  "currency": "SGD",
+                  "model_version": "eval-fixture",
+                  "was_clamped": false,
+                  "explanation": "eval fixed price"
+                }
+              }
+            }
+          ],
+          "warnings": [],
+          "recommendationId": "rec_307efd9e78e0442d9d89219b3ff0c03f"
+        }
+      },
+      "metrics": {
+        "case_id": "multi_scissors_excavator",
+        "kind": "happy",
+        "ingest_ok": 1.0,
+        "summary_ok": 1.0,
+        "need_f1": 1.0,
+        "need_precision": 1.0,
+        "need_recall": 1.0,
+        "date_start_ok": 1.0,
+        "date_end_ok": 1.0,
+        "budget_match": 1.0,
+        "budget_invented": 0.0,
+        "hit_at_1": true,
+        "hit_at_1_rate": 1.0,
+        "coverage": 1.0,
+        "ndcg": 0.81545,
+        "mean_match_score": 0.9,
+        "confidence": 0.78,
+        "confidence_recomputed": 0.78,
+        "confidence_consistent": 1.0,
+        "price_mape": 0.0,
+        "item_count": 2,
+        "expect_empty": false,
+        "confidence_min": 0.55
+      }
+    },
+    {
+      "case_id": "no_match_submarine",
+      "kind": "no_match",
+      "input": {
+        "project_text": "Need a submarine for underwater inspection next month. Budget is tight.",
+        "call1_request_dates": {
+          "start_date": null,
+          "end_date": null
+        }
+      },
+      "expected": {
+        "call1": {
+          "equipment_types": [],
+          "start_date": null,
+          "end_date": null,
+          "budget_amount": null,
+          "budget_currency": null,
+          "must_not_invent_budget": true
+        },
+        "call2": {
+          "need_count": 1,
+          "gold_by_need": [
+            {
+              "need_id": "need_unknown",
+              "description": "Need a submarine for underwater inspection",
+              "equipment_hints": [
+                "submarine"
+              ],
+              "quantity": 1,
+              "gold_asset_ids": [],
+              "gold_categories": [],
+              "available": null,
+              "price_daily": null
+            }
+          ],
+          "confidence_min": null,
+          "hit_at_1_required": false,
+          "expect_empty_items": true
+        }
+      },
+      "predicted": {
+        "call1": {
+          "ingest_id": "ing_c27c1796015c48ad9f738bfa16c1bd19",
+          "user_id": "eval_no_match_submarine",
+          "user_requirement_summary": "Need a submarine for underwater inspection next month. Budget is tight.\nNeed a submarine for underwater inspection next month. Budget is tight.",
+          "tentative_start_date": "2026-09-01",
+          "tentative_end_date": "2026-09-30",
+          "needs_summary": [
+            {
+              "need_id": "need_1",
+              "description": "Need a submarine for underwater inspection next month. Budget is tight.\n\nNeed a submarine for underwater inspection next month. Budget is tight.",
+              "equipment_hints": [],
+              "quantity": 1
+            }
+          ],
+          "expected_budget": null,
+          "warnings": [
+            "expected_budget not found"
+          ]
+        },
+        "call2": {
+          "user_id": "eval_no_match_submarine",
+          "ingest_id": "ing_c27c1796015c48ad9f738bfa16c1bd19",
+          "query": null,
+          "quoteRef": "QUO-A32DC8DA",
+          "confidenceScore": null,
+          "days": 30,
+          "estimatedTotal": null,
+          "specSummary": "Need a submarine for underwater inspection next month. Budget is tight.\nNeed a submarine for underwater inspection next month. Budget is tight.",
+          "rationale": null,
+          "items": [],
+          "warnings": [
+            "No available equipment matched this need for the requested window (or no catalog match). Refine equipment type, dates, or quantity.",
+            "No equipment matched for this project-spec session"
+          ],
+          "recommendationId": "rec_3b40d2d34a4040f780de1b1a0fce4cf6"
+        }
+      },
+      "metrics": {
+        "case_id": "no_match_submarine",
+        "kind": "no_match",
+        "ingest_ok": 1.0,
+        "summary_ok": 1.0,
+        "need_f1": 1.0,
+        "need_precision": 1.0,
+        "need_recall": 1.0,
+        "date_start_ok": 0.0,
+        "date_end_ok": 0.0,
+        "budget_match": 1.0,
+        "budget_invented": 0.0,
+        "hit_at_1": true,
+        "hit_at_1_rate": 1.0,
+        "coverage": 0.0,
+        "ndcg": 1.0,
+        "mean_match_score": null,
+        "confidence": null,
+        "confidence_recomputed": null,
+        "confidence_consistent": 1.0,
+        "price_mape": null,
+        "item_count": 0,
+        "expect_empty": true,
+        "confidence_min": null
+      }
+    },
+    {
+      "case_id": "no_dates_scissors",
+      "kind": "happy",
+      "input": {
+        "project_text": "Need a scissors lift for indoor elevated work around 8 meters. Budget SGD 9000.",
+        "call1_request_dates": {
+          "start_date": null,
+          "end_date": null
+        }
+      },
+      "expected": {
+        "call1": {
+          "equipment_types": [
+            "scissor lift"
+          ],
+          "start_date": null,
+          "end_date": null,
+          "budget_amount": 9000,
+          "budget_currency": "SGD",
+          "must_not_invent_budget": false
+        },
+        "call2": {
+          "need_count": 1,
+          "gold_by_need": [
+            {
+              "need_id": "need_1",
+              "description": "Need scissors lift indoor elevated work",
+              "equipment_hints": [
+                "scissor lift"
+              ],
+              "quantity": 1,
+              "gold_asset_ids": [
+                "AST-SL-001",
+                "AST-SL-002"
+              ],
+              "gold_categories": [
+                "Scissors Lift"
+              ],
+              "available": true,
+              "price_daily": 185.0
+            }
+          ],
+          "confidence_min": 0.5,
+          "hit_at_1_required": true,
+          "expect_empty_items": false
+        }
+      },
+      "predicted": {
+        "call1": {
+          "ingest_id": "ing_f4df49516ef74019892e3ad16832bb7a",
+          "user_id": "eval_no_dates_scissors",
+          "user_requirement_summary": "Need a scissors lift for indoor elevated work around 8 meters. Budget SGD 9000.\nNeed a scissors lift for indoor elevated work around 8 meters. Budget SGD 9000.",
+          "tentative_start_date": null,
+          "tentative_end_date": null,
+          "needs_summary": [
+            {
+              "need_id": "need_1",
+              "description": "Need a scissors lift for indoor elevated work around 8 meters.",
+              "equipment_hints": [
+                "scissor lift"
+              ],
+              "quantity": 1
+            }
+          ],
+          "expected_budget": {
+            "amount": 9000.0,
+            "currency": "SGD",
+            "source": "extracted"
+          },
+          "warnings": [
+            "rental dates not found"
+          ]
+        },
+        "call2": {
+          "user_id": "eval_no_dates_scissors",
+          "ingest_id": "ing_f4df49516ef74019892e3ad16832bb7a",
+          "query": null,
+          "quoteRef": "QUO-429D5EED",
+          "confidenceScore": 0.71,
+          "days": null,
+          "estimatedTotal": 1295.0,
+          "specSummary": "Need a scissors lift for indoor elevated work around 8 meters. Budget SGD 9000.\nNeed a scissors lift for indoor elevated work around 8 meters. Budget SGD 9000.",
+          "rationale": "Matched scissor lift to AST-SL-002 (category scissor lift, daily_rate=185.0, platform_height=12.0m, match_score=0.8).",
+          "items": [
+            {
+              "rankOrder": 1,
+              "matchScore": 0.8,
+              "reason": "Matched scissor lift to AST-SL-002 (category scissor lift, daily_rate=185.0, platform_height=12.0m, match_score=0.8).",
+              "lineTotal": 1295.0,
+              "quantity": 1,
+              "needId": "need_1",
+              "mlPredictedPrice": 185.0,
+              "equipment": {
+                "id": "AST-SL-002",
+                "name": "Scissors Lift",
+                "category": "Scissors Lift",
+                "baseDailyRate": 185.0,
+                "weekly": null,
+                "capacity": null,
+                "purchaseYear": null,
+                "location": null,
+                "available": true,
+                "desc": null,
+                "platformHeight": 12.0,
+                "tags": [],
+                "extra": {
+                  "availability": "available",
+                  "currency": "SGD",
+                  "model_version": "eval-fixture",
+                  "was_clamped": false,
+                  "explanation": "eval fixed price"
+                }
+              }
+            }
+          ],
+          "warnings": [],
+          "recommendationId": "rec_001117ab0b3b4108aad492980c3a4f71"
+        }
+      },
+      "metrics": {
+        "case_id": "no_dates_scissors",
+        "kind": "happy",
+        "ingest_ok": 1.0,
+        "summary_ok": 1.0,
+        "need_f1": 1.0,
+        "need_precision": 1.0,
+        "need_recall": 1.0,
+        "date_start_ok": 1.0,
+        "date_end_ok": 1.0,
+        "budget_match": 1.0,
+        "budget_invented": 0.0,
+        "hit_at_1": true,
+        "hit_at_1_rate": 1.0,
+        "coverage": 1.0,
+        "ndcg": 1.0,
+        "mean_match_score": 0.8,
+        "confidence": 0.71,
+        "confidence_recomputed": 0.71,
+        "confidence_consistent": 1.0,
+        "price_mape": 0.0,
+        "item_count": 1,
+        "expect_empty": false,
+        "confidence_min": 0.5
+      }
+    },
+    {
+      "case_id": "no_budget_forklift",
+      "kind": "happy",
+      "input": {
+        "project_text": "Need a forklift for warehouse loading bay work from 2026-12-01 to 2026-12-05.",
+        "call1_request_dates": {
+          "start_date": "2026-12-01",
+          "end_date": "2026-12-05"
+        }
+      },
+      "expected": {
+        "call1": {
+          "equipment_types": [
+            "forklift"
+          ],
+          "start_date": "2026-12-01",
+          "end_date": "2026-12-05",
+          "budget_amount": null,
+          "budget_currency": null,
+          "must_not_invent_budget": true
+        },
+        "call2": {
+          "need_count": 1,
+          "gold_by_need": [
+            {
+              "need_id": "need_1",
+              "description": "Need forklift for warehouse loading",
+              "equipment_hints": [
+                "forklift"
+              ],
+              "quantity": 1,
+              "gold_asset_ids": [
+                "AST-FL-001"
+              ],
+              "gold_categories": [
+                "Fork Lift"
+              ],
+              "available": true,
+              "price_daily": 185.0
+            }
+          ],
+          "confidence_min": 0.55,
+          "hit_at_1_required": true,
+          "expect_empty_items": false
+        }
+      },
+      "predicted": {
+        "call1": {
+          "ingest_id": "ing_10fde55c7fc4452c9d3f3fc1605827d5",
+          "user_id": "eval_no_budget_forklift",
+          "user_requirement_summary": "Need a forklift for warehouse loading bay work from 2026-12-01 to 2026-12-05.\nNeed a forklift for warehouse loading bay work from 2026-12-01 to 2026-12-05.",
+          "tentative_start_date": "2026-12-01",
+          "tentative_end_date": "2026-12-05",
+          "needs_summary": [
+            {
+              "need_id": "need_1",
+              "description": "Need a forklift for warehouse loading bay work from 2026-12-01 to 2026-12-05.",
+              "equipment_hints": [
+                "forklift"
+              ],
+              "quantity": 1
+            }
+          ],
+          "expected_budget": null,
+          "warnings": [
+            "expected_budget not found"
+          ]
+        },
+        "call2": {
+          "user_id": "eval_no_budget_forklift",
+          "ingest_id": "ing_10fde55c7fc4452c9d3f3fc1605827d5",
+          "query": null,
+          "quoteRef": "QUO-68C9A19A",
+          "confidenceScore": 0.76,
+          "days": 5,
+          "estimatedTotal": 925.0,
+          "specSummary": "Need a forklift for warehouse loading bay work from 2026-12-01 to 2026-12-05.\nNeed a forklift for warehouse loading bay work from 2026-12-01 to 2026-12-05.",
+          "rationale": "Matched forklift to AST-FL-001 (category forklift, available=available, daily_rate=185.0, match_score=0.8).",
+          "items": [
+            {
+              "rankOrder": 1,
+              "matchScore": 0.8,
+              "reason": "Matched forklift to AST-FL-001 (category forklift, available=available, daily_rate=185.0, match_score=0.8).",
+              "lineTotal": 925.0,
+              "quantity": 1,
+              "needId": "need_1",
+              "mlPredictedPrice": 185.0,
+              "equipment": {
+                "id": "AST-FL-001",
+                "name": "Fork Lift",
+                "category": "Fork Lift",
+                "baseDailyRate": 185.0,
+                "weekly": null,
+                "capacity": null,
+                "purchaseYear": null,
+                "location": null,
+                "available": true,
+                "desc": null,
+                "tags": [],
+                "extra": {
+                  "availability": "available",
+                  "currency": "SGD",
+                  "model_version": "eval-fixture",
+                  "was_clamped": false,
+                  "explanation": "eval fixed price"
+                }
+              }
+            }
+          ],
+          "warnings": [],
+          "recommendationId": "rec_44d713fb02094dbe8603fc3cb919b653"
+        }
+      },
+      "metrics": {
+        "case_id": "no_budget_forklift",
+        "kind": "happy",
+        "ingest_ok": 1.0,
+        "summary_ok": 1.0,
+        "need_f1": 1.0,
+        "need_precision": 1.0,
+        "need_recall": 1.0,
+        "date_start_ok": 1.0,
+        "date_end_ok": 1.0,
+        "budget_match": 1.0,
+        "budget_invented": 0.0,
+        "hit_at_1": true,
+        "hit_at_1_rate": 1.0,
+        "coverage": 1.0,
+        "ndcg": 1.0,
+        "mean_match_score": 0.8,
+        "confidence": 0.76,
+        "confidence_recomputed": 0.76,
+        "confidence_consistent": 1.0,
+        "price_mape": 0.0,
+        "item_count": 1,
+        "expect_empty": false,
+        "confidence_min": 0.55
+      }
+    },
+    {
+      "case_id": "excavator_prefers_available",
+      "kind": "happy",
+      "input": {
+        "project_text": "Need an excavator between 2026-09-05 and 2026-09-12 for trench work.",
+        "call1_request_dates": {
+          "start_date": "2026-09-05",
+          "end_date": "2026-09-12"
+        }
+      },
+      "expected": {
+        "call1": {
+          "equipment_types": [
+            "excavator"
+          ],
+          "start_date": "2026-09-05",
+          "end_date": "2026-09-12",
+          "budget_amount": null,
+          "budget_currency": null,
+          "must_not_invent_budget": true
+        },
+        "call2": {
+          "need_count": 1,
+          "gold_by_need": [
+            {
+              "need_id": "need_1",
+              "description": "Need excavator for trench work",
+              "equipment_hints": [
+                "excavator"
+              ],
+              "quantity": 1,
+              "gold_asset_ids": [
+                "AST-EX-001"
+              ],
+              "gold_categories": [
+                "Excavator"
+              ],
+              "available": true,
+              "price_daily": 185.0,
+              "prefer_not_asset_ids": [
+                "AST-EX-002"
+              ]
+            }
+          ],
+          "confidence_min": 0.55,
+          "hit_at_1_required": true,
+          "expect_empty_items": false
+        }
+      },
+      "predicted": {
+        "call1": {
+          "ingest_id": "ing_28e55fcf78954fd1b81115b99a2178b6",
+          "user_id": "eval_excavator_prefers_available",
+          "user_requirement_summary": "Need an excavator between 2026-09-05 and 2026-09-12 for trench work.\nNeed an excavator between 2026-09-05 and 2026-09-12 for trench work.",
+          "tentative_start_date": "2026-09-05",
+          "tentative_end_date": "2026-09-12",
+          "needs_summary": [
+            {
+              "need_id": "need_1",
+              "description": "Need an excavator between 2026-09-05 and 2026-09-12 for trench work.",
+              "equipment_hints": [
+                "excavator"
+              ],
+              "quantity": 1
+            }
+          ],
+          "expected_budget": null,
+          "warnings": [
+            "expected_budget not found"
+          ]
+        },
+        "call2": {
+          "user_id": "eval_excavator_prefers_available",
+          "ingest_id": "ing_28e55fcf78954fd1b81115b99a2178b6",
+          "query": null,
+          "quoteRef": "QUO-C579A879",
+          "confidenceScore": 0.76,
+          "days": 8,
+          "estimatedTotal": 1480.0,
+          "specSummary": "Need an excavator between 2026-09-05 and 2026-09-12 for trench work.\nNeed an excavator between 2026-09-05 and 2026-09-12 for trench work.",
+          "rationale": "Matched excavator to AST-EX-001 (category excavator, available=available, daily_rate=185.0, match_score=0.8).",
+          "items": [
+            {
+              "rankOrder": 1,
+              "matchScore": 0.8,
+              "reason": "Matched excavator to AST-EX-001 (category excavator, available=available, daily_rate=185.0, match_score=0.8).",
+              "lineTotal": 1480.0,
+              "quantity": 1,
+              "needId": "need_1",
+              "mlPredictedPrice": 185.0,
+              "equipment": {
+                "id": "AST-EX-001",
+                "name": "Excavator",
+                "category": "Excavator",
+                "baseDailyRate": 185.0,
+                "weekly": null,
+                "capacity": null,
+                "purchaseYear": null,
+                "location": null,
+                "available": true,
+                "desc": null,
+                "tags": [],
+                "extra": {
+                  "availability": "available",
+                  "currency": "SGD",
+                  "model_version": "eval-fixture",
+                  "was_clamped": false,
+                  "explanation": "eval fixed price"
+                }
+              }
+            }
+          ],
+          "warnings": [],
+          "recommendationId": "rec_59c9d111835543e5a6af86269084e63e"
+        }
+      },
+      "metrics": {
+        "case_id": "excavator_prefers_available",
+        "kind": "happy",
+        "ingest_ok": 1.0,
+        "summary_ok": 1.0,
+        "need_f1": 1.0,
+        "need_precision": 1.0,
+        "need_recall": 1.0,
+        "date_start_ok": 1.0,
+        "date_end_ok": 1.0,
+        "budget_match": 1.0,
+        "budget_invented": 0.0,
+        "hit_at_1": true,
+        "hit_at_1_rate": 1.0,
+        "coverage": 1.0,
+        "ndcg": 1.0,
+        "mean_match_score": 0.8,
+        "confidence": 0.76,
+        "confidence_recomputed": 0.76,
+        "confidence_consistent": 1.0,
+        "price_mape": 0.0,
+        "item_count": 1,
+        "expect_empty": false,
+        "confidence_min": 0.55
+      }
+    },
+    {
+      "case_id": "multi_fork_boom",
+      "kind": "happy",
+      "input": {
+        "project_text": "Site needs a forklift for materials and a boom lift for high exterior work. 2026-07-01 to 2026-07-15. Budget SGD 18000.",
+        "call1_request_dates": {
+          "start_date": "2026-07-01",
+          "end_date": "2026-07-15"
+        }
+      },
+      "expected": {
+        "call1": {
+          "equipment_types": [
+            "forklift",
+            "boom lift"
+          ],
+          "start_date": "2026-07-01",
+          "end_date": "2026-07-15",
+          "budget_amount": 18000,
+          "budget_currency": "SGD",
+          "must_not_invent_budget": false
+        },
+        "call2": {
+          "need_count": 2,
+          "gold_by_need": [
+            {
+              "need_id": "need_lift",
+              "description": "Need forklift for materials",
+              "equipment_hints": [
+                "forklift"
+              ],
+              "quantity": 1,
+              "gold_asset_ids": [
+                "AST-FL-001"
+              ],
+              "gold_categories": [
+                "Fork Lift"
+              ],
+              "available": true,
+              "price_daily": 185.0
+            },
+            {
+              "need_id": "need_aerial",
+              "description": "Need boom lift for high exterior work",
+              "equipment_hints": [
+                "boom lift"
+              ],
+              "quantity": 1,
+              "gold_asset_ids": [
+                "AST-BL-001"
+              ],
+              "gold_categories": [
+                "Boom Lift"
+              ],
+              "available": true,
+              "price_daily": 185.0
+            }
+          ],
+          "confidence_min": 0.55,
+          "hit_at_1_required": true,
+          "expect_empty_items": false
+        }
+      },
+      "predicted": {
+        "call1": {
+          "ingest_id": "ing_a55aac64dc9043ef92d639ba15236813",
+          "user_id": "eval_multi_fork_boom",
+          "user_requirement_summary": "Site needs a forklift for materials and a boom lift for high exterior work. 2026-07-01 to 2026-07-15. Budget SGD 18000.\nSite needs a forklift for materials and a boom lift for high exterior work. 2026-07-01 to 2026-07-15. Budget SGD 18000.",
+          "tentative_start_date": "2026-07-01",
+          "tentative_end_date": "2026-07-15",
+          "needs_summary": [
+            {
+              "need_id": "need_1",
+              "description": "Site needs a forklift for materials and a boom lift for high exterior work.",
+              "equipment_hints": [
+                "forklift"
+              ],
+              "quantity": 1
+            },
+            {
+              "need_id": "need_2",
+              "description": "Site needs a forklift for materials and a boom lift for high exterior work.",
+              "equipment_hints": [
+                "boom lift"
+              ],
+              "quantity": 1
+            }
+          ],
+          "expected_budget": {
+            "amount": 18000.0,
+            "currency": "SGD",
+            "source": "extracted"
+          },
+          "warnings": []
+        },
+        "call2": {
+          "user_id": "eval_multi_fork_boom",
+          "ingest_id": "ing_a55aac64dc9043ef92d639ba15236813",
+          "query": null,
+          "quoteRef": "QUO-9668B2B2",
+          "confidenceScore": 0.76,
+          "days": 15,
+          "estimatedTotal": 5550.0,
+          "specSummary": "Site needs a forklift for materials and a boom lift for high exterior work. 2026-07-01 to 2026-07-15. Budget SGD 18000.\nSite needs a forklift for materials and a boom lift for high exterior work. 2026-07-01 to 2026-07-15. Budget SGD 18000.",
+          "rationale": "Matched forklift to AST-FL-001 (category forklift, available=available, daily_rate=185.0, match_score=0.8). Matched boom lift to AST-BL-001 (category boom lift, available=available, daily_rate=185.0, platform_height=18.0m, match_score=0.8).",
+          "items": [
+            {
+              "rankOrder": 1,
+              "matchScore": 0.8,
+              "reason": "Matched forklift to AST-FL-001 (category forklift, available=available, daily_rate=185.0, match_score=0.8).",
+              "lineTotal": 2775.0,
+              "quantity": 1,
+              "needId": "need_lift",
+              "mlPredictedPrice": 185.0,
+              "equipment": {
+                "id": "AST-FL-001",
+                "name": "Fork Lift",
+                "category": "Fork Lift",
+                "baseDailyRate": 185.0,
+                "weekly": null,
+                "capacity": null,
+                "purchaseYear": null,
+                "location": null,
+                "available": true,
+                "desc": null,
+                "tags": [],
+                "extra": {
+                  "availability": "available",
+                  "currency": "SGD",
+                  "model_version": "eval-fixture",
+                  "was_clamped": false,
+                  "explanation": "eval fixed price"
+                }
+              }
+            },
+            {
+              "rankOrder": 2,
+              "matchScore": 0.8,
+              "reason": "Matched boom lift to AST-BL-001 (category boom lift, available=available, daily_rate=185.0, platform_height=18.0m, match_score=0.8).",
+              "lineTotal": 2775.0,
+              "quantity": 1,
+              "needId": "need_aerial",
+              "mlPredictedPrice": 185.0,
+              "equipment": {
+                "id": "AST-BL-001",
+                "name": "Boom Lift",
+                "category": "Boom Lift",
+                "baseDailyRate": 185.0,
+                "weekly": null,
+                "capacity": null,
+                "purchaseYear": null,
+                "location": null,
+                "available": true,
+                "desc": null,
+                "platformHeight": 18.0,
+                "tags": [],
+                "extra": {
+                  "availability": "available",
+                  "currency": "SGD",
+                  "model_version": "eval-fixture",
+                  "was_clamped": false,
+                  "explanation": "eval fixed price"
+                }
+              }
+            }
+          ],
+          "warnings": [],
+          "recommendationId": "rec_15b535f11a97496ab07d5f3200fb62aa"
+        }
+      },
+      "metrics": {
+        "case_id": "multi_fork_boom",
+        "kind": "happy",
+        "ingest_ok": 1.0,
+        "summary_ok": 1.0,
+        "need_f1": 1.0,
+        "need_precision": 1.0,
+        "need_recall": 1.0,
+        "date_start_ok": 1.0,
+        "date_end_ok": 1.0,
+        "budget_match": 1.0,
+        "budget_invented": 0.0,
+        "hit_at_1": true,
+        "hit_at_1_rate": 1.0,
+        "coverage": 1.0,
+        "ndcg": 0.81545,
+        "mean_match_score": 0.8,
+        "confidence": 0.76,
+        "confidence_recomputed": 0.76,
+        "confidence_consistent": 1.0,
+        "price_mape": 0.0,
+        "item_count": 2,
+        "expect_empty": false,
+        "confidence_min": 0.55
+      }
+    },
+    {
+      "case_id": "happy_scissors_short_window",
+      "kind": "happy",
+      "input": {
+        "project_text": "Scissor lift required for ceiling work ~8m on 2026-09-01 through 2026-09-03. Budget SGD 3000.",
+        "call1_request_dates": {
+          "start_date": "2026-09-01",
+          "end_date": "2026-09-03"
+        }
+      },
+      "expected": {
+        "call1": {
+          "equipment_types": [
+            "scissor lift"
+          ],
+          "start_date": "2026-09-01",
+          "end_date": "2026-09-03",
+          "budget_amount": 3000,
+          "budget_currency": "SGD",
+          "must_not_invent_budget": false
+        },
+        "call2": {
+          "need_count": 1,
+          "gold_by_need": [
+            {
+              "need_id": "need_1",
+              "description": "Scissor lift for ceiling work ~8m",
+              "equipment_hints": [
+                "scissor lift"
+              ],
+              "quantity": 1,
+              "gold_asset_ids": [
+                "AST-SL-001",
+                "AST-SL-002"
+              ],
+              "gold_categories": [
+                "Scissors Lift"
+              ],
+              "available": true,
+              "price_daily": 185.0
+            }
+          ],
+          "confidence_min": 0.55,
+          "hit_at_1_required": true,
+          "expect_empty_items": false
+        }
+      },
+      "predicted": {
+        "call1": {
+          "ingest_id": "ing_186164eb6912453f9c2afae16c067a4f",
+          "user_id": "eval_happy_scissors_short_window",
+          "user_requirement_summary": "Scissor lift required for ceiling work ~8m on 2026-09-01 through 2026-09-03. Budget SGD 3000.\nScissor lift required for ceiling work ~8m on 2026-09-01 through 2026-09-03. Budget SGD 3000.",
+          "tentative_start_date": "2026-09-01",
+          "tentative_end_date": "2026-09-03",
+          "needs_summary": [
+            {
+              "need_id": "need_1",
+              "description": "Scissor lift required for ceiling work ~8m on 2026-09-01 through 2026-09-03.",
+              "equipment_hints": [
+                "scissor lift"
+              ],
+              "quantity": 1
+            }
+          ],
+          "expected_budget": {
+            "amount": 3000.0,
+            "currency": "SGD",
+            "source": "extracted"
+          },
+          "warnings": []
+        },
+        "call2": {
+          "user_id": "eval_happy_scissors_short_window",
+          "ingest_id": "ing_186164eb6912453f9c2afae16c067a4f",
+          "query": null,
+          "quoteRef": "QUO-9D9F3147",
+          "confidenceScore": 0.8,
+          "days": 3,
+          "estimatedTotal": 555.0,
+          "specSummary": "Scissor lift required for ceiling work ~8m on 2026-09-01 through 2026-09-03. Budget SGD 3000.\nScissor lift required for ceiling work ~8m on 2026-09-01 through 2026-09-03. Budget SGD 3000.",
+          "rationale": "Matched scissor lift to AST-SL-002 (category scissor lift, available=available, daily_rate=185.0, platform_height=12.0m, match_score=1.0).",
+          "items": [
+            {
+              "rankOrder": 1,
+              "matchScore": 1.0,
+              "reason": "Matched scissor lift to AST-SL-002 (category scissor lift, available=available, daily_rate=185.0, platform_height=12.0m, match_score=1.0).",
+              "lineTotal": 555.0,
+              "quantity": 1,
+              "needId": "need_1",
+              "mlPredictedPrice": 185.0,
+              "equipment": {
+                "id": "AST-SL-002",
+                "name": "Scissors Lift",
+                "category": "Scissors Lift",
+                "baseDailyRate": 185.0,
+                "weekly": null,
+                "capacity": null,
+                "purchaseYear": null,
+                "location": null,
+                "available": true,
+                "desc": null,
+                "platformHeight": 12.0,
+                "tags": [],
+                "extra": {
+                  "availability": "available",
+                  "currency": "SGD",
+                  "model_version": "eval-fixture",
+                  "was_clamped": false,
+                  "explanation": "eval fixed price"
+                }
+              }
+            }
+          ],
+          "warnings": [],
+          "recommendationId": "rec_b5ff119a73bc403692f6fcf7864cc666"
+        }
+      },
+      "metrics": {
+        "case_id": "happy_scissors_short_window",
+        "kind": "happy",
+        "ingest_ok": 1.0,
+        "summary_ok": 1.0,
+        "need_f1": 1.0,
+        "need_precision": 1.0,
+        "need_recall": 1.0,
+        "date_start_ok": 1.0,
+        "date_end_ok": 1.0,
+        "budget_match": 1.0,
+        "budget_invented": 0.0,
+        "hit_at_1": true,
+        "hit_at_1_rate": 1.0,
+        "coverage": 1.0,
+        "ndcg": 1.0,
+        "mean_match_score": 1.0,
+        "confidence": 0.8,
+        "confidence_recomputed": 0.8,
+        "confidence_consistent": 1.0,
+        "price_mape": 0.0,
+        "item_count": 1,
+        "expect_empty": false,
+        "confidence_min": 0.55
+      }
+    },
+    {
+      "case_id": "no_match_helicopter",
+      "kind": "no_match",
+      "input": {
+        "project_text": "Need a helicopter for deep-sea surveying tomorrow. Budget SGD 50000.",
+        "call1_request_dates": {
+          "start_date": null,
+          "end_date": null
+        }
+      },
+      "expected": {
+        "call1": {
+          "equipment_types": [],
+          "start_date": null,
+          "end_date": null,
+          "budget_amount": 50000,
+          "budget_currency": "SGD",
+          "must_not_invent_budget": false
+        },
+        "call2": {
+          "need_count": 1,
+          "gold_by_need": [
+            {
+              "need_id": "need_heli",
+              "description": "Need a helicopter for deep-sea surveying",
+              "equipment_hints": [
+                "helicopter"
+              ],
+              "quantity": 1,
+              "gold_asset_ids": [],
+              "gold_categories": [],
+              "available": null,
+              "price_daily": null
+            }
+          ],
+          "confidence_min": null,
+          "hit_at_1_required": false,
+          "expect_empty_items": true
+        }
+      },
+      "predicted": {
+        "call1": {
+          "ingest_id": "ing_782e068798ef4db1a251b02bbe09bf48",
+          "user_id": "eval_no_match_helicopter",
+          "user_requirement_summary": "Need a helicopter for deep-sea surveying tomorrow. Budget SGD 50000.\nNeed a helicopter for deep-sea surveying tomorrow. Budget SGD 50000.",
+          "tentative_start_date": null,
+          "tentative_end_date": null,
+          "needs_summary": [
+            {
+              "need_id": "need_1",
+              "description": "Need a helicopter for deep-sea surveying tomorrow. Budget SGD 50000.\n\nNeed a helicopter for deep-sea surveying tomorrow. Budget SGD 50000.",
+              "equipment_hints": [],
+              "quantity": 1
+            }
+          ],
+          "expected_budget": {
+            "amount": 50000.0,
+            "currency": "SGD",
+            "source": "extracted"
+          },
+          "warnings": [
+            "rental dates not found"
+          ]
+        },
+        "call2": {
+          "user_id": "eval_no_match_helicopter",
+          "ingest_id": "ing_782e068798ef4db1a251b02bbe09bf48",
+          "query": null,
+          "quoteRef": "QUO-12328D72",
+          "confidenceScore": null,
+          "days": null,
+          "estimatedTotal": null,
+          "specSummary": "Need a helicopter for deep-sea surveying tomorrow. Budget SGD 50000.\nNeed a helicopter for deep-sea surveying tomorrow. Budget SGD 50000.",
+          "rationale": null,
+          "items": [],
+          "warnings": [
+            "No available equipment matched this need for the requested window (or no catalog match). Refine equipment type, dates, or quantity.",
+            "No equipment matched for this project-spec session"
+          ],
+          "recommendationId": "rec_b51c7f704f564277ae9bf451fe78a6c2"
+        }
+      },
+      "metrics": {
+        "case_id": "no_match_helicopter",
+        "kind": "no_match",
+        "ingest_ok": 1.0,
+        "summary_ok": 1.0,
+        "need_f1": 1.0,
+        "need_precision": 1.0,
+        "need_recall": 1.0,
+        "date_start_ok": 1.0,
+        "date_end_ok": 1.0,
+        "budget_match": 1.0,
+        "budget_invented": 0.0,
+        "hit_at_1": true,
+        "hit_at_1_rate": 1.0,
+        "coverage": 0.0,
+        "ndcg": 1.0,
+        "mean_match_score": null,
+        "confidence": null,
+        "confidence_recomputed": null,
+        "confidence_consistent": 1.0,
+        "price_mape": null,
+        "item_count": 0,
+        "expect_empty": true,
+        "confidence_min": null
+      }
+    }
+  ]
+}

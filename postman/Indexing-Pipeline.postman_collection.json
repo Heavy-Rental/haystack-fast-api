@@ -1,0 +1,1488 @@
+{
+  "info": {
+    "_postman_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+    "name": "Call 1 Ingest · Call 2 Recommend · Call 3 Q&A",
+    "description": "Postman collection for haystack-fast-api multi-call journey (as-built):\n\n1) **Call 1** `POST /internal/v1/recommendations/submitprojectspecification`\n   — dual-branch indexing + mandatory KG-1 (internal) + **lean FR-IX-023** public body\n2) **Call 2** `POST /internal/v1/recommendations/project-knowledge/getassetrecommendations`\n   — **recommend / quote** (`quoteRef`, `items[]`, `confidenceScore`, `mlPredictedPrice`)\n3) **Call 3** `POST /internal/v1/recommendations/project-knowledge/query`\n   — **chatbot Q&A** (`answer`, hits, `tool_traces`)\n\n**Import:** this collection + environment `Indexing-Pipeline-Local`.\n\n**Server:** from `haystack-fast-api/`:\n```\nuv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload\n```\n\n**Portal saga:** Call 1 then Call 2 (save `ingestId`). React primary body = Call 2 quote.\nCall 3 is optional follow-up on the same process-local session.\n\n**Call 1 public body (lean):** `ingest_id`, `user_id`, `user_requirement_summary`,\n`tentative_start_date`/`end_date`, `needs_summary[]`, `expected_budget`, `warnings[]`.\nTechnical fields (`data_kind`, `documents_written`, `kg_built`, `documents[]`) are **not** on the public response (session/meta only).\n\n**Headers:** `Idempotency-Key` (Call 1 only), `X-Correlation-Id`, optional `traceparent`.\n\n**Env notes:**\n- CI/local fake: `FLEET_BACKEND=fake`, `RECOMMEND_VIA_AGENT_GRAPH=false`, mock embedder\n- Live compose: `FLEET_BACKEND=sql` → `equipment.id` = `assets.id`; optional `RECOMMEND_VIA_AGENT_GRAPH=true`\n\n**Docs:** `docs/call1-call2-endpoint-process.md` · `docs/multi-agent-architecture.md` · `postman/README.md`\n",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "ingestPath",
+      "value": "/internal/v1/recommendations/submitprojectspecification"
+    },
+    {
+      "key": "projectKnowledgePath",
+      "value": "/internal/v1/recommendations/project-knowledge/getassetrecommendations"
+    },
+    {
+      "key": "userId",
+      "value": "user_demo"
+    },
+    {
+      "key": "ingestId",
+      "value": ""
+    },
+    {
+      "key": "agentQuery",
+      "value": "What excavator capacity and soil conditions are required?"
+    },
+    {
+      "key": "idempotencyKey",
+      "value": "",
+      "description": "Optional Idempotency-Key (UUID) for Call 1 retry safety"
+    },
+    {
+      "key": "correlationId",
+      "value": "postman-corr-demo",
+      "description": "Optional X-Correlation-Id for log join"
+    },
+    {
+      "key": "traceparent",
+      "value": "",
+      "description": "Optional W3C traceparent"
+    },
+    {
+      "key": "projectKnowledgeQueryPath",
+      "value": "/internal/v1/recommendations/project-knowledge/query"
+    }
+  ],
+  "item": [
+    {
+      "name": "00 Health",
+      "item": [
+        {
+          "name": "01 GET Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Body has status field', function () {",
+                  "    const j = pm.response.json();",
+                  "    pm.expect(j).to.have.property('status');",
+                  "    pm.expect(['ok', 'degraded']).to.include(j.status);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present.",
+                "disabled": true
+              }
+            ],
+            "url": "{{baseUrl}}/health",
+            "description": "Sanity check. `status` may be `degraded` if Postgres is down; indexing still works."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01 Happy path — JSON (unstructured)",
+      "item": [
+        {
+          "name": "02 POST JSON project_text (unstructured)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('lean FR-IX-023 body', function () {",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.user_requirement_summary).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.needs_summary).to.be.an('array');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    // technical indexing/KG fields must not be required on public body",
+                  "    pm.expect(j).to.not.have.property('data_kind');",
+                  "    pm.expect(j).to.not.have.property('documents_written');",
+                  "    pm.expect(j).to.not.have.property('kg_built');",
+                  "    pm.expect(j).to.not.have.property('documents');",
+                  "    pm.expect(j).to.not.have.property('recommendation_id');",
+                  "    pm.expect(j).to.not.have.property('results_by_need');",
+                  "});",
+                  "if (j.ingest_id) {",
+                  "    pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "    pm.environment.set('ingestId', j.ingest_id);",
+                  "}",
+                  "if (j.user_id) {",
+                  "    pm.collectionVariables.set('userId', j.user_id);",
+                  "    pm.environment.set('userId', j.user_id);",
+                  "}",
+                  "pm.test('dates or null', function () {",
+                  "    // may be request echo or extract; must be present as keys",
+                  "    pm.expect(j).to.have.property('tentative_start_date');",
+                  "    pm.expect(j).to.have.property('tentative_end_date');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"user_demo\",\n  \"user_name\": \"Demo User\",\n  \"project_text\": \"Indoor elevated work ~8m for scissors lift\",\n  \"start_date\": \"2026-09-01\",\n  \"end_date\": \"2026-09-12\",\n  \"options\": {\n    \"include_pricing\": true\n  }\n}\n"
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "JSON free-text as unstructured source.\n\nExpect **200 lean FR-IX-023**: `ingest_id`, `user_id`, `user_requirement_summary`, `needs_summary[]`, `warnings[]`.\nTechnical `data_kind` / `documents[]` / `kg_*` are **not** on the public body."
+          },
+          "response": []
+        },
+        {
+          "name": "03 POST JSON project_text (no dates)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('lean FR-IX-023 body', function () {",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.user_requirement_summary).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.needs_summary).to.be.an('array');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    // technical indexing/KG fields must not be required on public body",
+                  "    pm.expect(j).to.not.have.property('data_kind');",
+                  "    pm.expect(j).to.not.have.property('documents_written');",
+                  "    pm.expect(j).to.not.have.property('kg_built');",
+                  "    pm.expect(j).to.not.have.property('documents');",
+                  "    pm.expect(j).to.not.have.property('recommendation_id');",
+                  "    pm.expect(j).to.not.have.property('results_by_need');",
+                  "});",
+                  "if (j.ingest_id) {",
+                  "    pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "    pm.environment.set('ingestId', j.ingest_id);",
+                  "}",
+                  "if (j.user_id) {",
+                  "    pm.collectionVariables.set('userId', j.user_id);",
+                  "    pm.environment.set('userId', j.user_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"user_demo\",\n  \"project_text\": \"Fork lift for warehouse loading\"\n}\n"
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Minimal JSON body (dates optional for Part 3)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 Happy path — multipart files",
+      "item": [
+        {
+          "name": "04 POST multipart .txt (unstructured)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('lean FR-IX-023 body', function () {",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.user_requirement_summary).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.needs_summary).to.be.an('array');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    // technical indexing/KG fields must not be required on public body",
+                  "    pm.expect(j).to.not.have.property('data_kind');",
+                  "    pm.expect(j).to.not.have.property('documents_written');",
+                  "    pm.expect(j).to.not.have.property('kg_built');",
+                  "    pm.expect(j).to.not.have.property('documents');",
+                  "    pm.expect(j).to.not.have.property('recommendation_id');",
+                  "    pm.expect(j).to.not.have.property('results_by_need');",
+                  "});",
+                  "if (j.ingest_id) {",
+                  "    pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "    pm.environment.set('ingestId', j.ingest_id);",
+                  "}",
+                  "if (j.user_id) {",
+                  "    pm.collectionVariables.set('userId', j.user_id);",
+                  "    pm.environment.set('userId', j.user_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "user_id",
+                  "value": "{{userId}}",
+                  "type": "text",
+                  "description": "Required identity for ingest + KG session"
+                },
+                {
+                  "key": "user_name",
+                  "value": "Demo User",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "description": "Select postman/fixtures/project.txt",
+                  "type": "file",
+                  "src": "fixtures/project.txt"
+                },
+                {
+                  "key": "start_date",
+                  "value": "2026-09-01",
+                  "type": "text"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2026-09-12",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "**Body → form-data** (do NOT set Content-Type manually).\n\n| Key | Type | Value |\n|-----|------|-------|\n| `file` | File | `postman/fixtures/project.txt` |\n| `start_date` | Text | `2026-09-01` (optional) |\n| `end_date` | Text | `2026-09-12` (optional) |\n\nIf the file field is empty after import, click **Select Files** and choose `postman/fixtures/project.txt`."
+          },
+          "response": []
+        },
+        {
+          "name": "05 POST multipart .md (unstructured)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('lean FR-IX-023 body', function () {",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.user_requirement_summary).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.needs_summary).to.be.an('array');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    // technical indexing/KG fields must not be required on public body",
+                  "    pm.expect(j).to.not.have.property('data_kind');",
+                  "    pm.expect(j).to.not.have.property('documents_written');",
+                  "    pm.expect(j).to.not.have.property('kg_built');",
+                  "    pm.expect(j).to.not.have.property('documents');",
+                  "    pm.expect(j).to.not.have.property('recommendation_id');",
+                  "    pm.expect(j).to.not.have.property('results_by_need');",
+                  "});",
+                  "if (j.ingest_id) {",
+                  "    pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "    pm.environment.set('ingestId', j.ingest_id);",
+                  "}",
+                  "if (j.user_id) {",
+                  "    pm.collectionVariables.set('userId', j.user_id);",
+                  "    pm.environment.set('userId', j.user_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "user_id",
+                  "value": "{{userId}}",
+                  "type": "text",
+                  "description": "Required identity for ingest + KG session"
+                },
+                {
+                  "key": "user_name",
+                  "value": "Demo User",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "description": "Select postman/fixtures/brief.md",
+                  "type": "file",
+                  "src": "fixtures/brief.md"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Attach `postman/fixtures/brief.md`."
+          },
+          "response": []
+        },
+        {
+          "name": "06 POST multipart .csv (structured)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('lean FR-IX-023 body', function () {",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.user_requirement_summary).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.needs_summary).to.be.an('array');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    // technical indexing/KG fields must not be required on public body",
+                  "    pm.expect(j).to.not.have.property('data_kind');",
+                  "    pm.expect(j).to.not.have.property('documents_written');",
+                  "    pm.expect(j).to.not.have.property('kg_built');",
+                  "    pm.expect(j).to.not.have.property('documents');",
+                  "    pm.expect(j).to.not.have.property('recommendation_id');",
+                  "    pm.expect(j).to.not.have.property('results_by_need');",
+                  "});",
+                  "if (j.ingest_id) {",
+                  "    pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "    pm.environment.set('ingestId', j.ingest_id);",
+                  "}",
+                  "if (j.user_id) {",
+                  "    pm.collectionVariables.set('userId', j.user_id);",
+                  "    pm.environment.set('userId', j.user_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "user_id",
+                  "value": "{{userId}}",
+                  "type": "text",
+                  "description": "Required identity for ingest + KG session"
+                },
+                {
+                  "key": "user_name",
+                  "value": "Demo User",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "description": "Select postman/fixtures/needs.csv",
+                  "type": "file",
+                  "src": "fixtures/needs.csv"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Multipart `.csv` (structured branch internally).\n\nExpect 200 lean FR-IX-023. Attach `postman/fixtures/needs.csv`."
+          },
+          "response": []
+        },
+        {
+          "name": "07 POST multipart .json (structured)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('lean FR-IX-023 body', function () {",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.user_requirement_summary).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.needs_summary).to.be.an('array');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    // technical indexing/KG fields must not be required on public body",
+                  "    pm.expect(j).to.not.have.property('data_kind');",
+                  "    pm.expect(j).to.not.have.property('documents_written');",
+                  "    pm.expect(j).to.not.have.property('kg_built');",
+                  "    pm.expect(j).to.not.have.property('documents');",
+                  "    pm.expect(j).to.not.have.property('recommendation_id');",
+                  "    pm.expect(j).to.not.have.property('results_by_need');",
+                  "});",
+                  "if (j.ingest_id) {",
+                  "    pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "    pm.environment.set('ingestId', j.ingest_id);",
+                  "}",
+                  "if (j.user_id) {",
+                  "    pm.collectionVariables.set('userId', j.user_id);",
+                  "    pm.environment.set('userId', j.user_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "user_id",
+                  "value": "{{userId}}",
+                  "type": "text",
+                  "description": "Required identity for ingest + KG session"
+                },
+                {
+                  "key": "user_name",
+                  "value": "Demo User",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "description": "Select postman/fixtures/needs.json",
+                  "type": "file",
+                  "src": "fixtures/needs.json"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Attach `postman/fixtures/needs.json`."
+          },
+          "response": []
+        },
+        {
+          "name": "08 POST multipart file + project_text (mixed possible)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('lean FR-IX-023 body', function () {",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.user_requirement_summary).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.needs_summary).to.be.an('array');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    // technical indexing/KG fields must not be required on public body",
+                  "    pm.expect(j).to.not.have.property('data_kind');",
+                  "    pm.expect(j).to.not.have.property('documents_written');",
+                  "    pm.expect(j).to.not.have.property('kg_built');",
+                  "    pm.expect(j).to.not.have.property('documents');",
+                  "    pm.expect(j).to.not.have.property('recommendation_id');",
+                  "    pm.expect(j).to.not.have.property('results_by_need');",
+                  "});",
+                  "if (j.ingest_id) {",
+                  "    pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "    pm.environment.set('ingestId', j.ingest_id);",
+                  "}",
+                  "if (j.user_id) {",
+                  "    pm.collectionVariables.set('userId', j.user_id);",
+                  "    pm.environment.set('userId', j.user_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "user_id",
+                  "value": "{{userId}}",
+                  "type": "text",
+                  "description": "Required identity for ingest + KG session"
+                },
+                {
+                  "key": "user_name",
+                  "value": "Demo User",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "description": "Select postman/fixtures/needs.csv",
+                  "type": "file",
+                  "src": "fixtures/needs.csv"
+                },
+                {
+                  "key": "project_text",
+                  "value": "Also need one excavator for trench work.",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "CSV file + `project_text` (mixed sources internally).\n\nExpect 200 lean FR-IX-023. Attach `postman/fixtures/needs.csv`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03 Negative cases (400)",
+      "item": [
+        {
+          "name": "09 POST empty project_text (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test('shared error shape', function () {",
+                  "    const j = pm.response.json();",
+                  "    pm.expect(j.error).to.eql('bad_request');",
+                  "    pm.expect(j.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"user_demo\",\n  \"project_text\": \"   \"\n}\n"
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Whitespace-only text → 400."
+          },
+          "response": []
+        },
+        {
+          "name": "10 POST missing project_text (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('shared error shape', function () {",
+                  "    pm.expect(j.error).to.eql('bad_request');",
+                  "    pm.expect(j.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}\n"
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Empty JSON object → 400."
+          },
+          "response": []
+        },
+        {
+          "name": "11 POST bad date window (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('error mentions dates', function () {",
+                  "    pm.expect(j.error).to.eql('bad_request');",
+                  "    pm.expect(j.message.toLowerCase()).to.match(/end_date|start_date/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"user_demo\",\n  \"project_text\": \"Need an excavator\",\n  \"start_date\": \"2026-09-12\",\n  \"end_date\": \"2026-09-01\"\n}\n"
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "`end_date` before `start_date` → 400."
+          },
+          "response": []
+        },
+        {
+          "name": "12 POST unsupported file type (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('unsupported message', function () {",
+                  "    pm.expect(j.error).to.eql('bad_request');",
+                  "    pm.expect(j.message.toLowerCase()).to.match(/unsupported|unclassified/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "user_id",
+                  "value": "{{userId}}",
+                  "type": "text",
+                  "description": "Required identity for ingest + KG session"
+                },
+                {
+                  "key": "user_name",
+                  "value": "Demo User",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "description": "Select postman/fixtures/unsupported.bin",
+                  "type": "file",
+                  "src": "fixtures/unsupported.bin"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Attach `postman/fixtures/unsupported.bin` → 400."
+          },
+          "response": []
+        },
+        {
+          "name": "13 POST empty file (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('shared error shape', function () {",
+                  "    pm.expect(j.error).to.eql('bad_request');",
+                  "    pm.expect(j.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "user_id",
+                  "value": "{{userId}}",
+                  "type": "text",
+                  "description": "Required identity for ingest + KG session"
+                },
+                {
+                  "key": "user_name",
+                  "value": "Demo User",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "description": "Select postman/fixtures/empty.txt",
+                  "type": "file",
+                  "src": "fixtures/empty.txt"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Attach `postman/fixtures/empty.txt` (0 bytes) → 400."
+          },
+          "response": []
+        },
+        {
+          "name": "14 POST multipart with no fields (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "const j = pm.response.json();",
+                  "pm.test('shared error shape', function () {",
+                  "    pm.expect(j.error).to.eql('bad_request');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "project_text",
+                  "value": "",
+                  "type": "text",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Empty multipart (no file, no text) → 400."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04 Portal dual-hop Call 2 + optional Call 3",
+      "description": "After Call 1 ingest in the **same** process:\n- **15/16 style:** ingest then **Call 2 recommend** (`getassetrecommendations`) — primary portal body\n- **Call 3 chatbot:** `project-knowledge/query` — optional free-form Q&A\n",
+      "item": [
+        {
+          "name": "15 POST ingest project-spec for multi-agent",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('lean FR-IX-023 body', function () {",
+                  "    pm.expect(j.ingest_id).to.match(/^ing_/);",
+                  "    pm.expect(j.user_id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.user_requirement_summary).to.be.a('string').and.not.empty;",
+                  "    pm.expect(j.needs_summary).to.be.an('array');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    // technical indexing/KG fields must not be required on public body",
+                  "    pm.expect(j).to.not.have.property('data_kind');",
+                  "    pm.expect(j).to.not.have.property('documents_written');",
+                  "    pm.expect(j).to.not.have.property('kg_built');",
+                  "    pm.expect(j).to.not.have.property('documents');",
+                  "    pm.expect(j).to.not.have.property('recommendation_id');",
+                  "    pm.expect(j).to.not.have.property('results_by_need');",
+                  "});",
+                  "if (j.ingest_id) {",
+                  "    pm.collectionVariables.set('ingestId', j.ingest_id);",
+                  "    pm.environment.set('ingestId', j.ingest_id);",
+                  "}",
+                  "if (j.user_id) {",
+                  "    pm.collectionVariables.set('userId', j.user_id);",
+                  "    pm.environment.set('userId', j.user_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "description": "Optional UUID per logical ingest (S2a / FR-IX-024). Same user_id+key → same ingest_id (process-local).",
+                "disabled": true
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed; server mints if omitted.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present (C1 logging-only).",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{userId}}\",\n  \"user_name\": \"Demo User\",\n  \"project_text\": \"Site preparation for foundation work. Requires a 20-ton excavator operating on soft clay soil. Project timeline is 8 weeks from mobilisation.\"\n}\n"
+            },
+            "url": "{{baseUrl}}{{ingestPath}}",
+            "description": "Ingest project text with distinctive capacity/soil/timeline tokens for dual-source multi-agent checks.\n\nOn success, Tests save `ingestId` and `userId` for request **16**."
+          },
+          "response": []
+        },
+        {
+          "name": "16 POST Call 2 recommend (getassetrecommendations)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.collectionVariables.get('ingestId') || pm.environment.get('ingestId');",
+                  "if (!id) {",
+                  "    console.warn('ingestId is empty — run request 15 first in this server process.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('Call 2 recommend 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('quote envelope (not Q&A answer)', function () {",
+                  "    pm.expect(j).to.have.property('quoteRef');",
+                  "    pm.expect(String(j.quoteRef)).to.match(/^QUO-/);",
+                  "    pm.expect(j).to.have.property('items');",
+                  "    pm.expect(j.items).to.be.an('array');",
+                  "    pm.expect(j.user_id).to.eql(pm.environment.get('userId') || j.user_id);",
+                  "    pm.expect(j.ingest_id).to.eql(pm.environment.get('ingestId') || j.ingest_id);",
+                  "    pm.expect(j).to.not.have.property('answer');",
+                  "    pm.expect(j).to.not.have.property('tool_traces');",
+                  "});",
+                  "pm.test('quote scores and items shape', function () {",
+                  "    // confidenceScore may be null when items empty",
+                  "    pm.expect(j).to.have.property('confidenceScore');",
+                  "    pm.expect(j).to.have.property('warnings');",
+                  "    pm.expect(j.warnings).to.be.an('array');",
+                  "    j.items.forEach(function (item) {",
+                  "        pm.expect(item).to.have.property('equipment');",
+                  "        pm.expect(item.equipment).to.have.property('id');",
+                  "        pm.expect(item.equipment.id).to.be.ok;",
+                  "        // live SQL: digit assets.id; fake: AST-* seed ids",
+                  "        if (item.mlPredictedPrice !== null && item.mlPredictedPrice !== undefined) {",
+                  "            pm.expect(Number(item.mlPredictedPrice)).to.be.above(0);",
+                  "            if (item.equipment.baseDailyRate !== null && item.equipment.baseDailyRate !== undefined) {",
+                  "                pm.expect(Number(item.equipment.baseDailyRate)).to.eql(Number(item.mlPredictedPrice));",
+                  "            }",
+                  "        }",
+                  "        if (item.matchScore !== null && item.matchScore !== undefined) {",
+                  "            pm.expect(Number(item.matchScore)).to.be.at.least(0);",
+                  "            pm.expect(Number(item.matchScore)).to.be.at.most(1);",
+                  "        }",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present.",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{userId}}\",\n  \"ingest_id\": \"{{ingestId}}\",\n  \"query\": \"{{agentQuery}}\",\n  \"top_k\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{projectKnowledgePath}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "v1",
+                "recommendations",
+                "project-knowledge",
+                "getassetrecommendations"
+              ]
+            },
+            "description": "**Call 2 recommend / quote.** Requires `userId` + `ingestId` from request 15.\n\nExpect 200: `quoteRef` (QUO-…), `items[]`, `confidenceScore`, optional `mlPredictedPrice` / `matchScore`.\nMust **not** include chatbot `answer` or `tool_traces`.\n\nLive SQL: `equipment.id` = `assets.id` (digit string). Fake/seed: `AST-*` ids."
+          },
+          "response": []
+        },
+        {
+          "name": "17 POST Call 3 chatbot Q&A (project-knowledge/query)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.collectionVariables.get('ingestId') || pm.environment.get('ingestId');",
+                  "if (!id) {",
+                  "    console.warn('ingestId is empty — run request 15 first in this server process.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('Call 3 Q&A 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('chatbot answer (not quote)', function () {",
+                  "    pm.expect(j).to.have.property('answer');",
+                  "    pm.expect(j.answer.length).to.be.above(0);",
+                  "    pm.expect(j).to.not.have.property('quoteRef');",
+                  "    pm.expect(j).to.not.have.property('items');",
+                  "    pm.expect(j.user_id).to.eql(pm.environment.get('userId') || j.user_id);",
+                  "    pm.expect(j.ingest_id).to.eql(pm.environment.get('ingestId') || j.ingest_id);",
+                  "    pm.expect(j).to.have.property('sources_used');",
+                  "    pm.expect(j.sources_used).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present.",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{userId}}\",\n  \"ingest_id\": \"{{ingestId}}\",\n  \"query\": \"{{agentQuery}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{projectKnowledgeQueryPath}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "v1",
+                "recommendations",
+                "project-knowledge",
+                "query"
+              ]
+            },
+            "description": "**Call 3 chatbot Q&A** over project DocumentStore + KG-1.\n\nExpect 200: non-empty `answer`, `sources_used[]`. Must **not** include `quoteRef` / `items`."
+          },
+          "response": []
+        },
+        {
+          "name": "18 POST Call 2 recommend missing session (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('missing session 404', function () { pm.response.to.have.status(404); });",
+                  "pm.test('error body', function () {",
+                  "  const j = pm.response.json();",
+                  "  pm.expect(j.error).to.eql('not_found');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present.",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"nobody\",\n  \"ingest_id\": \"ing_missing\",\n  \"query\": \"anything\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{projectKnowledgePath}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "v1",
+                "recommendations",
+                "project-knowledge",
+                "getassetrecommendations"
+              ]
+            },
+            "description": "Call 2 with unknown `ingest_id` → **404** `{\"error\":\"not_found\",...}`."
+          },
+          "response": []
+        },
+        {
+          "name": "19 POST Call 3 empty query (422 or 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('empty query rejected', function () {",
+                  "  pm.expect([400, 422]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}",
+                "description": "Optional end-to-end correlation (S2a / FR-IX-025). Logged + echoed.",
+                "disabled": true
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}",
+                "description": "Optional W3C Trace Context; logged when present.",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{userId}}\",\n  \"ingest_id\": \"{{ingestId}}\",\n  \"query\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{projectKnowledgeQueryPath}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "v1",
+                "recommendations",
+                "project-knowledge",
+                "query"
+              ]
+            },
+            "description": "Call 3 with empty `query` → **422** or **400**."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('Response time under 10s', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(10000);",
+          "});"
+        ]
+      }
+    }
+  ]
+}

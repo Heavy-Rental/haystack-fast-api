@@ -1,0 +1,282 @@
+# Contract: `POST /internal/v1/recommendations/submitprojectspecification`
+
+| Field | Value |
+|-------|--------|
+| **Capability** | [`../spec.md`](../spec.md) (indexing) |
+| **Design** | [`../design.md`](../design.md) |
+| **Status** | **as-built** lean Call 1 + **full FR-IX-023** (S1a–S1e) + **S2a** idempotency/correlation + **S3** optional agent gate + portal dual-hop note |
+| **DTO (as-built)** | `IngestFromProjectSpecResponse` (`app/schemas/indexing.py`) |
+| **Standards** | OpenSpec behaviour · Spec-kit contract tables · OpenSPDD (prompt/spec before code) |
+| **Resilience** | Stage **S2a** / track **C1** — [`Feasibility_Study/phase2-s2a-haystack-implementation-plan.md`](../../../../Feasibility_Study/phase2-s2a-haystack-implementation-plan.md) |
+| **Agent gate (S3)** | FR-IX-026 — [`../spec.md`](../spec.md) · `app/agents/indexing_gate.py` · `app/agents/tools.py` |
+
+Live HTTP owner: **indexing** (not FR-010 recommend on the public route).  
+Internal pipeline still: dual-branch index → DocumentStore write → mandatory KG-1 → project-knowledge session register (for Call 2).
+
+**Portal caller (Spring saga):** React `POST /api/recommendations/project-spec` → Spring **Call 1** hits **this** endpoint first, then Call 2 recommend; React’s primary UX body for that portal request is Call 2 (see `Feasibility_Study_Spring/portal-to-haystack-mapping.md`). This route is **not** skipped for project-spec submit.
+
+---
+
+## Call 1 execution path (S3 as-built)
+
+| Path | When | Behaviour |
+|------|------|-----------|
+| **Direct service (default)** | `INDEXING_VIA_AGENT_GATE=false` or unset | `IndexingIngestService.ingest_from_project_spec` |
+| **Coordinator gate [4]** | `INDEXING_VIA_AGENT_GATE=true` | Forced non-LLM LangGraph `START → index_gate → END` → in-process tool `run_indexing_from_request` → **same** `IndexingIngestService` |
+
+| Rule | Detail |
+|------|--------|
+| Public body | Identical lean FR-IX-023 on both paths |
+| Errors | MIME / KG / empty source → **400** / `{"error","message"}` on both paths |
+| S2a headers | `Idempotency-Key` + correlation still wrap the producer (outside the gate) |
+| LLM | Gate MUST NOT use LLM tool-calling; files never enter LLM context as raw bytes |
+| Modules | `app/agents/indexing_gate.py`, `app/agents/tools.py` (`run_indexing_from_request`) |
+| SuperComponent | Optional packaging (S3.3) — **not** required for this contract |
+
+---
+
+## Request headers (S2a as-built)
+
+| Header | Required | Notes |
+|--------|----------|--------|
+| `Idempotency-Key` | no | UUID (or opaque string) per **logical** ingest. When present, scoped with `user_id`. Successful **200** lean body is stored process-locally and **replayed** on retry (same `ingest_id`). Failed **4xx/5xx are not cached**. Missing key → always new ingest (legacy behaviour). |
+| `X-Correlation-Id` | no | End-to-end correlation. Logged on the request path; **echoed** on the response. If omitted, server mints a UUID. |
+| `traceparent` | no | Optional W3C Trace Context; logged when present (C1 logging-only). |
+
+**Idempotency rules (normative):**
+
+1. Applies to **successful ingest only** (HTTP 200 lean body).  
+2. Scope key = `user_id` + `Idempotency-Key` (same key under different users → different logical ingests).  
+3. JSON and multipart honour the same key.  
+4. Concurrent POSTs with the same scoped key use **single-flight** (wait for first producer; no double logical index).  
+5. Store is **process-local memory** (optional TTL via `IDEMPOTENCY_TTL_SECONDS`, default 24h). **Not multi-replica safe** without a later shared store.  
+6. Clients MAY retry **5xx** (and timed-out requests) with the **same** `Idempotency-Key`. Do **not** reuse a key for a different logical project-spec.
+
+### Example headers
+
+```http
+Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
+X-Correlation-Id: spring-req-abc123
+traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01
+```
+
+---
+
+## Request headers (S2a as-built)
+
+| Header | Required | Notes |
+|--------|----------|--------|
+| `Idempotency-Key` | no | UUID (or opaque string) per **logical** ingest. When present, scoped with `user_id`. Successful **200** lean body is stored process-locally and **replayed** on retry (same `ingest_id`). Failed **4xx/5xx are not cached**. Missing key → always new ingest (legacy behaviour). |
+| `X-Correlation-Id` | no | End-to-end correlation. Logged on the request path; **echoed** on the response. If omitted, server mints a UUID. |
+| `traceparent` | no | Optional W3C Trace Context; logged when present (C1 logging-only). |
+
+**Idempotency rules (normative):**
+
+1. Applies to **successful ingest only** (HTTP 200 lean body).  
+2. Scope key = `user_id` + `Idempotency-Key` (same key under different users → different logical ingests).  
+3. JSON and multipart honour the same key.  
+4. Concurrent POSTs with the same scoped key use **single-flight** (wait for first producer; no double logical index).  
+5. Store is **process-local memory** (optional TTL via `IDEMPOTENCY_TTL_SECONDS`, default 24h). **Not multi-replica safe** without a later shared store.  
+6. Clients MAY retry **5xx** (and timed-out requests) with the **same** `Idempotency-Key`. Do **not** reuse a key for a different logical project-spec.
+
+### Example headers
+
+```http
+Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
+X-Correlation-Id: spring-req-abc123
+traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01
+```
+
+---
+
+## Request
+
+| Field | Required | Notes |
+|-------|----------|--------|
+| `user_id` | **yes** | Tenant for meta + KG path; also scopes `Idempotency-Key` |
+| `user_name` | no | Audit only (not on lean public response) |
+| `project_text` and/or `file` | one non-empty source | JSON-only needs non-empty text |
+| `start_date` / `end_date` | no | Window valid if both set; echoed as `tentative_*` (S1b); free-text extract when omitted (S1e) |
+| `options` / `include_pricing` | no | Accepted; **boolean** for future recommend pricing — **not** a budget amount |
+
+Sources: multipart file uploads are packaged as Haystack `ByteStream` with `mime_type` derived from filename extension. Non-empty JSON `project_text` is unstructured `text/plain` when no file (or in addition to file sources).
+
+**As-built source merge:** extracted file text is used **before** `project_text`. The placeholder caption `"Optional caption alongside file"` is ignored so a multipart caption does not replace the brief.
+
+### Example request (JSON)
+
+```json
+{
+  "user_id": "user_demo",
+  "user_name": "Demo User",
+  "project_text": "Indoor elevated work ~8m; need scissors lift on soft clay.",
+  "start_date": "2026-09-01",
+  "end_date": "2026-09-12",
+  "options": { "include_pricing": true }
+}
+```
+
+---
+
+## Success response `200` — as-built lean `IngestFromProjectSpecResponse`
+
+| Field | Type | Notes |
+|-------|------|--------|
+| `ingest_id` | string | `ing_` + hex — **required handle for Call 2 / Call 3** |
+| `user_id` | string | Echo of request |
+| `user_requirement_summary` | string | Deterministic summary of **extracted file text first**, then `project_text` (not raw bytes; not the placeholder caption); may be truncated |
+| `tentative_start_date` | date \| null | **S1b+S1e as-built:** request preferred; else free-text/file extract when confident; else `null` |
+| `tentative_end_date` | date \| null | **S1b+S1e as-built:** request preferred; else free-text/file extract when confident; else `null` |
+| `needs_summary` | array | **S1c as-built:** structured needs after index+KG via need decomposer (`NEED_DECOMPOSER=stub` in CI; live may use `llm`) |
+| `needs_summary[].need_id` | string \| null | Optional stable id (e.g. `need_1`) |
+| `needs_summary[].description` | string | Human-readable need |
+| `needs_summary[].equipment_hints` | string[] | Optional category/type hints; stub / LLM-empty fallback emits **one need per approved type** using hints |
+| `needs_summary[].quantity` | int \| null | Optional |
+| `expected_budget` | object \| null | **S1d as-built:** extract only when confident; null + warning if not found; never invent |
+| `expected_budget.amount` | number | When extracted |
+| `expected_budget.currency` | string \| null | e.g. `SGD` |
+| `expected_budget.source` | string | e.g. `extracted` |
+| `warnings` | string[] | Soft issues (e.g. truncated summary, empty needs, budget not found); empty when none |
+
+### Example (as-built lean + full FR-IX-023 S1a–S1e)
+
+```json
+{
+  "ingest_id": "ing_a1b2c3d4e5f6",
+  "user_id": "user_demo",
+  "user_requirement_summary": "Need a forklift and a scissors lift for indoor work ~8m. Budget SGD 15000. From 1 Sep 2026 to 30 Sep 2026.",
+  "tentative_start_date": "2026-09-01",
+  "tentative_end_date": "2026-09-30",
+  "needs_summary": [
+    {
+      "need_id": "need_1",
+      "description": "Need a forklift",
+      "equipment_hints": ["forklift"],
+      "quantity": 1
+    },
+    {
+      "need_id": "need_2",
+      "description": "Need a scissors lift for indoor work ~8m",
+      "equipment_hints": ["scissor lift"],
+      "quantity": 1
+    }
+  ],
+  "expected_budget": {
+    "amount": 15000,
+    "currency": "SGD",
+    "source": "extracted"
+  },
+  "warnings": []
+}
+```
+
+### Not on public body (still executed internally)
+
+| Concern | Where |
+|---------|--------|
+| Chunk previews, counts, `data_kind`, mime/filenames | Indexing pipeline + session `meta` |
+| `kg_built`, node/rel counts, artifact path, transforms | KG runner + session registry |
+| Session DocumentStore + KG-1 | `ProjectKnowledgeSession` for Call 2 (store from `create_session_document_store()`; memory default or pgvector flag; FR-IX-028) |
+
+### FR-IX-023 as-built checklist (Phase 1.7)
+
+All Call 1 project-spec summary increments are **as-built** (implementation-plan Phase 1):
+
+| Stage | Field / behaviour | Status |
+|-------|-------------------|--------|
+| **S1a** | `ingest_id`, `user_id`, `user_requirement_summary`, `warnings` | **as-built** |
+| **S1b** | Request date **echo** as `tentative_*` | **as-built** |
+| **S1c** | `needs_summary[]` via need decomposer | **as-built** |
+| **S1d** | `expected_budget` extract-only (never invent) | **as-built** |
+| **S1e** | Free-text / file date extract when request omits dates (request preferred) | **as-built** |
+| **1.7** | OpenSpec + Postman + regression mark full FR-IX-023 as-built | **as-built** |
+
+**Date extract (S1e) recognized forms:** ISO; `DD/MM/YYYY` and `MM/DD/YYYY` when unambiguous; English months (`1 Sep 2026`, `Sep 1, 2026`, ordinals, hyphenated names, two-digit years); dotted/slashed numerics; compact `YYYYMMDD`; ISO datetimes; quarters (`Q3 2026`); month-only; `start/end of September`; `this/next month`. Heights like `8m` are **not** dates. Request dates still win over extract.
+
+**Budget extract (S1d) recognized forms:** `SGD8000`, `SGD 8k`, `1.5m SGD`, spoken currency, `RM`, yen, cue + bare number (`budget of 8000`), spaced thousands, `$8000` / `$12,500` when the figure looks like money. **Not** a budget: words only (`tight budget`), `$10` room-size, `8m` / `20 ton`.
+
+Default response **SHOULD** stay compact (no public `documents[]` / `kg_*`).
+
+### Still not on Call 1 (default path)
+
+| Field | Why |
+|-------|-----|
+| `recommendation_id` / `results_by_need` | Call 3 / FR-010 reattach |
+| Ranked `item.asset_id` / ML `daily_rate` | Fleet + pricing tools after ingest |
+
+---
+
+## Error notes (`400` / shared shape)
+
+Error body shape (as-built): `{"error":"<code>","message":"<text>"}` (shared handlers in `app/core/errors.py`).
+
+| Case | Notes |
+|------|--------|
+| Missing `user_id` | Required for meta + KG path (FR-IX-021) |
+| Unclassified / unsupported type | Outside MIME map → 400 (FR-IX-003) |
+| Empty file bytes / empty combined sources | FR-IX-009 |
+| Zero documents after classification (hard conversion failure) | FR-IX-013 |
+| Zero written chunks | FR-IX-016 |
+| KG hard-fail | No lean success body; no session register for that ingest |
+| Validation / bad content-type | `bad_request` — **not** stored under `Idempotency-Key` |
+
+**Retry guidance (S2a):** Spring MAY retry **5xx** and transport timeouts with the same `Idempotency-Key`. **4xx** indicate client/input problems — fix the request before reusing a key (or use a new key for a new logical ingest).
+
+**Ops limits (document only in C1):** process-local idempotency map; multi-replica requires a shared store (out of scope S2a). Max upload size is deployment/proxy-dependent (Uvicorn/reverse-proxy); no app-level hard cap beyond MIME validation.
+
+---
+
+## Verification (S3 / FR-IX-026)
+
+Full runbook: [`../design.md` — How to test this capability](../design.md#how-to-test-this-capability-runbook).  
+Requirement scenarios: [`../spec.md` FR-IX-026](../spec.md) + [How to test](../spec.md#how-to-test-fr-ix-026--s3--verification-instructions).
+
+### Automated
+
+```bash
+cd haystack-fast-api
+uv run pytest tests/test_indexing_tool.py -q
+```
+
+Flag on/off is set **inside** tests; shell env not required for pytest.
+
+### Manual Call 1 (both paths)
+
+| Step | Flag off (default) | Flag on |
+|------|--------------------|---------|
+| Env | unset / `INDEXING_VIA_AGENT_GATE=false` | `INDEXING_VIA_AGENT_GATE=true` |
+| Start | `uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload` | same |
+| Request | `POST /internal/v1/recommendations/submitprojectspecification` with `user_id` + `project_text` | same body |
+| Success | **200** lean FR-IX-023 fields | **same** lean shape |
+| Failure | unsupported file → **400** | **400** (parity) |
+
+Example success body shape (fields only; values vary):
+
+```json
+{
+  "ingest_id": "ing_…",
+  "user_id": "user_demo",
+  "user_requirement_summary": "…",
+  "tentative_start_date": null,
+  "tentative_end_date": null,
+  "needs_summary": [],
+  "expected_budget": null,
+  "warnings": []
+}
+```
+
+### Postman
+
+Import `postman/Indexing-Pipeline.postman_collection.json` + local env ([`postman/README.md`](../../../../postman/README.md)).  
+Gate path: restart the server with `INDEXING_VIA_AGENT_GATE=true`, then re-run Call 1 requests (collection is path-agnostic).
+
+---
+
+## Call 2 handoff
+
+Spring (or portal) stores `user_id` + `ingest_id` from this response, then calls:
+
+`POST /internal/v1/recommendations/project-knowledge/getassetrecommendations`
+
+For React **project-spec submit**, Call 2 **recommend** (`getassetrecommendations` quote) is the required second hop; Call 2 body is primary to React. Optional Call 3 chatbot: [`project-knowledge-query.md`](../../knowledge-graph/contracts/project-knowledge-query.md). Mapping: [`portal-to-haystack-mapping.md`](../../../../Feasibility_Study_Spring/portal-to-haystack-mapping.md).  
+Recommend contract: [`get-asset-recommendations.md`](../../recommendation-pipeline/contracts/get-asset-recommendations.md).

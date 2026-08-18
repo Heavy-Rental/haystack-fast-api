@@ -1,0 +1,129 @@
+# Traceability matrix — legacy `specification/` → OpenSpec
+
+Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** · **OpenSPDD**.
+
+## File map
+
+| Legacy path | New path | Notes |
+|-------------|----------|--------|
+| `specification/README.md` | `openspec/AGENTS.md` + `openspec/README.md` | Runtime flow, paths A–D, conflict rules |
+| `specification/00-overview.md` | `openspec/project.md` | Vision, product focus, stakeholders |
+| `specification/SPEC-project.md` | `openspec/project.md` | Merged identity |
+| `specification/01-domain.md` | `openspec/specs/domain/spec.md` | 12 requirements + scenarios |
+| `specification/SPEC-project-setup.md` | `openspec/specs/project-setup/spec.md` + `design.md` | Runbooks → design; principles → constitution |
+| — | `.specify/memory/constitution.md` | Spec-kit constitution (new) |
+| `specification/SPEC-indexing-file-type-router.md` | `openspec/specs/indexing/spec.md` + `design.md` + `contracts/ingest-from-project-spec.md` | FR-IX-001…022 + MIME map |
+| `specification/SPEC-knowledge-graph.md` | `openspec/specs/knowledge-graph/spec.md` + `design.md` + `contracts/project-knowledge-query.md` | FR-KG-001…014 |
+| `specification/SPEC-knowledge-graph.md` §10 | `docs/testing/knowledge-graph-testing-guide.md` | Verification only |
+| `specification/SPEC-recommendation-intake.md` | `openspec/specs/recommendation-intake/spec.md` | FR-I-001…015 live/deferred |
+| `specification/SPEC-recommendation-pipeline.md` | `openspec/specs/recommendation-pipeline/spec.md` + `design.md` | FR-010.1–8 + FR-P-001…012 |
+| `specification/SPEC-dynamic-pricing.md` | `openspec/specs/dynamic-pricing/spec.md` + `design.md` | US-1…3 + feature schema in design |
+| `specification/SPEC-agentic-equipment-recommendation-and-pricing.md` | `openspec/specs/equipment-recommendation/spec.md` + `design.md` | Parent FR-001…053 + design REASONS |
+| `specification/SPEC-recommendation-intake-and-pipeline-front.md` | `openspec/changes/archive/2026-08-07-hr-65-intake-front/` | Historical full capture |
+| `specification/SPEC-recommendation-pipeline-testing-guide.md` | `docs/testing/recommendation-pipeline-testing-guide.md` | |
+| `specification/SPEC-recommendation-postman-testing-guide.md` | `docs/testing/recommendation-postman-testing-guide.md` | Deferred |
+| `specification/tasks-indexing-file-type-router.md` | `openspec/changes/archive/2026-08-07-indexing-file-type-router/tasks.md` | |
+| `specification/tasks-knowledge-graph.md` | `openspec/changes/archive/2026-08-07-knowledge-graph-hr-76/tasks.md` | |
+| `specification/tasks-kg-multi-agent-stage1.md` | `openspec/changes/archive/2026-08-08-kg-multi-agent-stage1/tasks.md` | |
+| `specification/SPEC-spring-entity-repository.md` | `openspec/specs/spring-entity-repository/spec.md` | Spring JPA entity/repo catalog (haystack read copy) |
+| — (S2a new) | `openspec/changes/archive/2026-08-12-s2a-ingest-idempotency-correlation/` | FR-IX-024/025 proposal + tasks |
+| — (S3 new) | `openspec/changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/` | FR-IX-026 proposal + tasks |
+| — (S6 new) | `openspec/changes/archive/2026-08-12-s6-predict-asset-price-tool/` | US-5 / Phase 6 agent pricing tool |
+| — (S7.0 new) | `openspec/changes/archive/2026-08-12-s7-0-recommend-agent-state/` | Phase 7 RecommendAgentState + F-2 partition validation |
+| — (S7.1 new) | `openspec/changes/archive/2026-08-12-s7-1-fleet-tool-catalog/` | Phase 7 fleet/needs in-process tool catalog + DI factory |
+| — (S7.3 + S7.4 new) | `openspec/changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/` | Phase 7 recommend LangGraph DAG + tool-free stub synthesis |
+| — (S7.5 + S7.6 new) | `openspec/changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/` | Phase 7 Call 2 graph enrich + tool_traces duration |
+| — (S7.7 new) | `openspec/changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/` | Phase 7 recommend prompts A–L + tool DI / Delegator allowlist |
+| — (S7.2 new) | `openspec/changes/archive/2026-08-13-s7-2-neo4j-tools/` | Phase 7 Neo4j tools (templates + populate no-op; K-3 skip) |
+| — (S4 new) | `openspec/changes/archive/2026-08-13-s4-live-sql-fleet-backend/` | Phase 4 app: D0 fleet-read contract + live SQL fleet backend |
+| — (S8.1 new) | `openspec/changes/archive/2026-08-13-s8-1-t3-neo4j-populate/` | Phase 8.1 T3 config pack neo4j-populate as-built stamp |
+| — (S2b new) | `openspec/changes/archive/2026-08-13-s2b-spring-resilience-stamp/` | Phase 2 S2b Spring client/saga as-built stamp |
+| — (process doc) | `openspec/specs/portal-dual-hop/spec.md` | Call 1 → Call 2 dual-hop process (FR-PDH-001…011); links indexing + recommend contracts |
+| — (S8.2 new) | `openspec/changes/archive/2026-08-13-s8-2-t4-neo4j-populate-trigger/` | Phase 8.2 T4 config post-sync + admin HTTP as-built stamp |
+| — (S8.3 new) | `openspec/changes/archive/2026-08-13-s8-3-live-neo4j-tools/` | Phase 8.3 app live Neo4j Bolt client + populate HTTP |
+| — (S7.8 new) | `openspec/changes/archive/2026-08-13-s7-8-worker5-kg1-live/` | Worker [5] live KG-1 vector + project KG query |
+| `app/agents/prompts.py` | `openspec/spdd/prompts/project-knowledge-agents.md` (index) | OpenSPDD first-class Stage-1 Q&A prompts |
+| `app/agents/recommend_prompts.py` | `openspec/spdd/prompts/recommend-agents.md` (index) | OpenSPDD first-class recommend A–L prompts (S7.7) |
+
+## FR / requirement ID map
+
+| Legacy ID range | Capability | OpenSpec home |
+|-----------------|------------|---------------|
+| FR-IX-001 … FR-IX-022 | Indexing | `specs/indexing/spec.md` |
+| FR-IX-017 lean (as-built S1a) | Indexing — Call 1 lean body (`ingest_id`, `user_id`, `user_requirement_summary`) | `specs/indexing/spec.md` + contract |
+| FR-IX-023 dates echo (as-built S1b) | Indexing — `tentative_*` echo request dates | `specs/indexing/spec.md` + contract |
+| FR-IX-023 S1c (as-built) | Indexing — `needs_summary[]` | `specs/indexing/spec.md` + contract; impl-plan **1.4** |
+| FR-IX-023 S1d (as-built) | Indexing — `expected_budget` | `specs/indexing/spec.md` + contract; impl-plan **1.5** |
+| FR-IX-023 S1e (as-built) | Indexing — free-text/file date extract | `specs/indexing/spec.md` + contract; impl-plan **1.6** |
+| FR-IX-023 Call 1 summary (as-built) | Full lean summary S1a–S1e | `specs/indexing/spec.md` + contract; impl-plan **1.7** |
+| FR-IX-024 (as-built S2a) | Indexing — `Idempotency-Key` process-local store; same key → same `ingest_id` | `specs/indexing/spec.md` + contract; impl-plan **2.3** / S2a |
+| FR-IX-025 (as-built S2a) | Indexing — `X-Correlation-Id` / `traceparent` log + echo (all routes incl. Call 2) | `specs/indexing/spec.md` + contract; impl-plan **2.4** / S2a |
+| FR-IX-026 (as-built S3) | Indexing — optional Coordinator gate **[4]** + `run_indexing_from_request` behind `INDEXING_VIA_AGENT_GATE` (default off); lean body parity | `specs/indexing/spec.md` + contract + design; `app/agents/indexing_gate.py` · `app/agents/tools.py`; impl-plan **Phase 3 / S3** · **test runbook:** `specs/indexing/design.md#how-to-test-this-capability-runbook` |
+| FR-IX-027 (as-built S5-I0) | Indexing — `INDEXING_DOCUMENT_STORE` + `build_document_store()` (`memory` default \| `pgvector`) | `specs/indexing/spec.md` + design; `app/pipelines/indexing/document_store.py`; `tests/test_document_store_factory.py`; impl-plan **Phase 5 / 5.2 I0** · archive `changes/archive/2026-08-12-s5-i0-document-store-factory/` |
+| FR-IX-028 (as-built S5-I1) | Indexing — I1 pipeline/session factory wire; retrieval filters `user_id`+`ingest_id`; optional TTL/delete; dual-mode `@pytest.mark.pgvector` | `specs/indexing/spec.md` + design; `document_store.py` / `retrieval.py` / `project_chunk_cleanup.py` / `indexing.py`; `tests/test_tenant_vector_isolation.py` · `test_project_chunk_cleanup.py` · `test_pgvector_isolation.py`; impl-plan **Phase 5 / 5.3–5.6** · archive `changes/archive/2026-08-12-s5-i1-document-store-pipeline-wire/` |
+| S3 agent gate (as-built) | Same as FR-IX-026 | `changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/` |
+| S5-I0 store factory (as-built) | Same as FR-IX-027 | `changes/archive/2026-08-12-s5-i0-document-store-factory/` |
+| S5-I1 pipeline wire (as-built) | Same as FR-IX-028 | `changes/archive/2026-08-12-s5-i1-document-store-pipeline-wire/` |
+| Portal dual-hop (docs) | React project-spec → Call 1 → **Call 2 recommend quote** → React; Call 3 = chatbot Q&A | `AGENTS.md` · recommend + KG contracts · `portal-to-haystack-mapping.md` v2.1 · impl-plan §1.2.0 |
+| Call 2 quote hydration (as-built) | Quote `equipment.id` = `assets.id` (live SQL); DTO `asset_id` = `assets.name`; extra catalog fields; evidence scores; `PRICING_SCHEMA` | `specs/recommendation-pipeline/contracts/get-asset-recommendations.md` · `fleet-read-contract.md` · impl-plan **3.18.0** |
+| Call 1 extract expansions (as-built) | File-before-text + ignore caption; multi-need hint split; expanded date/budget patterns | `specs/indexing/spec.md` + ingest contract; impl-plan **3.18.0** |
+| S2a change archive | Idempotency + correlation tasks | `changes/archive/2026-08-12-s2a-ingest-idempotency-correlation/` |
+| S2b (as-built Spring) | Resilience C1 client + saga in heavy-rental-spring-rest-api | Spring plan v2.1.1; impl-plan **3.14.0**; archive `changes/archive/2026-08-13-s2b-spring-resilience-stamp/` |
+| S3 change archive | Agent indexing tool + Coordinator gate | `changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/` |
+| Portal dual-hop (superseded) | Earlier Call 2 = Q&A wording | `changes/2026-08-12-portal-dual-hop-docs/` (**superseded**) |
+| Call 2 recommend + Call 3 Q&A | Breaking renumber | `changes/2026-08-12-call2-recommend-call3-qa/` |
+| FR-I-016 (as-built alignment) | Intake — FR-IX-023 summary ≠ recommend | `specs/recommendation-intake/spec.md` |
+| MIME map §3 | Indexing | Requirement: MIME classification map |
+| FR-KG-001 … FR-KG-008 | KG Part A | `specs/knowledge-graph/spec.md` |
+| FR-KG-010 … FR-KG-014 | KG Part B (011 Stage 2) | same |
+| FR-I-001 … FR-I-015 | Intake | `specs/recommendation-intake/spec.md` |
+| FR-010.1 … FR-010.8 | Pipeline | `specs/recommendation-pipeline/spec.md` |
+| FR-P-001 … FR-P-012 | Pipeline | same |
+| US-1 … US-4 + pricing FRs | Dynamic pricing | `specs/dynamic-pricing/spec.md` |
+| US-5 / S6 (as-built) | Dynamic pricing — agent tool `predict_asset_price` → `pricing_client` | `specs/dynamic-pricing/spec.md` + design; `app/agents/tools.py`; `tests/test_predict_asset_price_tool.py`; impl-plan **Phase 6 / S6** · archive `changes/archive/2026-08-12-s6-predict-asset-price-tool/` |
+| S6 change archive | predict_asset_price tool tasks | `changes/archive/2026-08-12-s6-predict-asset-price-tool/` |
+| S7.0 (as-built) | Equipment recommendation — `RecommendAgentState` + F-2 partition validation | `specs/equipment-recommendation/spec.md` + design; `app/agents/recommend_state.py`; `tests/test_recommend_agent_state.py`; impl-plan **Phase 7 / S7.0** · archive `changes/archive/2026-08-12-s7-0-recommend-agent-state/` |
+| S7.1 (as-built) | Equipment recommendation — fleet/needs allowlisted tools + DI factory | `specs/equipment-recommendation/spec.md`; `app/agents/fleet_tools.py` · `tool_factory.py`; `tests/test_fleet_tools.py` · `test_tool_factory.py`; impl-plan **Phase 7 / S7.1** · archive `changes/archive/2026-08-12-s7-1-fleet-tool-catalog/` |
+| S7.0 change archive | RecommendAgentState + validation tasks | `changes/archive/2026-08-12-s7-0-recommend-agent-state/` |
+| S7.1 change archive | Fleet tool catalog tasks | `changes/archive/2026-08-12-s7-1-fleet-tool-catalog/` |
+| S7.3 (as-built) | Equipment recommendation — recommend LangGraph DAG (gate → [5] → Delegator → ([6]→[7])×N) | `specs/equipment-recommendation/spec.md` + design; `app/agents/recommend_graph.py` · `recommend_nodes.py`; `tests/test_recommend_graph_order.py` · `test_recommend_fanout.py`; impl-plan **Phase 7 / S7.3** · archive `changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/` |
+| S7.4 (as-built) | Equipment recommendation — tool-free Coordinator synthesis [8] | `specs/equipment-recommendation/spec.md`; `app/agents/recommend_synthesis.py`; `tests/test_recommend_synthesis.py`; impl-plan **Phase 7 / S7.4** · same archive |
+| S7.3/S7.4 change archive | Recommend graph + synthesis tasks | `changes/archive/2026-08-12-s7-3-s7-4-recommend-graph-synthesis/` |
+| S7.5 (as-built) | Equipment recommendation — Call 2 multi-agent enrich behind `RECOMMEND_VIA_AGENT_GRAPH` (same quote DTO) | `specs/equipment-recommendation/spec.md` + recommendation-pipeline contract; `app/services/session_recommend.py`; `tests/test_recommend_http_call2.py`; impl-plan **Phase 7 / S7.5** · archive `changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/` |
+| S7.6 (as-built) | Equipment recommendation — G-1 `tool_traces` (`role`, `need_id`, `duration_ms`) | `specs/equipment-recommendation/spec.md`; `app/agents/recommend_traces.py`; `tests/test_tool_traces.py`; impl-plan **Phase 7 / S7.6** · same archive |
+| S7.5/S7.6 change archive | Call 2 enrich + traces tasks | `changes/archive/2026-08-12-s7-5-s7-6-call2-enrich-traces/` |
+| S7.7 (as-built) | Equipment recommendation — A–L prompt contracts + tool DI + Delegator `worker_kind` allowlist | `specs/equipment-recommendation/spec.md` + design; `app/agents/recommend_prompts.py` · `tool_factory.py`; `tests/test_recommend_prompts.py` · `test_agent_tool_di.py`; impl-plan **Phase 7 / S7.7** · archive `changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/` |
+| S7.7 change archive | Prompts A–L + tool DI tasks | `changes/archive/2026-08-13-s7-7-prompts-a-l-tool-di/` |
+| S7.8 (as-built) | Equipment recommendation — Worker [5] live `project_vector_search` + `project_kg_query` before decompose | `specs/equipment-recommendation/spec.md`; `app/agents/recommend_nodes.py`; `tests/test_recommend_project_worker.py`; impl-plan **3.17.0**; archive `changes/archive/2026-08-13-s7-8-worker5-kg1-live/` |
+| S7.2 (as-built) | Equipment recommendation — KG-2 tools `neo4j_cypher_read` (templates) + `trigger_neo4j_populate` (non-blocking no-op); K-3 skip when empty | `specs/equipment-recommendation/spec.md` + design; `app/agents/neo4j_tools.py` · `tool_factory.py`; `tests/test_neo4j_tools.py`; impl-plan **Phase 7 / S7.2** · archive `changes/archive/2026-08-13-s7-2-neo4j-tools/` |
+| S7.2 change archive | Neo4j tool catalog tasks | `changes/archive/2026-08-13-s7-2-neo4j-tools/` |
+| S4 (as-built app) | Fleet LTM read — `FLEET_BACKEND=sql` + `FleetRepository`; D0 map | `specs/spring-entity-repository/fleet-read-contract.md`; `app/repositories/fleet_repository.py`; `tests/test_fleet_repository.py`; impl-plan **Phase 4 / S4 app**; archive `changes/archive/2026-08-13-s4-live-sql-fleet-backend/` |
+| S4 (as-built config T0–T2) | Pack `develop`: 60s poll, `SYNC_TABLE_ALLOWLIST`, METRICS; table-name alignment follow-up | Config repo `Haystack-Fast-API/`; impl-plan **3.12.0**; dual-plane **2.8.0** |
+| S8.1 T3 (as-built config) | `neo4j-populate` SQL→Cypher MERGE; `:Asset`/`:Booking`/`:Category` isolated from `:Document` | Pack spec `005-haystack-neo4j-populate`; impl-plan **3.13.0**; archive `changes/archive/2026-08-13-s8-1-t3-neo4j-populate/` |
+| S8.2 T4 (as-built config) | Post-sync populate trigger + admin HTTP `:8089`; scoped delete; never drop KG-1 | Pack spec 005 T4; impl-plan **3.15.0**; archive `changes/archive/2026-08-13-s8-2-t4-neo4j-populate-trigger/` |
+| S8.3 (as-built app) | Live `neo4j_cypher_read` / `trigger_neo4j_populate` (`NEO4J_BACKEND=bolt`; default fake); FR-KG-011 load | `app/agents/neo4j_tools.py`; `tests/test_neo4j_tools.py` · `test_neo4j_tools_integration.py`; impl-plan **3.16.0**; archive `changes/archive/2026-08-13-s8-3-live-neo4j-tools/` |
+| FR-KG-011 (as-built) | KG-2 persist (pack S8.1–S8.2) + load (app S8.3) | `specs/knowledge-graph/spec.md` |
+| FR-001 … FR-053 (+ NFR, demo) | Equipment recommendation parent | `specs/equipment-recommendation/spec.md` |
+| Domain invariants | Domain | `specs/domain/spec.md` |
+| Setup / layering / stack | Project setup | `specs/project-setup/spec.md` |
+| Default pytest isolation (as-built) | Project setup + indexing FR-IX-015 + KG FR-KG-014 | `specs/project-setup/spec.md` · `tests/conftest.py` forces mock embedder dim 384; vector query/store dim match |
+| FR-IX-015 embedder (query/store dim) | Indexing | `specs/indexing/spec.md` (0.8.1) |
+
+## Standards compliance checklist
+
+| Check | Status |
+|-------|--------|
+| OpenSpec `openspec/specs/<cap>/spec.md` for all capabilities | Yes |
+| `### Requirement:` + `#### Scenario:` with WHEN/THEN | Yes (~119 req, ~141 scenarios) |
+| Design as REASONS Canvas (OpenSPDD) for major caps | Yes |
+| Spec-kit constitution | Yes (`.specify/memory/constitution.md`) |
+| User stories on product-facing caps | Yes |
+| Contracts for live HTTP | Yes (ingest + project-knowledge query) |
+| Structured agent prompts indexed (OpenSPDD) | Yes |
+| Testing guides not mislabeled as behaviour SoT | Yes (`docs/testing/`) |
+| Historical HR-65 archived | Yes |
+| Legacy path stubs | **Removed 2026-08-13** (`specification/` deleted; map above) |
+
+## Soft-compat
+
+`specification/` was **removed on 2026-08-13**. Redirect stubs are gone. Start at [`AGENTS.md`](./AGENTS.md). The table above is the historical path map only.

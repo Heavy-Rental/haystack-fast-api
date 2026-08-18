@@ -1,0 +1,8 @@
+---
+compose_dir: /opt/heavy-rental
+secret_json_path: /run/heavy-rental/app.json
+env_path: /opt/heavy-rental/.env
+aws_region: us-east-1
+haystack_image: ""
+image_http_url: ""
+image_ref: ""

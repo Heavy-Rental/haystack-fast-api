@@ -1,0 +1,1340 @@
+# =============================================================================
+# Heavy Rental haystack-fast-api — Release CI Pipeline (reusable)
+# =============================================================================
+# Stages (priority order — Integration is highest priority):
+#   1. Integration      (HIGHEST) checkout, Python 3.12 + uv, Haystack smoke
+#   2. Quality Control  needs Integration — Ruff + pytest
+#   3. Security Testing needs Integration — SAST (Semgrep p/python) + Trivy
+#   4. CodeQL Analysis  needs Integration — GitHub CodeQL (Python)
+#   5. Packaging        needs Integration + QC + Security + CodeQL
+#                       uv build + Docker image (tar artifact; GHCR
+#                       haystack_recommender:<semver> + :latest, off PR)
+#
+# Security report format (standard): SARIF 2.1.0
+#   - Semgrep → semgrep.sarif
+#   - Trivy FS → trivy-fs.sarif
+#   - CodeQL → GitHub Code Scanning (native SARIF via analyze)
+#
+# GitHub Flow
+# --------------------------------------------------------------------------
+# Invoked via haystack-release-caller.yml when:
+#   - a GitHub Release is published, or
+#   - a pull request is opened/updated from develop → master
+# Feature-branch PR validation remains haystack-ci-caller.yml (Integration first).
+#
+#   feature → develop (CI) → PR develop→master and/or publish GitHub Release
+#     → this pipeline
+#
+# Same gates as integration-pipeline.yml plus uv build wheel/sdist artifacts
+# and a Docker image (gzipped tar always; GHCR haystack_recommender push
+# outside pull requests).
+# Always generates a Python 3.12 + uv + uvicorn image (Haystack FastAPI).
+# An app Dockerfile is not the deploy image. Portable:
+#   docker run -p 8000:8000 -e DATABASE_URL=… <image>
+# Endpoints: GET /docs and GET /health on :8000.
+# The image is env-driven for estate keys: no lab hostnames, POSTGRES_*,
+# SOURCE_* / TARGET_* (SoR → Haystack RDS sync), or NEO4J_URI in ENV/ARG.
+# Product knobs come from a sanitized .env.prod copied to /app/.env
+# (pydantic Settings env_file). Process env (compose SM / docker -e) wins.
+# Packaging refuses baked ENV/ARG and estate secrets in that file, starts
+# uvicorn briefly, and requires GET /docs or GET /health (200–302).
+# It does not connect to RDS or an LLM.
+#
+# Application:
+#   https://github.com/Heavy-Rental/haystack-fast-api
+#   Python 3.12 · uv · FastAPI · Haystack 2.x
+#
+# How haystack-fast-api uses this on release
+# ------------------------------------------
+# Install both files into the application repository:
+#
+#   .github/workflows/release-pipeline.yml            ← this file (reusable only)
+#   .github/workflows/haystack-release-caller.yml     ← sole allowed entry point
+#
+# Local validation (pipeline-development repo root, in the devcontainer):
+#   actionlint haystack-fast-api-pipeline/release-pipeline/release-pipeline.yml
+#   act — see haystack-fast-api-pipeline/act/README.md
+#
+# GHCR push uses GITHUB_TOKEN (packages: write). No LLM / DB secrets.
+# Registry image: ghcr.io/<owner>/haystack_recommender:<x.y.z> and :latest.
+# <x.y.z> is the previous GHCR semver patch-bumped (first publish: 1.0.0).
+# Image is saved as a gzipped tar for a later deploy project that cannot pull GHCR.
+# This family does not provision infrastructure, deploy, or operate production.
+# =============================================================================
+
+name: Haystack Release Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      app_repository:
+        description: >
+          Override application repository (owner/name). Leave empty to use the
+          calling repository.
+        required: false
+        type: string
+        default: ""
+      app_ref:
+        description: >
+          Override git ref (branch/tag/SHA). Leave empty to use the calling
+          workflow's commit (github.sha).
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: haystack-release-${{ github.workflow }}-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+  # Required to push the packaging Docker image to GHCR (non-PR runs)
+  packages: write
+
+env:
+  PYTHON_VERSION: "3.12"
+  APP_PATH: app
+  DEFAULT_APP_REPOSITORY: Heavy-Rental/haystack-fast-api
+  DEFAULT_APP_REF: master
+  IMAGE_NAME: haystack_recommender
+  PYTHON_BASE_IMAGE: python:3.12-slim-bookworm
+  NEED_DECOMPOSER: stub
+  INDEXING_EMBEDDER: mock
+  INDEXING_DOCUMENT_STORE: memory
+  INDEXING_EMBEDDING_DIM: "384"
+  FLEET_BACKEND: fake
+  PRICING_SCHEMA: primary_snapshot
+  NEO4J_BACKEND: fake
+  RECOMMEND_VIA_AGENT_GRAPH: "false"
+  KG_APPLY_TRANSFORMS: "false"
+  PROJECT_AGENT_MODE: stub
+
+jobs:
+  assert-caller:
+    name: Assert caller
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Allow only haystack-release-caller.yml
+        env:
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+        run: |
+          set -euo pipefail
+          echo "github.workflow_ref=${WORKFLOW_REF}"
+          echo "github.event_name=${EVENT_NAME}"
+          echo "github.workflow=${WORKFLOW_NAME}"
+          if [ "${ACT:-}" = "true" ] && [ -z "${WORKFLOW_REF}" ]; then
+            echo "act local run: caller gate skipped (github.workflow_ref unset)"
+            {
+              echo "### Caller gate"
+              echo ""
+              echo "nektos/act — \`github.workflow_ref\` is empty; filename gate skipped."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          case "${WORKFLOW_REF}" in
+            */.github/workflows/haystack-release-caller.yml@*)
+              echo "Allowed caller: haystack-release-caller.yml"
+              {
+                echo "### Caller gate"
+                echo ""
+                echo "Invoked by \`haystack-release-caller.yml\` — OK."
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo "::error::release-pipeline.yml may only be invoked by .github/workflows/haystack-release-caller.yml (got: ${WORKFLOW_REF})"
+              exit 1
+              ;;
+          esac
+
+  integration:
+    name: Integration
+    runs-on: ubuntu-latest
+    needs: [assert-caller]
+    timeout-minutes: 30
+    outputs:
+      app_repository: ${{ steps.meta.outputs.app_repository }}
+      app_ref: ${{ steps.meta.outputs.app_ref }}
+      checkout_mode: ${{ steps.meta.outputs.checkout_mode }}
+    steps:
+      - name: Resolve application source (same-repo caller vs remote override)
+        id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_REPO: ${{ inputs.app_repository }}
+          INPUT_REF: ${{ inputs.app_ref }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_SHA: ${{ github.sha }}
+          DEFAULT_APP_REF_VALUE: ${{ env.DEFAULT_APP_REF }}
+        run: |
+          set -euo pipefail
+          EVENT="${EVENT_NAME}"
+          INPUT_REPO="${INPUT_REPO}"
+          INPUT_REF="${INPUT_REF}"
+
+          if [ -n "${INPUT_REPO}" ] && [ "${INPUT_REPO}" != "${GH_REPOSITORY}" ]; then
+            APP_REPO="${INPUT_REPO}"
+            APP_REF="${INPUT_REF:-${DEFAULT_APP_REF_VALUE}}"
+            MODE=remote
+          else
+            APP_REPO="${GH_REPOSITORY}"
+            APP_REF="${INPUT_REF:-${GH_SHA}}"
+            MODE=caller
+          fi
+
+          echo "app_repository=$APP_REPO" >> "$GITHUB_OUTPUT"
+          echo "app_ref=$APP_REF" >> "$GITHUB_OUTPUT"
+          echo "checkout_mode=$MODE" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Source resolution"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Event | \`$EVENT\` |"
+            echo "| Mode | \`$MODE\` |"
+            echo "| Repository | \`$APP_REPO\` |"
+            echo "| Ref | \`$APP_REF\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Integrating application: $APP_REPO @ $APP_REF (mode=$MODE)"
+
+      - name: Checkout calling repository (release / push head)
+        if: steps.meta.outputs.checkout_mode == 'caller'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: ${{ env.APP_PATH }}
+
+      - name: Checkout remote application repository
+        if: steps.meta.outputs.checkout_mode == 'remote'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ steps.meta.outputs.app_repository }}
+          ref: ${{ steps.meta.outputs.app_ref }}
+          path: ${{ env.APP_PATH }}
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
+
+      - name: Require uv.lock and sync frozen environment
+        working-directory: ${{ env.APP_PATH }}
+        run: |
+          set -euo pipefail
+          if [ ! -f uv.lock ]; then
+            echo "::error::uv.lock not found — this pipeline expects a locked uv project."
+            exit 1
+          fi
+          uv --version
+          python --version
+          uv lock --check
+          uv sync --frozen --all-groups
+
+      - name: Verify project layout and Haystack / FastAPI smoke
+        working-directory: ${{ env.APP_PATH }}
+        env:
+          PYTHON_VERSION_VALUE: ${{ env.PYTHON_VERSION }}
+        run: |
+          set -euo pipefail
+          test -f pyproject.toml
+          test -f uv.lock
+          test -f .python-version
+          test -f app/main.py
+          test -f tests/conftest.py
+          if [ -n "${LLM_API_KEY:-}" ]; then
+            echo "::error::LLM_API_KEY must not be set in Integration."
+            exit 1
+          fi
+          uv run python -c "
+          import haystack
+          from haystack import Pipeline
+          from app.main import create_app
+          from app.pipelines import build_indexing_pipeline, build_intake_front_pipeline
+
+          print('haystack', getattr(haystack, '__version__', 'unknown'))
+          app = create_app()
+          print('fastapi', getattr(app, 'title', type(app).__name__))
+          indexing = build_indexing_pipeline()
+          intake = build_intake_front_pipeline()
+          if not isinstance(indexing, Pipeline):
+              raise SystemExit(f'indexing pipeline type={type(indexing)!r}')
+          if not isinstance(intake, Pipeline):
+              raise SystemExit(f'intake pipeline type={type(intake)!r}')
+          print('Haystack/FastAPI smoke OK')
+          "
+          {
+            echo "### Integration checks"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Runner Python | \`${PYTHON_VERSION_VALUE}\` |"
+            echo "| Package manager | \`uv\` (frozen lock) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload uv project fingerprint
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-integration-metadata
+          path: |
+            ${{ env.APP_PATH }}/pyproject.toml
+            ${{ env.APP_PATH }}/uv.lock
+          retention-days: 14
+          if-no-files-found: warn
+
+  quality-control:
+    name: Quality Control
+    runs-on: ubuntu-latest
+    needs: [integration]
+    timeout-minutes: 40
+    steps:
+      - name: Checkout calling repository (release / push head)
+        if: needs.integration.outputs.checkout_mode == 'caller'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: ${{ env.APP_PATH }}
+
+      - name: Checkout remote application repository
+        if: needs.integration.outputs.checkout_mode == 'remote'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ needs.integration.outputs.app_repository }}
+          ref: ${{ needs.integration.outputs.app_ref }}
+          path: ${{ env.APP_PATH }}
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
+
+      - name: Install locked environment
+        working-directory: ${{ env.APP_PATH }}
+        run: uv sync --frozen --all-groups
+
+      - name: Ruff check and pytest
+        working-directory: ${{ env.APP_PATH }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LLM_API_KEY:-}" ]; then
+            echo "::error::LLM_API_KEY must not be set in Quality Control."
+            exit 1
+          fi
+          uv run ruff check app tests
+          mkdir -p reports
+          uv run pytest tests/
+          {
+            echo "### Quality control"
+            echo ""
+            echo "Ruff and pytest completed successfully."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload pytest HTML report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-quality-test-reports
+          path: ${{ env.APP_PATH }}/reports/pytest-report.html
+          retention-days: 14
+          if-no-files-found: warn
+
+  security-testing:
+    name: Security Testing
+    runs-on: ubuntu-latest
+    needs: [integration]
+    timeout-minutes: 25
+    steps:
+      - name: Checkout calling repository (release / push head)
+        if: needs.integration.outputs.checkout_mode == 'caller'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: ${{ env.APP_PATH }}
+
+      - name: Checkout remote application repository
+        if: needs.integration.outputs.checkout_mode == 'remote'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ needs.integration.outputs.app_repository }}
+          ref: ${{ needs.integration.outputs.app_ref }}
+          path: ${{ env.APP_PATH }}
+
+      - name: Create security reports directory
+        run: mkdir -p "${GITHUB_WORKSPACE}/security-reports"
+
+      - name: Setup Python (Semgrep + uv)
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
+
+      - name: Install Semgrep
+        run: pip install --quiet semgrep
+
+      - name: SAST — Semgrep (Python / OWASP) → SARIF
+        working-directory: ${{ env.APP_PATH }}
+        run: |
+          set -euo pipefail
+          REPORT_DIR="${GITHUB_WORKSPACE}/security-reports"
+          SEMGREP_COMMON=(
+            --config=p/python
+            --config=p/owasp-top-ten
+            --config=p/security-audit
+            --config=p/secrets
+            --metrics=off
+          )
+
+          echo "==> Semgrep report (SARIF 2.1.0)"
+          set +e
+          semgrep scan "${SEMGREP_COMMON[@]}" \
+            --sarif \
+            --output="${REPORT_DIR}/semgrep.sarif" \
+            .
+          SARIF_RC=$?
+          set -e
+          if [ -f "${REPORT_DIR}/semgrep.sarif" ]; then
+            echo "SARIF written: ${REPORT_DIR}/semgrep.sarif (semgrep exit=${SARIF_RC}; non-zero is OK for report pass)"
+          else
+            echo "::warning::semgrep.sarif was not produced (exit=${SARIF_RC})"
+          fi
+
+          echo "==> SAST gate (ERROR severity only; exit 1 if findings)"
+          set +e
+          semgrep scan "${SEMGREP_COMMON[@]}" \
+            --severity=ERROR \
+            --error \
+            --text \
+            .
+          GATE_RC=$?
+          set -e
+          if [ "${GATE_RC}" -ne 0 ]; then
+            echo "::error::Semgrep SAST gate failed (exit=${GATE_RC})."
+            exit "${GATE_RC}"
+          fi
+          echo "SAST (Semgrep) gate passed — no ERROR-level findings."
+
+      - name: Python SCA report — pip-audit (does not fail the job)
+        working-directory: ${{ env.APP_PATH }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          REPORT_DIR="${GITHUB_WORKSPACE}/security-reports"
+          uv export --frozen --no-dev --no-hashes -o "${REPORT_DIR}/requirements-frozen.txt"
+          uvx pip-audit -r "${REPORT_DIR}/requirements-frozen.txt" \
+            --format json \
+            --output "${REPORT_DIR}/pip-audit.json" \
+            || true
+
+      - name: Trivy cache key
+        id: trivy-cache-meta
+        run: echo "week=$(date -u +%Y-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Trivy DBs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ github.workspace }}/.cache/trivy
+          key: trivy-db-${{ runner.os }}-${{ steps.trivy-cache-meta.outputs.week }}
+          restore-keys: |
+            trivy-db-${{ runner.os }}-
+
+      - name: Trivy filesystem scan (SARIF report)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.APP_PATH }}
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+          format: sarif
+          output: security-reports/trivy-fs.sarif
+          ignore-unfixed: true
+          scanners: vuln
+          cache: "false"
+          cache-dir: ${{ github.workspace }}/.cache/trivy
+
+      - name: Trivy filesystem scan (console table)
+        if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.APP_PATH }}
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+          format: table
+          ignore-unfixed: true
+          scanners: vuln
+          cache: "false"
+          cache-dir: ${{ github.workspace }}/.cache/trivy
+
+      - name: Trivy SCA gate (CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.APP_PATH }}
+          severity: CRITICAL
+          exit-code: "1"
+          format: table
+          ignore-unfixed: true
+          scanners: vuln
+          cache: "false"
+          cache-dir: ${{ github.workspace }}/.cache/trivy
+
+      - name: Upload Semgrep SARIF to Code Scanning
+        if: always() && hashFiles('security-reports/semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          sarif_file: security-reports/semgrep.sarif
+          checkout_path: ${{ env.APP_PATH }}
+          category: haystack-release-semgrep
+        continue-on-error: true
+
+      - name: Upload Trivy SARIF to Code Scanning
+        if: always() && hashFiles('security-reports/trivy-fs.sarif') != ''
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          sarif_file: security-reports/trivy-fs.sarif
+          checkout_path: ${{ env.APP_PATH }}
+          category: haystack-release-trivy-fs
+        continue-on-error: true
+
+      - name: Upload security reports (SARIF + pip-audit)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-security-reports-sarif
+          path: |
+            security-reports/*.sarif
+            security-reports/pip-audit.json
+            security-reports/requirements-frozen.txt
+          retention-days: 30
+          if-no-files-found: warn
+
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    needs: [integration]
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout calling repository (release / push head)
+        if: needs.integration.outputs.checkout_mode == 'caller'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: ${{ env.APP_PATH }}
+
+      - name: Checkout remote application repository
+        if: needs.integration.outputs.checkout_mode == 'remote'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ needs.integration.outputs.app_repository }}
+          ref: ${{ needs.integration.outputs.app_ref }}
+          path: ${{ env.APP_PATH }}
+
+      - name: Initialize CodeQL (Python)
+        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          languages: python
+          source-root: ${{ env.APP_PATH }}
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          category: "haystack-release-codeql-python"
+
+      - name: CodeQL summary
+        if: always()
+        run: |
+          {
+            echo "### CodeQL Analysis"
+            echo ""
+            echo "Language: Python"
+            echo "Query suite: security-and-quality"
+            echo "Category: haystack-release-codeql-python"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  packaging:
+    name: Packaging
+    runs-on: ubuntu-latest
+    needs: [integration, quality-control, security-testing, codeql]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout calling repository (release / push head)
+        if: needs.integration.outputs.checkout_mode == 'caller'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: ${{ env.APP_PATH }}
+
+      - name: Checkout remote application repository
+        if: needs.integration.outputs.checkout_mode == 'remote'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ needs.integration.outputs.app_repository }}
+          ref: ${{ needs.integration.outputs.app_ref }}
+          path: ${{ env.APP_PATH }}
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
+
+      - name: Build wheel and sdist
+        working-directory: ${{ env.APP_PATH }}
+        run: |
+          set -euo pipefail
+          uv build
+          echo "==> dist outputs"
+          ls -lah dist || true
+
+      - name: Resolve next haystack_recommender version
+        id: image-version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        run: |
+          set -euo pipefail
+          OWNER="${GH_REPOSITORY_OWNER}"
+          PKG="${IMAGE_NAME,,}"
+
+          list_tags() {
+            local path="$1"
+            gh api --paginate "${path}" --jq '.[] | .metadata.container.tags[]?' 2>/dev/null || true
+          }
+
+          TAGS="$(list_tags "/orgs/${OWNER}/packages/container/${PKG}/versions")"
+          if [ -z "${TAGS}" ]; then
+            TAGS="$(list_tags "/users/${OWNER}/packages/container/${PKG}/versions")"
+          fi
+
+          PREV="$(printf '%s\n' "${TAGS}" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)"
+          if [ -z "${PREV}" ]; then
+            NEXT="1.0.0"
+            PREV_DISPLAY="none"
+          else
+            IFS=. read -r MAJ MIN PAT <<< "${PREV}"
+            NEXT="${MAJ}.${MIN}.$((PAT + 1))"
+            PREV_DISPLAY="${PREV}"
+          fi
+
+          echo "previous_version=${PREV_DISPLAY}" >> "$GITHUB_OUTPUT"
+          echo "image_version=${NEXT}" >> "$GITHUB_OUTPUT"
+          echo "Resolved GHCR image version: previous=${PREV_DISPLAY} next=${NEXT}"
+          {
+            echo "### GHCR image version"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Package | \`${PKG}\` |"
+            echo "| Previous semver | \`${PREV_DISPLAY}\` |"
+            echo "| Next semver | \`${NEXT}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stage versioned and stable artifacts
+        id: package
+        working-directory: ${{ env.APP_PATH }}
+        env:
+          GH_RUN_NUMBER: ${{ github.run_number }}
+          GH_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          IMAGE_VERSION: ${{ steps.image-version.outputs.image_version }}
+          PREVIOUS_IMAGE_VERSION: ${{ steps.image-version.outputs.previous_version }}
+        run: |
+          set -euo pipefail
+          WHEEL="$(find dist -maxdepth 1 -type f -name '*.whl' | head -n 1 || true)"
+          SDIST="$(find dist -maxdepth 1 -type f -name '*.tar.gz' | head -n 1 || true)"
+          if [ -z "${WHEEL}" ] || [ ! -f "${WHEEL}" ]; then
+            echo "::error::No wheel produced under dist/ after uv build"
+            ls -lah dist || true
+            exit 1
+          fi
+          if [ -z "${SDIST}" ] || [ ! -f "${SDIST}" ]; then
+            echo "::error::No sdist produced under dist/ after uv build"
+            ls -lah dist || true
+            exit 1
+          fi
+
+          VERSION="$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          VERSION="${VERSION:-0.0.0}"
+          SHORT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+          RUN_ID="${GH_RUN_NUMBER}"
+
+          VERSIONED_WHEEL="haystack-fast-api-v${VERSION}-build${RUN_ID}-${SHORT_SHA}.whl"
+          STABLE_WHEEL="haystack-fast-api.whl"
+          VERSIONED_SDIST="haystack-fast-api-v${VERSION}-build${RUN_ID}-${SHORT_SHA}.tar.gz"
+          STABLE_SDIST="haystack-fast-api.tar.gz"
+
+          cp "${WHEEL}" "${GITHUB_WORKSPACE}/${VERSIONED_WHEEL}"
+          cp "${WHEEL}" "${GITHUB_WORKSPACE}/${STABLE_WHEEL}"
+          cp "${SDIST}" "${GITHUB_WORKSPACE}/${VERSIONED_SDIST}"
+          cp "${SDIST}" "${GITHUB_WORKSPACE}/${STABLE_SDIST}"
+
+          for f in \
+            "${GITHUB_WORKSPACE}/${VERSIONED_WHEEL}" \
+            "${GITHUB_WORKSPACE}/${STABLE_WHEEL}" \
+            "${GITHUB_WORKSPACE}/${VERSIONED_SDIST}" \
+            "${GITHUB_WORKSPACE}/${STABLE_SDIST}"
+          do
+            if [ ! -s "$f" ]; then
+              echo "::error::Staged package is empty or missing: $f"
+              exit 1
+            fi
+          done
+
+          IMAGE_TAG="${IMAGE_VERSION}"
+          if [ -z "${IMAGE_TAG}" ]; then
+            echo "::error::Resolved image version is empty"
+            exit 1
+          fi
+          IMAGE_NAME_LC="${IMAGE_NAME,,}"
+          OWNER_LC="${GH_REPOSITORY_OWNER,,}"
+          IMAGE_LOCAL="${IMAGE_NAME_LC}:${IMAGE_TAG}"
+          IMAGE_LOCAL_LATEST="${IMAGE_NAME_LC}:latest"
+          IMAGE_REMOTE="ghcr.io/${OWNER_LC}/${IMAGE_NAME_LC}:${IMAGE_TAG}"
+          IMAGE_REMOTE_LATEST="ghcr.io/${OWNER_LC}/${IMAGE_NAME_LC}:latest"
+          IMAGE_TAR="haystack_recommender-${IMAGE_TAG}.tar.gz"
+
+          {
+            echo "versioned_wheel=${VERSIONED_WHEEL}"
+            echo "stable_wheel=${STABLE_WHEEL}"
+            echo "versioned_sdist=${VERSIONED_SDIST}"
+            echo "stable_sdist=${STABLE_SDIST}"
+            echo "version=${VERSION}"
+            echo "short_sha=${SHORT_SHA}"
+            echo "image_tag=${IMAGE_TAG}"
+            echo "previous_image_version=${PREVIOUS_IMAGE_VERSION}"
+            echo "image_local=${IMAGE_LOCAL}"
+            echo "image_local_latest=${IMAGE_LOCAL_LATEST}"
+            echo "image_remote=${IMAGE_REMOTE}"
+            echo "image_remote_latest=${IMAGE_REMOTE_LATEST}"
+            echo "image_tar=${IMAGE_TAR}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Packaging"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| version | \`${VERSION}\` |"
+            echo "| Previous GHCR semver | \`${PREVIOUS_IMAGE_VERSION}\` |"
+            echo "| Versioned wheel | \`${VERSIONED_WHEEL}\` |"
+            echo "| Stable wheel | \`${STABLE_WHEEL}\` |"
+            echo "| Versioned sdist | \`${VERSIONED_SDIST}\` |"
+            echo "| Stable sdist | \`${STABLE_SDIST}\` |"
+            echo "| Docker image (local) | \`${IMAGE_LOCAL}\` |"
+            echo "| Docker image (GHCR) | \`${IMAGE_REMOTE}\` |"
+            echo "| Docker image (GHCR latest) | \`${IMAGE_REMOTE_LATEST}\` |"
+            echo "| Image archive | \`${IMAGE_TAR}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # -------------------------------------------------------------------
+      # Docker image: always Python 3.12 + uv + uvicorn so any Docker Engine can run it.
+      # An app Dockerfile is not the deploy image. Sidecar packages COPY only if present.
+      # Product knobs: sanitized .env.prod → /app/.env (pydantic). Estate keys: -e / SM.
+      # -------------------------------------------------------------------
+      - name: Prepare Dockerfile for uvicorn image
+        working-directory: ${{ env.APP_PATH }}
+        env:
+          PYTHON_BASE_IMAGE: ${{ env.PYTHON_BASE_IMAGE }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          APP_REPOSITORY: ${{ needs.integration.outputs.app_repository }}
+          SHORT_SHA: ${{ steps.package.outputs.short_sha }}
+          VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ ! -f app/main.py ]; then
+            echo "::error::FastAPI entrypoint app/main.py is missing. Image CMD is uvicorn app.main:app."
+            ls -la || true
+            exit 1
+          fi
+          if [ ! -f pyproject.toml ] || [ ! -f uv.lock ]; then
+            echo "::error::pyproject.toml and uv.lock are required to build the uvicorn image."
+            exit 1
+          fi
+
+          if [ -f .dockerignore ]; then
+            if grep -Eiq '^[[:space:]]*(\./)?app(/|\*|/\*)?[[:space:]]*$' .dockerignore \
+              || grep -Eiq '^[[:space:]]*(\./)?pyproject\.toml[[:space:]]*$' .dockerignore; then
+              echo "::error::.dockerignore excludes app/ or pyproject.toml; Release cannot COPY the FastAPI app."
+              cat .dockerignore
+              exit 1
+            fi
+          fi
+
+          if [ -f Dockerfile ]; then
+            echo "Application Dockerfile present — moving aside. Release always builds uv + uvicorn app.main:app :8000."
+            mv Dockerfile Dockerfile.app-repo
+          fi
+
+          python3 - <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          estate = {
+              "POSTGRES_HOST", "POSTGRES_HOSTNAME", "POSTGRES_PORT",
+              "POSTGRES_DATABASE", "POSTGRES_DB", "POSTGRES_USERNAME",
+              "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_URL", "DATABASE_URL",
+              "SOURCE_HOST", "SOURCE_PORT", "SOURCE_DATABASE", "SOURCE_USER",
+              "SOURCE_PASSWORD", "TARGET_HOST", "TARGET_PORT", "TARGET_DATABASE",
+              "TARGET_USER", "TARGET_PASSWORD",
+              "NEO4J_URI", "NEO4J_USER", "NEO4J_PASSWORD", "NEO4J_POPULATE_URL",
+              "LLM_API_KEY",
+          }
+          secret_re = re.compile(
+              r"(?i)(sk-[A-Za-z0-9]{10,}|whsec_|BEGIN (RSA |OPENSSH )?PRIVATE KEY)"
+          )
+          fallback = [
+              ("APP_NAME", "haystack-fast-api"),
+              ("APP_ENV", "prod"),
+              ("LOG_LEVEL", "INFO"),
+              ("NEED_DECOMPOSER", "stub"),
+              ("LLM_BASE_URL", "https://inference.do-ai.run/v1"),
+              ("LLM_MODEL", "router:default"),
+              ("LLM_TIMEOUT_SECONDS", "60"),
+              ("LLM_TEMPERATURE", "0.5"),
+              ("INDEXING_EMBEDDER", "mock"),
+              ("INDEXING_EMBEDDING_DIM", "384"),
+              ("INDEXING_SPLIT_LENGTH", "200"),
+              ("INDEXING_SPLIT_OVERLAP", "20"),
+              ("INDEXING_OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
+              ("INDEXING_ST_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+              ("INDEXING_DOCUMENT_STORE", "memory"),
+              ("INDEXING_CHUNK_TTL_SECONDS", "0"),
+              ("IDEMPOTENCY_TTL_SECONDS", "86400"),
+              ("INDEXING_VIA_AGENT_GATE", "false"),
+              ("FLEET_BACKEND", "sql"),
+              ("PRICING_SCHEMA", "primary_snapshot"),
+              ("NEO4J_BACKEND", "bolt"),
+              ("NEO4J_POPULATE_TIMEOUT_SECONDS", "2"),
+              ("RECOMMEND_VIA_AGENT_GRAPH", "false"),
+              ("RECOMMEND_FANOUT_CAP", "4"),
+              ("KG_ARTIFACT_DIR", "artifacts/kg"),
+              ("KG_APPLY_TRANSFORMS", "false"),
+              ("PROJECT_AGENT_MODE", "stub"),
+              ("PROJECT_AGENT_TOP_K", "5"),
+          ]
+          candidates = [
+              Path(".env.prod"),
+              Path("docs/samples/.env.prod"),
+          ]
+          src = next((p for p in candidates if p.is_file()), None)
+          rows = []
+          if src is not None:
+              for raw in src.read_text(encoding="utf-8").splitlines():
+                  line = raw.strip()
+                  if not line or line.startswith("#") or "=" not in line:
+                      continue
+                  key, _, val = line.partition("=")
+                  key = key.strip()
+                  val = val.strip().strip("'").strip('"')
+                  if secret_re.search(val):
+                      print(f"::error::{src} looks like it contains a secret in {key}.")
+                      sys.exit(1)
+                  if key == "LLM_API_KEY" and val:
+                      print(f"::error::{src} sets LLM_API_KEY. Use Secrets Manager or academy secret.")
+                      sys.exit(1)
+                  if key == "NEO4J_URI" and val:
+                      print(
+                          f"::error::{src} sets NEO4J_URI={val}. "
+                          "Infra sync-secrets owns Bolt NLB. Do not commit a compose hostname."
+                      )
+                      sys.exit(1)
+                  rows.append((key, val))
+              origin = str(src)
+          else:
+              rows = list(fallback)
+              origin = "generated production defaults (no app .env.prod)"
+
+          kept = []
+          seen = set()
+          for key, val in rows:
+              if key in estate or not key:
+                  continue
+              if key not in seen:
+                  kept.append((key, val))
+                  seen.add(key)
+          if "APP_ENV" not in seen:
+              kept.insert(0, ("APP_ENV", "prod"))
+          if not any(k == "APP_ENV" and v == "prod" for k, v in kept):
+              print("::warning::.env.prod APP_ENV is not prod; image /app/.env will keep the file value.")
+          out = Path("haystack.prod.env")
+          out.write_text("".join(f"{k}={v}\n" for k, v in kept), encoding="utf-8")
+          print(f"Wrote {out} from {origin} ({len(kept)} product keys). Estate keys stripped.")
+          PY
+
+          if [ -f .dockerignore ]; then
+            if grep -Eiq '^[[:space:]]*(\./)?haystack\.prod\.env[[:space:]]*$' .dockerignore \
+              || grep -Eiq '^[[:space:]]*\*\.env[[:space:]]*$' .dockerignore; then
+              echo "::error::.dockerignore excludes haystack.prod.env (or *.env); Release cannot COPY the production profile."
+              cat .dockerignore
+              exit 1
+            fi
+          fi
+
+          echo "Generating uvicorn Dockerfile (Haystack FastAPI → ${PYTHON_BASE_IMAGE})"
+          {
+            echo "# Generated by haystack-fast-api release packaging (FastAPI + Haystack)"
+            echo "# Portable: docker run -p 8000:8000 -e KEY=… <image>"
+            echo "# Product knobs: COPY haystack.prod.env → /app/.env (from app .env.prod)."
+            echo "# Estate keys from infra heavy-rental/haystack (sync-secrets) or docker -e."
+            echo "# Do not ENV/ARG any of these:"
+            echo "#   Infra writes: DATABASE_URL, POSTGRES_*, SOURCE_*, TARGET_*,"
+            echo "#     FLEET_BACKEND=sql, NEO4J_BACKEND=bolt, NEO4J_URI/USER/PASSWORD,"
+            echo "#     optional LLM_API_KEY"
+            echo "#   App knobs (file defaults; SM / academy overlay / -e override):"
+            echo "#     APP_ENV, NEED_DECOMPOSER, LLM_BASE_URL, LLM_MODEL,"
+            echo "#     INDEXING_*, FLEET_BACKEND, PRICING_SCHEMA, NEO4J_BACKEND, KG_*"
+            echo "FROM ${PYTHON_BASE_IMAGE}"
+            echo "COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/"
+            echo "LABEL org.opencontainers.image.title=\"${IMAGE_NAME}\""
+            echo "LABEL org.opencontainers.image.description=\"Heavy Rental Haystack FastAPI (uvicorn)\""
+            echo "LABEL org.opencontainers.image.source=\"https://github.com/${APP_REPOSITORY}\""
+            echo "LABEL org.opencontainers.image.revision=\"${SHORT_SHA}\""
+            echo "LABEL org.opencontainers.image.version=\"${VERSION}\""
+            echo ""
+            echo "WORKDIR /app"
+            echo "COPY pyproject.toml uv.lock README.md ./"
+            echo "RUN uv sync --frozen --no-dev --extra neo4j --no-install-project"
+            echo "COPY app ./app"
+            echo "RUN uv sync --frozen --no-dev --extra neo4j"
+            echo "COPY haystack.prod.env .env"
+            if [ -d postgres_haystack_sync ]; then
+              echo "COPY postgres_haystack_sync ./postgres_haystack_sync"
+            fi
+            if [ -d neo4j_populate ]; then
+              echo "COPY neo4j_populate ./neo4j_populate"
+            fi
+            echo ""
+            echo "EXPOSE 8000"
+            echo "CMD [\"uv\", \"run\", \"uvicorn\", \"app.main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\"]"
+          } > Dockerfile
+
+          echo "==> Dockerfile"
+          cat Dockerfile
+          echo "==> haystack.prod.env (sanitized product profile)"
+          cat haystack.prod.env
+
+          if grep -Eiq '^[[:space:]]*(ENV|ARG)[[:space:]]+(POSTGRES_|SOURCE_|TARGET_|DATABASE_URL|NEED_DECOMPOSER|LLM_|INDEXING_|IDEMPOTENCY_|FLEET_BACKEND|PRICING_SCHEMA|NEO4J_|RECOMMEND_VIA_AGENT_GRAPH|KG_|APP_ENV|PROJECT_AGENT_)' Dockerfile; then
+            echo "::error::Dockerfile bakes infra/app Haystack config (ENV/ARG). Use .env.prod, heavy-rental/haystack, or docker -e."
+            exit 1
+          fi
+          if grep -Eiq '^[[:space:]]*COPY[[:space:]]+\.env' Dockerfile; then
+            echo "::error::Dockerfile copies a raw .env / .env.prod. Release may only COPY haystack.prod.env .env after sanitizing."
+            exit 1
+          fi
+          if ! grep -Eq '^COPY[[:space:]]+haystack\.prod\.env[[:space:]]+\.env$' Dockerfile; then
+            echo "::error::Generated Dockerfile must COPY haystack.prod.env .env so pydantic loads the production profile."
+            exit 1
+          fi
+          if grep -Eiq '^(POSTGRES_|SOURCE_|TARGET_|DATABASE_URL=|NEO4J_URI=|NEO4J_USER=|NEO4J_PASSWORD=|NEO4J_POPULATE_URL=|LLM_API_KEY=)' haystack.prod.env; then
+            echo "::error::haystack.prod.env still contains estate/secret keys. Strip them before COPY."
+            exit 1
+          fi
+          if ! grep -Eq '^APP_ENV=' haystack.prod.env; then
+            echo "::error::haystack.prod.env must set APP_ENV (production profile)."
+            exit 1
+          fi
+          if ! grep -Eq 'uvicorn.*app\.main:app' Dockerfile; then
+            echo "::error::Generated Dockerfile must run uvicorn app.main:app."
+            exit 1
+          fi
+
+      - name: Build Docker image
+        id: docker
+        working-directory: ${{ env.APP_PATH }}
+        env:
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          GH_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          IMAGE_LOCAL: ${{ steps.package.outputs.image_local }}
+          IMAGE_LOCAL_LATEST: ${{ steps.package.outputs.image_local_latest }}
+          IMAGE_REMOTE: ${{ steps.package.outputs.image_remote }}
+          IMAGE_REMOTE_LATEST: ${{ steps.package.outputs.image_remote_latest }}
+          IMAGE_TAR: ${{ steps.package.outputs.image_tar }}
+        run: |
+          set -euo pipefail
+          IMAGE_NAME_LC="${IMAGE_NAME,,}"
+          OWNER_LC="${GH_REPOSITORY_OWNER,,}"
+          IMAGE_LOCAL="${IMAGE_LOCAL,,}"
+          IMAGE_LOCAL_LATEST="${IMAGE_LOCAL_LATEST,,}"
+          IMAGE_REMOTE="${IMAGE_REMOTE,,}"
+          IMAGE_REMOTE_LATEST="${IMAGE_REMOTE_LATEST,,}"
+
+          # No --build-arg for POSTGRES_ / SOURCE_ / TARGET_ / DATABASE_URL / LLM_ / INDEXING_ / NEO4J_ / FLEET_ / KG_
+          docker build \
+            --pull \
+            -t "${IMAGE_LOCAL}" \
+            -t "${IMAGE_LOCAL_LATEST}" \
+            -t "${IMAGE_REMOTE}" \
+            -t "${IMAGE_REMOTE_LATEST}" \
+            .
+
+          echo "==> Images built"
+          echo "Local:  ${IMAGE_LOCAL}"
+          echo "GHCR:   ${IMAGE_REMOTE}"
+          docker images "${IMAGE_NAME_LC}" --format 'table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}'
+          docker images "ghcr.io/${OWNER_LC}/${IMAGE_NAME_LC}" --format 'table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}' || true
+
+          TAR_PATH="${GITHUB_WORKSPACE}/${IMAGE_TAR}"
+          docker save \
+            "${IMAGE_LOCAL}" \
+            "${IMAGE_LOCAL_LATEST}" \
+            "${IMAGE_REMOTE}" \
+            "${IMAGE_REMOTE_LATEST}" \
+            | gzip -c > "${TAR_PATH}"
+          ls -lh "${TAR_PATH}"
+          if [ ! -s "${TAR_PATH}" ]; then
+            echo "::error::Docker image tar is missing or empty: ${TAR_PATH}"
+            exit 1
+          fi
+
+          {
+            echo "image_id=$(docker image inspect -f '{{.Id}}' "${IMAGE_LOCAL}")"
+            echo "tar_path=${TAR_PATH}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Prove image is deployable
+        env:
+          IMAGE_LOCAL: ${{ steps.package.outputs.image_local }}
+        run: |
+          set -euo pipefail
+          IMAGE_LOCAL="${IMAGE_LOCAL,,}"
+          NAME="haystack-smoke-${GITHUB_RUN_ID:-$$}"
+
+          ENV_JSON="$(docker image inspect -f '{{json .Config.Env}}' "${IMAGE_LOCAL}")"
+          echo "Image Config.Env: ${ENV_JSON}"
+          if printf '%s' "${ENV_JSON}" | grep -Eq '"POSTGRES_|"SOURCE_|"TARGET_|"DATABASE_URL=|"NEED_DECOMPOSER=|"LLM_|"INDEXING_|"IDEMPOTENCY_|"FLEET_BACKEND=|"PRICING_SCHEMA=|"NEO4J_|"RECOMMEND_VIA_AGENT_GRAPH=|"KG_'; then
+            echo "::error::Image bakes infra/app Haystack env. Inject via heavy-rental/haystack or docker -e."
+            exit 1
+          fi
+
+          EXPOSED="$(docker image inspect -f '{{json .Config.ExposedPorts}}' "${IMAGE_LOCAL}")"
+          echo "Image ExposedPorts: ${EXPOSED}"
+          if ! printf '%s' "${EXPOSED}" | grep -q '8000/tcp'; then
+            echo "::error::Image does not EXPOSE 8000/tcp. docker run -p 8000:8000 and Academy compose require it."
+            exit 1
+          fi
+
+          docker run --rm --entrypoint /bin/sh "${IMAGE_LOCAL}" -c 'test -f /app/app/main.py'
+          echo "Image contains /app/app/main.py (uvicorn app.main:app)"
+
+          docker run --rm --entrypoint /bin/sh "${IMAGE_LOCAL}" -c 'test -f /app/.env && grep -q "^APP_ENV=" /app/.env'
+          echo "Image contains sanitized /app/.env (from .env.prod) for pydantic Settings."
+          if docker run --rm --entrypoint /bin/sh "${IMAGE_LOCAL}" \
+            -c 'grep -Eq "^(POSTGRES_|SOURCE_|TARGET_|DATABASE_URL=|NEO4J_URI=|NEO4J_PASSWORD=|LLM_API_KEY=)" /app/.env'; then
+            echo "::error::Image /app/.env still has estate or secret keys."
+            docker run --rm --entrypoint /bin/sh "${IMAGE_LOCAL}" -c 'cat /app/.env'
+            exit 1
+          fi
+          PROFILE_ENV="$(
+            docker run --rm --entrypoint /bin/sh "${IMAGE_LOCAL}" \
+              -c 'uv run python -c "from app.config import Settings; print(Settings().app_env)"'
+          )"
+          echo "pydantic Settings().app_env=${PROFILE_ENV} (from /app/.env)"
+          if [ -z "${PROFILE_ENV}" ]; then
+            echo "::error::Settings() did not load APP_ENV from /app/.env."
+            exit 1
+          fi
+          OVERRIDE_ENV="$(
+            docker run --rm -e APP_ENV=ci-override --entrypoint /bin/sh "${IMAGE_LOCAL}" \
+              -c 'uv run python -c "from app.config import Settings; print(Settings().app_env)"'
+          )"
+          echo "APP_ENV override via -e → Settings().app_env=${OVERRIDE_ENV}"
+          echo "${OVERRIDE_ENV}" | grep -qx 'ci-override'
+          echo "Process env still wins over /app/.env (compose SM / overlay / docker -e)."
+
+          # Dummy values only — not Vocareum, not Academy RDS, not a real LLM.
+          # Infra sync-secrets writes FLEET_BACKEND/NEO4J_*/LLM_API_KEY/DB; the rest
+          # are optional SM extras from .env.example. All must be injectable.
+          OUT="$(
+            docker run --rm \
+              -e SOURCE_HOST=sor.example.test \
+              -e SOURCE_PORT=5432 \
+              -e SOURCE_DATABASE=heavy_rental \
+              -e TARGET_HOST=haystack.example.test \
+              -e TARGET_PORT=5432 \
+              -e TARGET_DATABASE=haystack \
+              -e POSTGRES_USERNAME=ci_dummy \
+              -e POSTGRES_PASSWORD=ci_dummy \
+              -e DATABASE_URL=postgresql://ci_dummy:ci_dummy@haystack.example.test:5432/haystack \
+              -e NEED_DECOMPOSER=stub \
+              -e LLM_BASE_URL=https://llm.example.test/v1 \
+              -e LLM_API_KEY=ci-dummy-llm-key \
+              -e LLM_MODEL=ci-dummy-model \
+              -e LLM_TIMEOUT_SECONDS=60 \
+              -e LLM_TEMPERATURE=0.5 \
+              -e INDEXING_EMBEDDER=mock \
+              -e INDEXING_EMBEDDING_DIM=384 \
+              -e INDEXING_SPLIT_LENGTH=200 \
+              -e INDEXING_SPLIT_OVERLAP=20 \
+              -e INDEXING_OPENAI_EMBEDDING_MODEL=text-embedding-3-small \
+              -e INDEXING_DOCUMENT_STORE=memory \
+              -e INDEXING_CHUNK_TTL_SECONDS=0 \
+              -e IDEMPOTENCY_TTL_SECONDS=86400 \
+              -e INDEXING_VIA_AGENT_GATE=false \
+              -e FLEET_BACKEND=sql \
+              -e PRICING_SCHEMA=primary_snapshot \
+              -e NEO4J_BACKEND=bolt \
+              -e NEO4J_URI=bolt://neo4j.example.test:7687 \
+              -e NEO4J_USER=neo4j \
+              -e NEO4J_PASSWORD=ci-dummy-neo4j \
+              -e NEO4J_POPULATE_URL=http://neo4j-populate.example.test:8089/v1/populate \
+              -e NEO4J_POPULATE_TIMEOUT_SECONDS=2 \
+              -e RECOMMEND_VIA_AGENT_GRAPH=false \
+              -e KG_ARTIFACT_DIR=artifacts/kg \
+              -e KG_APPLY_TRANSFORMS=false \
+              --entrypoint /bin/sh \
+              "${IMAGE_LOCAL}" \
+              -c 'printf "%s\n" \
+                "$SOURCE_HOST" "$DATABASE_URL" \
+                "$NEED_DECOMPOSER" "$LLM_BASE_URL" "$LLM_API_KEY" "$LLM_MODEL" \
+                "$LLM_TIMEOUT_SECONDS" "$LLM_TEMPERATURE" \
+                "$INDEXING_EMBEDDER" "$INDEXING_EMBEDDING_DIM" \
+                "$INDEXING_SPLIT_LENGTH" "$INDEXING_SPLIT_OVERLAP" \
+                "$INDEXING_OPENAI_EMBEDDING_MODEL" "$INDEXING_DOCUMENT_STORE" \
+                "$INDEXING_CHUNK_TTL_SECONDS" "$IDEMPOTENCY_TTL_SECONDS" \
+                "$INDEXING_VIA_AGENT_GATE" "$FLEET_BACKEND" "$PRICING_SCHEMA" \
+                "$NEO4J_BACKEND" "$NEO4J_URI" "$NEO4J_USER" "$NEO4J_PASSWORD" \
+                "$NEO4J_POPULATE_URL" "$NEO4J_POPULATE_TIMEOUT_SECONDS" \
+                "$RECOMMEND_VIA_AGENT_GRAPH" "$KG_ARTIFACT_DIR" "$KG_APPLY_TRANSFORMS"'
+          )"
+          echo "${OUT}" | grep -qx 'sor.example.test'
+          echo "${OUT}" | grep -qx 'postgresql://ci_dummy:ci_dummy@haystack.example.test:5432/haystack'
+          echo "${OUT}" | grep -qx 'stub'
+          echo "${OUT}" | grep -qx 'https://llm.example.test/v1'
+          echo "${OUT}" | grep -qx 'ci-dummy-llm-key'
+          echo "${OUT}" | grep -qx 'ci-dummy-model'
+          echo "${OUT}" | grep -qx '60'
+          echo "${OUT}" | grep -qx '0.5'
+          echo "${OUT}" | grep -qx 'mock'
+          echo "${OUT}" | grep -qx '384'
+          echo "${OUT}" | grep -qx '200'
+          echo "${OUT}" | grep -qx '20'
+          echo "${OUT}" | grep -qx 'text-embedding-3-small'
+          echo "${OUT}" | grep -qx 'memory'
+          echo "${OUT}" | grep -qx '0'
+          echo "${OUT}" | grep -qx '86400'
+          echo "${OUT}" | grep -qx 'false'
+          echo "${OUT}" | grep -qx 'sql'
+          echo "${OUT}" | grep -qx 'primary_snapshot'
+          echo "${OUT}" | grep -qx 'bolt'
+          echo "${OUT}" | grep -qx 'bolt://neo4j.example.test:7687'
+          echo "${OUT}" | grep -qx 'neo4j'
+          echo "${OUT}" | grep -qx 'ci-dummy-neo4j'
+          echo "${OUT}" | grep -qx 'http://neo4j-populate.example.test:8089/v1/populate'
+          echo "${OUT}" | grep -qx '2'
+          echo "${OUT}" | grep -qx 'artifacts/kg'
+          echo "Dummy infra SM keys and .env.example knobs are visible at runtime (not baked)."
+
+          SYNC_STATUS="absent"
+          if docker run --rm --entrypoint /bin/sh "${IMAGE_LOCAL}" \
+            -c 'uv run python -c "import postgres_haystack_sync"' >/tmp/sync-import.log 2>&1; then
+            SYNC_STATUS="importable"
+          else
+            echo "::warning::postgres_haystack_sync is not importable in this image (app checkout may not ship the package)."
+            cat /tmp/sync-import.log || true
+          fi
+
+          cleanup() { docker rm -f "${NAME}" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          # CI-safe Profile A flags at run time only — not baked into the image.
+          docker run -d --name "${NAME}" \
+            -e SOURCE_HOST=sor.example.test \
+            -e SOURCE_PORT=5432 \
+            -e SOURCE_DATABASE=heavy_rental \
+            -e TARGET_HOST=haystack.example.test \
+            -e TARGET_PORT=5432 \
+            -e TARGET_DATABASE=haystack \
+            -e POSTGRES_USERNAME=ci_dummy \
+            -e POSTGRES_PASSWORD=ci_dummy \
+            -e DATABASE_URL=postgresql://ci_dummy:ci_dummy@haystack.example.test:5432/haystack \
+            -e NEED_DECOMPOSER=stub \
+            -e INDEXING_EMBEDDER=mock \
+            -e INDEXING_DOCUMENT_STORE=memory \
+            -e FLEET_BACKEND=fake \
+            -e NEO4J_BACKEND=fake \
+            -e RECOMMEND_VIA_AGENT_GRAPH=false \
+            -e KG_APPLY_TRANSFORMS=false \
+            "${IMAGE_LOCAL}"
+
+          http_code() {
+            local path="$1"
+            local py code
+            py="$(printf '%s\n' \
+              'import urllib.request, urllib.error' \
+              "p = '${path}'" \
+              'try:' \
+              '    r = urllib.request.urlopen("http://127.0.0.1:8000" + p, timeout=3)' \
+              '    print(r.status)' \
+              'except urllib.error.HTTPError as e:' \
+              '    print(e.code)' \
+              'except Exception:' \
+              '    print(0)')"
+            code="$(docker exec "${NAME}" python3 -c "${py}" 2>/dev/null | tr -cd '0-9')"
+            echo "${code:-0}"
+          }
+
+          docs=0
+          health=0
+          for _ in $(seq 1 90); do
+            docs="$(http_code /docs)"
+            health="$(http_code /health)"
+            if { [ "${docs}" -ge 200 ] && [ "${docs}" -le 302 ]; } \
+              || { [ "${health}" -ge 200 ] && [ "${health}" -le 302 ]; }; then
+              break
+            fi
+            sleep 1
+          done
+
+          echo "GET /docs=${docs} GET /health=${health}"
+          if ! { [ "${docs}" -ge 200 ] && [ "${docs}" -le 302 ]; } \
+            && ! { [ "${health}" -ge 200 ] && [ "${health}" -le 302 ]; }; then
+            echo "::error::uvicorn did not serve GET /docs or GET /health on :8000 (image is not deployable)."
+            docker logs "${NAME}" || true
+            exit 1
+          fi
+          if [ "${docs}" -ge 200 ] && [ "${docs}" -le 302 ]; then
+            echo "GET /docs returned ${docs}"
+          else
+            echo "::warning::GET /docs returned ${docs}; /health was accepted."
+          fi
+          if [ "${health}" -ge 200 ] && [ "${health}" -le 302 ]; then
+            echo "GET /health returned ${health} (degraded is OK without Postgres)"
+          else
+            echo "::warning::GET /health returned ${health}; /docs was accepted."
+          fi
+          echo "Haystack FastAPI endpoints are reachable; image is deployable on any Docker Engine."
+
+          {
+            echo "### Deployable image"
+            echo ""
+            echo "Generated \`python:3.12-slim-bookworm\` + uv + \`uvicorn app.main:app --host 0.0.0.0 --port 8000\`."
+            echo "No baked POSTGRES_/SOURCE_/TARGET_/DATABASE_URL/NEED_DECOMPOSER/LLM_/INDEXING_/NEO4J_/FLEET_/KG_ in Config.Env."
+            echo "Product knobs from sanitized \`.env.prod\` live in \`/app/.env\` (pydantic). Process env still wins."
+            echo "Infra \`heavy-rental/haystack\` injects estate keys at runtime. \`Settings().app_env\` loaded from the file."
+            echo "Dummy compose-style env is visible. \`EXPOSE 8000\`."
+            echo "Started uvicorn and reached \`GET /docs\` (${docs}) and \`GET /health\` (${health}); container was removed."
+            echo "Run anywhere: \`docker run -p 8000:8000 -e DATABASE_URL=… <image>\` (Docker Desktop, compose, or Academy)."
+            echo "postgres_haystack_sync: \`${SYNC_STATUS}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Docker image archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: haystack-fast-api-release-docker-image
+          path: ${{ github.workspace }}/${{ steps.package.outputs.image_tar }}
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Login to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push Docker image to GHCR
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          IMAGE_TAG: ${{ steps.package.outputs.image_tag }}
+          IMAGE_REMOTE: ${{ steps.package.outputs.image_remote }}
+          IMAGE_REMOTE_LATEST: ${{ steps.package.outputs.image_remote_latest }}
+        run: |
+          set -euo pipefail
+          IMAGE_REMOTE="${IMAGE_REMOTE,,}"
+          IMAGE_REMOTE_LATEST="${IMAGE_REMOTE_LATEST,,}"
+          OWNER="${GH_REPOSITORY_OWNER}"
+          PKG="${IMAGE_NAME,,}"
+
+          list_tags() {
+            local path="$1"
+            gh api --paginate "${path}" --jq '.[] | .metadata.container.tags[]?' 2>/dev/null || true
+          }
+
+          TAGS="$(list_tags "/orgs/${OWNER}/packages/container/${PKG}/versions")"
+          if [ -z "${TAGS}" ]; then
+            TAGS="$(list_tags "/users/${OWNER}/packages/container/${PKG}/versions")"
+          fi
+          if printf '%s\n' "${TAGS}" | grep -qx "${IMAGE_TAG}"; then
+            echo "::error::GHCR tag ${IMAGE_REMOTE} already exists; will not overwrite a version tag."
+            exit 1
+          fi
+
+          docker push "${IMAGE_REMOTE}"
+          docker push "${IMAGE_REMOTE_LATEST}"
+          echo "Pushed:"
+          echo "  ${IMAGE_REMOTE}"
+          echo "  ${IMAGE_REMOTE_LATEST}"
+
+      - name: Upload release packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: haystack-fast-api-release-packages
+          path: |
+            ${{ github.workspace }}/${{ steps.package.outputs.versioned_wheel }}
+            ${{ github.workspace }}/${{ steps.package.outputs.stable_wheel }}
+            ${{ github.workspace }}/${{ steps.package.outputs.versioned_sdist }}
+            ${{ github.workspace }}/${{ steps.package.outputs.stable_sdist }}
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Packaging summary
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          IMAGE_LOCAL: ${{ steps.package.outputs.image_local }}
+          IMAGE_REMOTE: ${{ steps.package.outputs.image_remote }}
+          IMAGE_REMOTE_LATEST: ${{ steps.package.outputs.image_remote_latest }}
+          IMAGE_TAR: ${{ steps.package.outputs.image_tar }}
+          IMAGE_ID: ${{ steps.docker.outputs.image_id }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Deploy options"
+            echo ""
+            echo "1. **Wheel / sdist** — download \`haystack-fast-api-release-packages\`."
+            echo "2. **Image archive** — \`docker load < ${IMAGE_TAR}\` then \`docker run -p 8000:8000 -e … ${IMAGE_LOCAL}\` (id \`${IMAGE_ID}\`)."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${EVENT_NAME}" != "pull_request" ]; then
+            echo "3. **GHCR** — \`docker pull ${IMAGE_REMOTE}\` or \`docker pull ${IMAGE_REMOTE_LATEST}\`." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "3. **GHCR** — push skipped on pull_request; image is available as the tar artifact only." >> "$GITHUB_STEP_SUMMARY"
+          fi
