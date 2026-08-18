@@ -35,7 +35,7 @@
 # 2. No secrets required for this pipeline.
 # =============================================================================
 
-name: Fast Feedback CI
+name: Haystack Fast Feedback CI Invoke
 
 on:
   push:

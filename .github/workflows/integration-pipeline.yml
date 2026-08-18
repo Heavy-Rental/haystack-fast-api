@@ -55,7 +55,7 @@
 # No GitHub Actions secrets required for v1.
 # =============================================================================
 
-name: Haystack FastAPI CI
+name: HayStack CI Pipeline
 
 on:
   workflow_call:

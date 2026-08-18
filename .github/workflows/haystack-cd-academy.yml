@@ -5,7 +5,7 @@
 # Reusable only. Sole caller: haystack-cd-academy-caller.yml
 # =============================================================================
 
-name: Haystack CD Academy pipeline
+name: Haystack CD pipeline
 
 on:
   workflow_call:

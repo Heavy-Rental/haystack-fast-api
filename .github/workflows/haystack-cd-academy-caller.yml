@@ -12,7 +12,7 @@
 # No neo4j container.
 # =============================================================================
 
-name: Haystack CD (Academy)
+name: Haystack CD Pipeline Invoke
 
 on:
   workflow_dispatch:
