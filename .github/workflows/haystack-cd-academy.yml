@@ -24,15 +24,18 @@ on:
         required: false
         type: string
         default: ""
-    secrets:
-      AWS_ACCESS_KEY_ID:
+      aws_access_key_id:
         required: false
-      AWS_SECRET_ACCESS_KEY:
+        type: string
+        default: ""
+      aws_secret_access_key:
         required: false
-      AWS_SESSION_TOKEN:
+        type: string
+        default: ""
+      aws_session_token:
         required: false
-      LLM_API_KEY:
-        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -63,9 +66,9 @@ jobs:
 
       - uses: ./.github/actions/resolve-vocareum-aws
         with:
-          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws_access_key_id: ${{ inputs.aws_access_key_id || secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ inputs.aws_secret_access_key || secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_session_token: ${{ inputs.aws_session_token || secrets.AWS_SESSION_TOKEN }}
           aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - name: Prove the Vocareum session is live
@@ -102,9 +105,9 @@ jobs:
 
       - uses: ./.github/actions/resolve-vocareum-aws
         with:
-          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws_access_key_id: ${{ inputs.aws_access_key_id || secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ inputs.aws_secret_access_key || secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_session_token: ${{ inputs.aws_session_token || secrets.AWS_SESSION_TOKEN }}
           aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - name: asg-haystack InService + SSM Online + secret shell
@@ -247,9 +250,9 @@ jobs:
 
       - uses: ./.github/actions/resolve-vocareum-aws
         with:
-          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws_access_key_id: ${{ inputs.aws_access_key_id || secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ inputs.aws_secret_access_key || secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_session_token: ${{ inputs.aws_session_token || secrets.AWS_SESSION_TOKEN }}
           aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - name: Session Manager plugin
@@ -387,9 +390,9 @@ jobs:
 
       - uses: ./.github/actions/resolve-vocareum-aws
         with:
-          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws_access_key_id: ${{ inputs.aws_access_key_id || secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ inputs.aws_secret_access_key || secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_session_token: ${{ inputs.aws_session_token || secrets.AWS_SESSION_TOKEN }}
           aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - name: SSM GET :8000 on asg-haystack
