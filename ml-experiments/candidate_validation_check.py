@@ -74,7 +74,8 @@ MAX_R2_REGRESSION = 0.01
 
 
 class PredictModel(Protocol):
-    def predict(self, features: pd.DataFrame) -> Any: ...
+    def predict(self, features: pd.DataFrame) -> Any:
+        """Return model predictions for the feature frame."""
 
 
 @dataclass(frozen=True)

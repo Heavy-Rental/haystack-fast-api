@@ -100,7 +100,6 @@ class NeedDecomposer(Protocol):
 
     def decompose(self, source_text: str) -> list[DecomposedNeed]:
         """Return one or more needs. Empty list is treated as intake failure upstream."""
-        ...
 
 
 class StubNeedDecomposer:

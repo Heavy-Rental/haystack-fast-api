@@ -191,18 +191,26 @@ def main() -> None:
         "|-------|--------|",
         f"| **Generated at (UTC)** | {generated_at} |",
         f"| **Eval seed** | `{pack.get('eval_seed', 42)}` |",
-        "| **Full JSON (inputs + gold + predictions)** | "
-        "[`call1-call2-test-data-and-predictions.json`]"
-        "(./call1-call2-test-data-and-predictions.json) |",
-        "| **Metrics-only JSON** | "
-        "[`call1-call2-eval-results.json`](./call1-call2-eval-results.json) |",
+        (
+            "| **Full JSON (inputs + gold + predictions)** | "
+            + "[`call1-call2-test-data-and-predictions.json`]"
+            + "(./call1-call2-test-data-and-predictions.json) |"
+        ),
+        (
+            "| **Metrics-only JSON** | "
+            + "[`call1-call2-eval-results.json`](./call1-call2-eval-results.json) |"
+        ),
         "| **Fixture copies** | [`test-data/`](./test-data/) |",
-        "| **Method** | "
-        "[`../call1-call2-endpoint-process.md`]"
-        "(../call1-call2-endpoint-process.md) §11 |",
+        (
+            "| **Method** | "
+            + "[`../call1-call2-endpoint-process.md`]"
+            + "(../call1-call2-endpoint-process.md) §11 |"
+        ),
         "",
-        "This folder holds **retrieved test data** (case inputs, gold labels, "
-        "fleet) and **predicted** Call 1 / Call 2 outputs from one offline eval run.",
+        (
+            "This folder holds **retrieved test data** (case inputs, gold labels, "
+            + "fleet) and **predicted** Call 1 / Call 2 outputs from one offline eval run."
+        ),
         "",
         "## Files",
         "",
@@ -210,16 +218,22 @@ def main() -> None:
         "|------|----------|",
         "| `test-data/call1_call2_cases.json` | Seeded case pack (input text + gold) |",
         "| `test-data/eval_fleet.json` | Fake fleet assets/bookings used by Call 2 |",
-        "| `call1-call2-test-data-and-predictions.json` | Per case: `input`, "
-        "`expected`, `predicted.call1`, `predicted.call2`, `metrics` |",
+        (
+            "| `call1-call2-test-data-and-predictions.json` | Per case: `input`, "
+            + "`expected`, `predicted.call1`, `predicted.call2`, `metrics` |"
+        ),
         "| `call1-call2-eval-results.json` / `.md` | Scoreboard snapshot |",
         "",
         "## Case index",
         "",
-        "| case_id | kind | project_text (truncated) | Call 1 gold types | "
-        "Call 2 gold assets | conf | items |",
-        "|---------|------|------------------------|-------------------|"
-        "--------------------|------|-------|",
+        (
+            "| case_id | kind | project_text (truncated) | Call 1 gold types | "
+            + "Call 2 gold assets | conf | items |"
+        ),
+        (
+            "|---------|------|------------------------|-------------------|"
+            + "--------------------|------|-------|"
+        ),
     ]
     for row, case in zip(detailed, pack["cases"], strict=True):
         text = (case.get("project_text") or "").replace("|", "/").replace("\n", " ")

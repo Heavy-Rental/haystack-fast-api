@@ -27,7 +27,8 @@ EmbedderMode = Literal["mock", "openai", "sentence-transformers"]
 class DocumentEmbedder(Protocol):
     """Minimal protocol for pipeline embed components."""
 
-    def run(self, documents: list[Any]) -> dict[str, Any]: ...
+    def run(self, documents: list[Any]) -> dict[str, Any]:
+        """Embed documents and return a Haystack-style result dict."""
 
 
 def openai_embedding_dimensions(model: str, dimension: int) -> int | None:

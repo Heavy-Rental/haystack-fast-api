@@ -31,7 +31,8 @@ def test_registry_put_get_delete() -> None:
     assert len(reg) == 1
     got = reg.get("u1", "ing_1")
     assert got.document_store is store
-    assert reg.delete("u1", "ing_1") is True
+    deleted = reg.delete("u1", "ing_1")
+    assert deleted is True
     assert len(reg) == 0
     with pytest.raises(NotFoundError):
         reg.get("u1", "ing_1")

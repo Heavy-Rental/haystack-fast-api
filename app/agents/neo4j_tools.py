@@ -102,17 +102,17 @@ class Neo4jBackend(Protocol):
 
     @property
     def is_empty(self) -> bool:
-        ...
+        """True when the graph has no fleet nodes or relationships."""
 
     @property
     def is_available(self) -> bool:
-        ...
+        """True when the backend can serve reads."""
 
     def nodes(self) -> list[dict[str, Any]]:
-        ...
+        """Return fleet graph nodes."""
 
     def relationships(self) -> list[dict[str, Any]]:
-        ...
+        """Return fleet graph relationships."""
 
 
 class FakeNeo4jBackend:
@@ -325,8 +325,8 @@ class BoltNeo4jBackend:
         self,
         uri: str,
         user: str = "neo4j",
-        password: str = "neo4j",
         *,
+        password: str,
         driver: Any | None = None,
     ) -> None:
         self._uri = uri
@@ -425,7 +425,7 @@ def build_neo4j_backend(
         settings = get_settings()
     uri = str(getattr(settings, "neo4j_uri", "") or "")
     user = str(getattr(settings, "neo4j_user", "neo4j") or "neo4j")
-    password = str(getattr(settings, "neo4j_password", "neo4j") or "")
+    password = str(getattr(settings, "neo4j_password", "") or "")
     backend = BoltNeo4jBackend(uri, user=user, password=password, driver=driver)
     if not backend.is_available:
         return UnavailableNeo4jBackend()
