@@ -162,9 +162,7 @@ def test_flag_off_does_not_invoke_graph(monkeypatch: pytest.MonkeyPatch) -> None
     """Scenario: Flag off uses MVP service."""
     _put_session()
     boom = MagicMock(side_effect=AssertionError("graph should not run"))
-    monkeypatch.setattr(
-        "app.services.session_recommend.run_recommend_graph", boom
-    )
+    monkeypatch.setattr("app.services.session_recommend.run_recommend_graph", boom)
     quote = SessionRecommendService(via_agent_graph=False).recommend(
         user_id="u-s75",
         ingest_id="ing_s75",
@@ -196,9 +194,7 @@ def test_multi_need_golden_asset_ids_and_rates() -> None:
 
     _put_session()
     assets, bookings = _seed()
-    catalog = build_recommend_tool_catalog(
-        backend="fake", assets=assets, bookings=bookings
-    )
+    catalog = build_recommend_tool_catalog(backend="fake", assets=assets, bookings=bookings)
     quote = SessionRecommendService(
         via_agent_graph=True,
         catalog=catalog,
@@ -207,9 +203,7 @@ def test_multi_need_golden_asset_ids_and_rates() -> None:
         fanout_cap=2,
     ).recommend(user_id="u-s75", ingest_id="ing_s75")
 
-    golden = json.loads(
-        (FIXTURES / "golden_call2_quote.json").read_text(encoding="utf-8")
-    )["items"]
+    golden = json.loads((FIXTURES / "golden_call2_quote.json").read_text(encoding="utf-8"))["items"]
     by_need = {item.needId: item for item in quote.items}
     assert set(by_need) == {row["needId"] for row in golden}
     for row in golden:

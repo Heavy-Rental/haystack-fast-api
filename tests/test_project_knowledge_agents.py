@@ -20,9 +20,7 @@ PROJECT_TEXT = (
 )
 
 
-def test_multi_agent_invokes_both_tools(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_multi_agent_invokes_both_tools(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
     monkeypatch.setenv("KG_ARTIFACT_DIR", str(tmp_path))
     monkeypatch.setenv("PROJECT_AGENT_MODE", "stub")
@@ -42,9 +40,7 @@ def test_multi_agent_invokes_both_tools(
         user_id="agent_user",
         project_text=PROJECT_TEXT,
     )
-    session = get_project_knowledge_registry().get(
-        "agent_user", ingest.ingest_id
-    )
+    session = get_project_knowledge_registry().get("agent_user", ingest.ingest_id)
     assert session.knowledge_graph is not None
     assert session.document_store.count_documents() >= 1
 

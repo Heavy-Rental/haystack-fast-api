@@ -31,12 +31,8 @@ class RecommendFromProjectSpecRequest(BaseModel):
         min_length=1,
         description="Unstructured project description (single free-text box)",
     )
-    start_date: date | None = Field(
-        default=None, description="Rental window start (ISO 8601 date)"
-    )
-    end_date: date | None = Field(
-        default=None, description="Rental window end (ISO 8601 date)"
-    )
+    start_date: date | None = Field(default=None, description="Rental window start (ISO 8601 date)")
+    end_date: date | None = Field(default=None, description="Rental window end (ISO 8601 date)")
     options: RecommendOptions = Field(default_factory=RecommendOptions)
 
     @field_validator("project_text", "user_id", mode="before")

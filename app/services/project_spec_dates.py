@@ -66,9 +66,7 @@ _RANGE_MID = r"(?:to|until|through|till|-|–|—)"
 _FROM_TO_ANY = re.compile(
     rf"(?i)\b{_RANGE_LEAD}\s*[:=]?\s*({_ANY_DATE})\s*{_RANGE_MID}\s*({_ANY_DATE})\b"
 )
-_BETWEEN_ANY = re.compile(
-    rf"(?i)\bbetween\s+({_ANY_DATE})\s+and\s+({_ANY_DATE})\b"
-)
+_BETWEEN_ANY = re.compile(rf"(?i)\bbetween\s+({_ANY_DATE})\s+and\s+({_ANY_DATE})\b")
 _START_ONLY_ANY = re.compile(
     rf"(?i)\b(?:start(?:ing)?(?:\s+date)?|from|on|begin(?:ning)?)\s*[:=]?\s*"
     rf"({_ANY_DATE})\b"
@@ -117,9 +115,7 @@ def _shift_month(year: int, month: int, delta: int) -> tuple[int, int]:
     return idx // 12, idx % 12 + 1
 
 
-def _extract_phrase_window(
-    text: str, *, today: date
-) -> tuple[date | None, date | None]:
+def _extract_phrase_window(text: str, *, today: date) -> tuple[date | None, date | None]:
     """Quarter / month / relative phrases. Not used for heights like ``8m``."""
     source = text or ""
 
@@ -199,16 +195,12 @@ def _parse_named_token(token: str) -> date | None:
         rf"(\d{{1,2}})[\s\-]+({_MONTH_DOT})[\s\-]+(\d{{2,4}})", text, flags=re.IGNORECASE
     )
     if dmy:
-        return _parse_named_parts(
-            int(dmy.group(1)), dmy.group(2), _expand_year(int(dmy.group(3)))
-        )
+        return _parse_named_parts(int(dmy.group(1)), dmy.group(2), _expand_year(int(dmy.group(3))))
     mdy = re.fullmatch(
         rf"({_MONTH_DOT})[\s\-]+(\d{{1,2}}),?[\s\-]+(\d{{2,4}})", text, flags=re.IGNORECASE
     )
     if mdy:
-        return _parse_named_parts(
-            int(mdy.group(2)), mdy.group(1), _expand_year(int(mdy.group(3)))
-        )
+        return _parse_named_parts(int(mdy.group(2)), mdy.group(1), _expand_year(int(mdy.group(3))))
     return None
 
 

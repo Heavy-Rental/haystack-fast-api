@@ -168,8 +168,10 @@ def main() -> None:
         assets=("asset_id", "size"), clamped=("was_clamped", "sum")
     )
     summary["clamp_rate_%"] = summary["clamped"] / summary["assets"] * 100
-    excavator = results[results["category"] == "excavator"].groupby("duration_days").agg(
-        assets=("asset_id", "size"), clamped=("was_clamped", "sum")
+    excavator = (
+        results[results["category"] == "excavator"]
+        .groupby("duration_days")
+        .agg(assets=("asset_id", "size"), clamped=("was_clamped", "sum"))
     )
     excavator["clamp_rate_%"] = excavator["clamped"] / excavator["assets"] * 100
 

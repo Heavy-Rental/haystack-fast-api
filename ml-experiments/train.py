@@ -35,7 +35,9 @@ XGB_PARAMS = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data", type=Path, default=SCRIPT_DIR / "data" / "synthetic_pricing_data.csv")
+    parser.add_argument(
+        "--data", type=Path, default=SCRIPT_DIR / "data" / "synthetic_pricing_data.csv"
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--test-size", type=float, default=0.2)
     parser.add_argument("--model-out", type=Path, default=SCRIPT_DIR / "artifacts" / "model.pkl")

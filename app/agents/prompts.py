@@ -119,13 +119,9 @@ def stub_synthesis_answer(
             f"Based on the project specification, regarding {query.strip() or 'the query'}:"
         )
         if vector_bits:
-            answer_parts.append(
-                "From project text chunks: " + " | ".join(vector_bits)
-            )
+            answer_parts.append("From project text chunks: " + " | ".join(vector_bits))
         if graph_bits:
-            answer_parts.append(
-                "From the project knowledge graph: " + " | ".join(graph_bits)
-            )
+            answer_parts.append("From the project knowledge graph: " + " | ".join(graph_bits))
     else:
         answer_parts.append(
             "No matching evidence was found in the project document store "
@@ -140,9 +136,7 @@ def stub_synthesis_answer(
     if not graph_bits:
         gaps.append("No KG-1 node matches for the project specification.")
     if not gaps:
-        gaps.append(
-            "Stage 1 does not include equipment stockpile (KG-2) or live availability."
-        )
+        gaps.append("Stage 1 does not include equipment stockpile (KG-2) or live availability.")
 
     return (
         "## Answer\n"

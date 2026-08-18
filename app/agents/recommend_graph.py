@@ -57,8 +57,10 @@ def build_recommend_graph(
         tools = runtime.catalog
         mode = agent_mode if agent_mode is not None else runtime.agent_mode
     else:
-        tools = catalog if catalog is not None else build_recommend_tool_catalog(
-            backend="fake", decomposer=decomposer
+        tools = (
+            catalog
+            if catalog is not None
+            else build_recommend_tool_catalog(backend="fake", decomposer=decomposer)
         )
         mode = agent_mode if agent_mode is not None else "stub"
     cap = max(1, int(fanout_cap))
@@ -67,9 +69,7 @@ def build_recommend_graph(
     builder.add_node("check_gate", check_gate)
     builder.add_node(
         "project_worker",
-        make_project_worker(
-            source_text, catalog=tools, decomposer=decomposer
-        ),
+        make_project_worker(source_text, catalog=tools, decomposer=decomposer),
     )
     builder.add_node("delegator", make_delegator(catalog=tools))
     builder.add_node(
@@ -156,9 +156,7 @@ def run_recommend_graph(
             catalog=tools_catalog,
             decomposer=decomposer,
             settings=cfg,
-            agent_mode=agent_mode
-            if agent_mode is not None
-            else (cfg.project_agent_mode or "stub"),
+            agent_mode=agent_mode if agent_mode is not None else (cfg.project_agent_mode or "stub"),
         )
     tools = injected.catalog
 

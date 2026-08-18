@@ -189,12 +189,8 @@ def test_gate_passes_only_when_clamp_accuracy_and_completeness_pass() -> None:
             {"model": "candidate", "mae": 20.5, "rmse": 25.5, "r2": 0.96},
         ]
     )
-    passed = validation.assess_gate(
-        _gate_summary(0.93, 0.30), accuracy, actual_asset_count=27
-    )
-    failed = validation.assess_gate(
-        _gate_summary(0.93, 0.60), accuracy, actual_asset_count=26
-    )
+    passed = validation.assess_gate(_gate_summary(0.93, 0.30), accuracy, actual_asset_count=27)
+    failed = validation.assess_gate(_gate_summary(0.93, 0.60), accuracy, actual_asset_count=26)
 
     assert passed.passed is True
     assert all(passed.checks.values())

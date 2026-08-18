@@ -94,12 +94,8 @@ def test_delegator_rejects_unknown_worker_kind() -> None:
 def test_execute_needs_refuses_unknown_worker_kind() -> None:
     catalog = build_recommend_tool_catalog(backend="fake")
     execute = make_execute_needs(catalog, fanout_cap=1)
-    state = empty_recommend_state(
-        user_id="u-test", ingest_id="ing-test", indexing_ok=True
-    )
-    state["project"]["needs"] = [
-        {"need_id": "need_access", "description": "lift", "quantity": 1}
-    ]
+    state = empty_recommend_state(user_id="u-test", ingest_id="ing-test", indexing_ok=True)
+    state["project"]["needs"] = [{"need_id": "need_access", "description": "lift", "quantity": 1}]
     state["work_plan"] = [
         {
             "worker_kind": "invent_stock",
@@ -112,9 +108,7 @@ def test_execute_needs_refuses_unknown_worker_kind() -> None:
 
 
 def test_delegator_emits_only_allowlisted_kinds() -> None:
-    state = empty_recommend_state(
-        user_id="u-test", ingest_id="ing-test", indexing_ok=True
-    )
+    state = empty_recommend_state(user_id="u-test", ingest_id="ing-test", indexing_ok=True)
     state["project"]["needs"] = [
         {
             "need_id": "need_access",

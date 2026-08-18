@@ -128,9 +128,7 @@ async def _run_ingest_with_optional_idempotency(
         "requestBody": {
             "content": {
                 "application/json": {
-                    "schema": {
-                        "$ref": "#/components/schemas/RecommendFromProjectSpecRequest"
-                    }
+                    "schema": {"$ref": "#/components/schemas/RecommendFromProjectSpecRequest"}
                 },
                 "multipart/form-data": {
                     "schema": {
@@ -148,7 +146,7 @@ async def _run_ingest_with_optional_idempotency(
                     }
                 },
             }
-        }
+        },
     },
 )
 async def recommend_from_project_spec(
@@ -276,9 +274,7 @@ async def recommend_from_project_spec(
             producer=_produce_multipart,
         )
 
-    raise BadRequestError(
-        "Content-Type must be application/json or multipart/form-data"
-    )
+    raise BadRequestError("Content-Type must be application/json or multipart/form-data")
 
 
 @router.post(

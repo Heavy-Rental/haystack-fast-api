@@ -25,9 +25,7 @@ class Asset(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column()
-    category_id: Mapped[int] = mapped_column(
-        ForeignKey("primary_snapshot.asset_categories.id")
-    )
+    category_id: Mapped[int] = mapped_column(ForeignKey("primary_snapshot.asset_categories.id"))
     capacity: Mapped[int | None] = mapped_column()
     platform_height: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     condition: Mapped[str | None] = mapped_column()

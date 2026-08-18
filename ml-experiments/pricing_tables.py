@@ -89,20 +89,60 @@ DISCOUNT_RATE = 0.18
 # pipelines, lifting construction-linked categories more than forklift.
 SEASONALITY = {
     "excavator": {
-        1: 0.88, 2: 0.92, 3: 0.96, 4: 1.00, 5: 1.00, 6: 1.00,
-        7: 1.00, 8: 1.00, 9: 1.02, 10: 1.06, 11: 1.08, 12: 0.95,
+        1: 0.88,
+        2: 0.92,
+        3: 0.96,
+        4: 1.00,
+        5: 1.00,
+        6: 1.00,
+        7: 1.00,
+        8: 1.00,
+        9: 1.02,
+        10: 1.06,
+        11: 1.08,
+        12: 0.95,
     },
     "boom lift": {
-        1: 0.94, 2: 0.96, 3: 0.98, 4: 1.00, 5: 1.00, 6: 1.00,
-        7: 1.00, 8: 1.00, 9: 1.01, 10: 1.04, 11: 1.05, 12: 0.98,
+        1: 0.94,
+        2: 0.96,
+        3: 0.98,
+        4: 1.00,
+        5: 1.00,
+        6: 1.00,
+        7: 1.00,
+        8: 1.00,
+        9: 1.01,
+        10: 1.04,
+        11: 1.05,
+        12: 0.98,
     },
     "scissor lift": {
-        1: 0.98, 2: 0.99, 3: 1.00, 4: 1.00, 5: 1.00, 6: 1.00,
-        7: 1.00, 8: 1.00, 9: 1.00, 10: 1.02, 11: 1.03, 12: 1.00,
+        1: 0.98,
+        2: 0.99,
+        3: 1.00,
+        4: 1.00,
+        5: 1.00,
+        6: 1.00,
+        7: 1.00,
+        8: 1.00,
+        9: 1.00,
+        10: 1.02,
+        11: 1.03,
+        12: 1.00,
     },
     "forklift": {
-        1: 1.00, 2: 1.00, 3: 1.00, 4: 1.00, 5: 1.00, 6: 1.00,
-        7: 1.00, 8: 1.00, 9: 1.00, 10: 1.01, 11: 1.02, 12: 1.01,
+        1: 1.00,
+        2: 1.00,
+        3: 1.00,
+        4: 1.00,
+        5: 1.00,
+        6: 1.00,
+        7: 1.00,
+        8: 1.00,
+        9: 1.00,
+        10: 1.01,
+        11: 1.02,
+        12: 1.01,
     },
 }
 
@@ -127,10 +167,10 @@ CONDITION_MULTIPLIER = {
 # production fallback in predict_price.py/pricing_client.py when a live
 # period_utilization value isn't available (e.g. no DB session).
 CATEGORY_UTILIZATION = {
-    "scissor lift": 0.76,   # aerial bucket, 72-80% band, midpoint
-    "boom lift": 0.76,      # aerial bucket, 72-80% band, midpoint
-    "forklift": 0.685,      # blended/general bucket, 65-72% band, midpoint
-    "excavator": 0.585,     # earthmoving bucket, 55-62% band, midpoint
+    "scissor lift": 0.76,  # aerial bucket, 72-80% band, midpoint
+    "boom lift": 0.76,  # aerial bucket, 72-80% band, midpoint
+    "forklift": 0.685,  # blended/general bucket, 65-72% band, midpoint
+    "excavator": 0.585,  # earthmoving bucket, 55-62% band, midpoint
 }
 
 # Spec-band boundaries for period_utilization grouping (Phase 1d). Excavator/
@@ -172,7 +212,7 @@ HEIGHT_BINS = {
     "boom lift": [(0, 18), (18, 24), (24, 31), (31, None)],
 }
 
-SHORT_DURATION_PREMIUM = {1: 1.15, 2: 1.10, 3: 1.05} # default 1.0 for duration_days > 3
+SHORT_DURATION_PREMIUM = {1: 1.15, 2: 1.10, 3: 1.05}  # default 1.0 for duration_days > 3
 
 # firmness = 1 + FIRMNESS_SLOPE * (utilization - FIRMNESS_PIVOT)
 # Higher utilization -> firmer (higher) prices. Bumped 1.4x (Phase 1d, from

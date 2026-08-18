@@ -58,9 +58,7 @@ DEFAULT_CANDIDATE_MODEL = ARTIFACTS_DIR / "model_v2.pkl"
 DEFAULT_CANDIDATE_META = ARTIFACTS_DIR / "current_v2.json"
 DEFAULT_CANDIDATE_DATA = SCRIPT_DIR / "data" / "phase2d" / "synthetic_pricing_data_v2.csv"
 DEFAULT_OUTPUT = SCRIPT_DIR / "outputs" / "phase2d" / "candidate_validation_check.png"
-EXPECTED_CANDIDATE_DATA_SHA256 = (
-    "3b2b79d28f42fe62e2971f48b055af0cabecadc3b5fb0b7463a58929766e2d05"
-)
+EXPECTED_CANDIDATE_DATA_SHA256 = "3b2b79d28f42fe62e2971f48b055af0cabecadc3b5fb0b7463a58929766e2d05"
 
 DURATIONS = (1, 7, 14, 30)
 REALISTIC_DURATIONS = (7, 14)
@@ -366,9 +364,7 @@ def assess_gate(
     candidate_r2 = float(indexed_accuracy.loc["candidate", "r2"])
     checks["common_holdout_mae"] = candidate_mae <= current_mae * (1 + MAX_MAE_REGRESSION)
     checks["common_holdout_r2"] = candidate_r2 >= current_r2 - MAX_R2_REGRESSION
-    details.append(
-        f"common holdout MAE: current={current_mae:.4f}, candidate={candidate_mae:.4f}"
-    )
+    details.append(f"common holdout MAE: current={current_mae:.4f}, candidate={candidate_mae:.4f}")
     details.append(f"common holdout R²: current={current_r2:.4f}, candidate={candidate_r2:.4f}")
 
     return GateDecision(passed=all(checks.values()), checks=checks, details=tuple(details))
@@ -403,7 +399,9 @@ def render_chart(predictions: pd.DataFrame, summary: pd.DataFrame, out_path: Pat
         .mean()
         .rename("clamp_rate")
     )
-    categories = [category for category in fs.CATEGORIES if category in set(predictions["category"])]
+    categories = [
+        category for category in fs.CATEGORIES if category in set(predictions["category"])
+    ]
     reductions = np.array(
         [
             [
@@ -462,10 +460,7 @@ def _print_results(
         "Formal gate inputs: durations=1/7/14/30d, distance_km=20.0, "
         "period_utilization=production category fallback, lead_time_days=0.0"
     )
-    print(
-        f"Candidate data: {candidate_data} "
-        f"(sha256={accuracy.attrs['data_sha256']})"
-    )
+    print(f"Candidate data: {candidate_data} (sha256={accuracy.attrs['data_sha256']})")
     print("\nClamp comparison:")
     print(printable.round(2).to_string(index=False))
     print("\nCommon v2 holdout metrics:")

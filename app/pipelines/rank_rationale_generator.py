@@ -32,9 +32,9 @@ def wanted_categories(unit_need: dict[str, Any]) -> list[str]:
     """Model categories this need is asking for (hints first)."""
     hints = [str(h).strip() for h in (unit_need.get("equipment_hints") or []) if str(h).strip()]
     if hints:
-        return infer_model_categories(
-            {"equipment_hints": hints, "description": ""}
-        ) or [h.lower() for h in hints]
+        return infer_model_categories({"equipment_hints": hints, "description": ""}) or [
+            h.lower() for h in hints
+        ]
     return infer_model_categories(unit_need)
 
 
@@ -104,13 +104,11 @@ def build_evidence_rationale(
     selected: dict[str, Any],
 ) -> str:
     """Factual one-liner from the same signals as ``score_need_match``. No invent."""
-    hints = [
-        str(h).strip()
-        for h in (unit_need.get("equipment_hints") or [])
-        if str(h).strip()
-    ]
-    label = hints[0] if hints else (
-        wanted_categories(unit_need)[0] if wanted_categories(unit_need) else "need"
+    hints = [str(h).strip() for h in (unit_need.get("equipment_hints") or []) if str(h).strip()]
+    label = (
+        hints[0]
+        if hints
+        else (wanted_categories(unit_need)[0] if wanted_categories(unit_need) else "need")
     )
     name = selected.get("name") or selected.get("asset_id") or "asset"
     cat = selected.get("category") or selected.get("equipment_type") or "unknown"

@@ -139,7 +139,9 @@ def describe_pair_fixed(scenarios: list[Scenario], varying: str) -> str:
         "capacity": f"capacity={s.capacity:g}kg",
         "distance_km": f"distance_km={s.distance_km:g}km",
         "platform_height": (
-            f"platform_height={s.platform_height:g}m" if s.platform_height is not None else "platform_height=n/a"
+            f"platform_height={s.platform_height:g}m"
+            if s.platform_height is not None
+            else "platform_height=n/a"
         ),
     }
     fields.pop(varying, None)
@@ -167,7 +169,9 @@ def plot_pair_comparison(
             ax.annotate(
                 f"{bar.get_height():.0f}",
                 (bar.get_x() + bar.get_width() / 2, bar.get_height()),
-                ha="center", va="bottom", fontsize=9,
+                ha="center",
+                va="bottom",
+                fontsize=9,
             )
     ax.set_xticks(x)
     ax.set_xticklabels(labels)
@@ -204,7 +208,9 @@ def run_pair(
     for s, r in zip(scenarios, results):
         print(f"  {s.label:<18} {r.raw_price:>8.2f} {r.clamped_price:>8.2f} {r.was_clamped!s:>9}")
 
-    plot_pair_comparison(scenarios, results, title, describe_pair_fixed(scenarios, varying), out_path)
+    plot_pair_comparison(
+        scenarios, results, title, describe_pair_fixed(scenarios, varying), out_path
+    )
 
 
 def parse_args() -> argparse.Namespace:

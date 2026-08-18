@@ -109,9 +109,7 @@ Rules:
 # Worker [6] — fleet
 # ---------------------------------------------------------------------------
 
-FLEET_WORKER_INTENT = (
-    "Retrieve, filter, and availability-check fleet candidates for one need_id."
-)
+FLEET_WORKER_INTENT = "Retrieve, filter, and availability-check fleet candidates for one need_id."
 
 FLEET_WORKER_SYSTEM = f"""You are Fleet Worker [6] for one need_id.
 

@@ -77,18 +77,10 @@ def compute_confidence_score(
     n = float(len(items))
     needs = max(1, int(need_count or 0))
     coverage = min(1.0, n / needs)
-    scores = [
-        float(item.matchScore)
-        for item in items
-        if item.matchScore is not None
-    ]
+    scores = [float(item.matchScore) for item in items if item.matchScore is not None]
     mean_match = (sum(scores) / len(scores)) if scores else 0.0
-    live = (
-        sum(1 for item in items if str(item.equipment.id or "").isdigit()) / n
-    )
-    available = (
-        sum(1 for item in items if item.equipment.available is True) / n
-    )
+    live = sum(1 for item in items if str(item.equipment.id or "").isdigit()) / n
+    available = sum(1 for item in items if item.equipment.available is True) / n
     priced_hits = 0
     for item in items:
         raw = item.mlPredictedPrice
@@ -172,10 +164,7 @@ def _is_aerial_asset(*parts: Any) -> bool:
                     return True
             except (TypeError, ValueError):
                 pass
-            blob = " ".join(
-                str(part.get(k) or "")
-                for k in ("equipment_type", "category", "name")
-            )
+            blob = " ".join(str(part.get(k) or "") for k in ("equipment_type", "category", "name"))
         else:
             blob = str(part or "")
         lowered = blob.lower()
@@ -229,19 +218,13 @@ def _hydrate_available(
     except (TypeError, ValueError):
         pk_int = None
     try:
-        available = repo.is_asset_available(
-            session, pk_int, start_date=start, end_date=end
-        )
+        available = repo.is_asset_available(session, pk_int, start_date=start, end_date=end)
     except Exception:
         logger.debug("availability lookup failed for id=%s", pk, exc_info=True)
-        warnings.append(
-            f"availability unread for assets.id={pk}; left null (no invent)"
-        )
+        warnings.append(f"availability unread for assets.id={pk}; left null (no invent)")
         return None
     if available is None:
-        warnings.append(
-            f"availability unread for assets.id={pk}; left null (no invent)"
-        )
+        warnings.append(f"availability unread for assets.id={pk}; left null (no invent)")
     return available
 
 
@@ -348,7 +331,9 @@ def map_recommend_to_quote(
     estimated = 0.0
     has_price = False
     rationales: list[str] = []
-    warnings: list[str] = list(meta.get("warnings") or []) if isinstance(meta.get("warnings"), list) else []
+    warnings: list[str] = (
+        list(meta.get("warnings") or []) if isinstance(meta.get("warnings"), list) else []
+    )
 
     rank = 0
     for need_result in recommend.results_by_need:
@@ -368,17 +353,13 @@ def map_recommend_to_quote(
             for k, v in {
                 "availability": item.availability,
                 "currency": (item.pricing.currency if item.pricing else None),
-                "model_version": (
-                    item.pricing.model_version if item.pricing else None
-                ),
+                "model_version": (item.pricing.model_version if item.pricing else None),
                 "was_clamped": (
                     item.pricing.was_clamped
                     if item.pricing and item.pricing.was_clamped is not None
                     else None
                 ),
-                "explanation": (
-                    item.pricing.explanation if item.pricing else None
-                ),
+                "explanation": (item.pricing.explanation if item.pricing else None),
             }.items()
             if v is not None
         }
@@ -443,9 +424,7 @@ def map_recommend_to_quote(
 
     rationale = " ".join(rationales).strip() or None
     if not rationale and items:
-        rationale = (
-            f"Selected {len(items)} catalog-backed asset(s) for the project needs."
-        )
+        rationale = f"Selected {len(items)} catalog-backed asset(s) for the project needs."
 
     return AssetRecommendResponse(
         user_id=user_id,
@@ -607,9 +586,5 @@ class SessionRecommendService:
             project_session=session,
         )
         if not state_indexing_ok(state):
-            raise BadRequestError(
-                "indexing gate refused: indexing_ok=false; no recommend"
-            )
-        return results_to_recommend_response(
-            state, start_date=start, end_date=end
-        )
+            raise BadRequestError("indexing gate refused: indexing_ok=false; no recommend")
+        return results_to_recommend_response(state, start_date=start, end_date=end)

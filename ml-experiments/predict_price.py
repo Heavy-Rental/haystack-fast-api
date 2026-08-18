@@ -104,16 +104,20 @@ def predict_price(
     if period_utilization is None:
         period_utilization = pt.CATEGORY_UTILIZATION[category]
 
-    row = pd.DataFrame([{
-        "category": category,
-        "condition": condition,
-        "duration_days": duration_days,
-        "capacity": capacity,
-        "distance_km": distance_km,
-        "platform_height": float("nan") if platform_height is None else platform_height,
-        "period_utilization": period_utilization,
-        "lead_time_days": lead_time_days,
-    }])
+    row = pd.DataFrame(
+        [
+            {
+                "category": category,
+                "condition": condition,
+                "duration_days": duration_days,
+                "capacity": capacity,
+                "distance_km": distance_km,
+                "platform_height": float("nan") if platform_height is None else platform_height,
+                "period_utilization": period_utilization,
+                "lead_time_days": lead_time_days,
+            }
+        ]
+    )
     features = fs.build_features(row)
     raw_price = float(_model.predict(features)[0])
 

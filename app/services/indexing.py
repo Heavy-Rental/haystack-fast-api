@@ -310,10 +310,9 @@ class IndexingIngestService:
                 pipeline = self._pipeline or _build_pipeline_for_store(session_store)
             elif self._pipeline is not None:
                 pipeline = self._pipeline
-                session_store = (
-                    _document_store_from_pipeline(pipeline)
-                    or create_session_document_store(settings=settings)
-                )
+                session_store = _document_store_from_pipeline(
+                    pipeline
+                ) or create_session_document_store(settings=settings)
             else:
                 session_store = create_session_document_store(settings=settings)
                 pipeline = _build_pipeline_for_store(session_store)
@@ -331,9 +330,7 @@ class IndexingIngestService:
                     meta["user_name"] = uname
                 if expires_at:
                     meta["expires_at"] = expires_at
-                sources.append(
-                    ByteStream(data=src.data, meta=meta, mime_type=src.mime_type)
-                )
+                sources.append(ByteStream(data=src.data, meta=meta, mime_type=src.mime_type))
         if project_text is not None and str(project_text).strip():
             text_stream = byte_stream_from_project_text(
                 str(project_text),
@@ -352,9 +349,7 @@ class IndexingIngestService:
             sources.append(text_stream)
 
         if not sources:
-            raise BadRequestError(
-                "project_text or file must provide at least one non-empty source"
-            )
+            raise BadRequestError("project_text or file must provide at least one non-empty source")
 
         try:
             out = run_indexing_pipeline(pipeline, sources=sources)
@@ -387,8 +382,7 @@ class IndexingIngestService:
         structured_document_count = int(out.get("structured_document_count") or 0)
         unstructured_document_count = int(out.get("unstructured_document_count") or 0)
         convert_document_count = int(
-            out.get("document_count")
-            or (structured_document_count + unstructured_document_count)
+            out.get("document_count") or (structured_document_count + unstructured_document_count)
         )
         conversion_warnings = list(out.get("conversion_warnings") or [])
 
@@ -400,9 +394,7 @@ class IndexingIngestService:
 
         # Embedded chunks for store previews; joiner output is KG input (post-split).
         embedded_raw = list(out.get("chunk_documents") or out.get("documents") or [])
-        joiner_raw = list(
-            out.get("final_doc_joiner_documents") or embedded_raw
-        )
+        joiner_raw = list(out.get("final_doc_joiner_documents") or embedded_raw)
         embedded_docs = _stamp_documents(
             [d for d in embedded_raw if isinstance(d, Document)],
             user_id=uid,
@@ -421,9 +413,7 @@ class IndexingIngestService:
         documents_written = int(out.get("documents_written") or 0)
 
         if chunk_count == 0 or documents_written == 0:
-            raise BadRequestError(
-                "indexing produced no writable chunks after clean/split/embed"
-            )
+            raise BadRequestError("indexing produced no writable chunks after clean/split/embed")
 
         public_warnings = list(conversion_warnings)
 
@@ -446,9 +436,7 @@ class IndexingIngestService:
             raise BadRequestError(msg) from exc
 
         if not kg_result.kg_built:
-            raise BadRequestError(
-                "; ".join(kg_result.warnings) or "knowledge graph build failed"
-            )
+            raise BadRequestError("; ".join(kg_result.warnings) or "knowledge graph build failed")
 
         kg_built = kg_result.kg_built
         kg_node_count = kg_result.kg_node_count
@@ -461,9 +449,7 @@ class IndexingIngestService:
         # such as "Optional caption alongside file" so needs_summary sees the brief.
         file_extract = _extract_text_from_documents(joiner_docs or embedded_docs)
         summary_source = merge_ingest_source(project_text, file_extract)
-        user_requirement_summary, summary_warnings = _build_user_requirement_summary(
-            summary_source
-        )
+        user_requirement_summary, summary_warnings = _build_user_requirement_summary(summary_source)
         public_warnings.extend(summary_warnings)
 
         # S1b + S1e: request dates preferred; else free-text/file extract.
@@ -506,9 +492,7 @@ class IndexingIngestService:
                     "data_kind": data_kind,
                     "chunk_count": chunk_count,
                     "documents_written": documents_written,
-                    "document_store_mode": str(
-                        settings.indexing_document_store or "memory"
-                    ),
+                    "document_store_mode": str(settings.indexing_document_store or "memory"),
                     "expires_at": expires_at,
                     "filenames": list(out.get("filenames") or []),
                     "kg_node_count": kg_node_count,
@@ -516,17 +500,13 @@ class IndexingIngestService:
                     "kg_transform_applied": kg_transform_applied,
                     "user_requirement_summary": user_requirement_summary,
                     "tentative_start_date": (
-                        resolved_start.isoformat()
-                        if resolved_start is not None
-                        else None
+                        resolved_start.isoformat() if resolved_start is not None else None
                     ),
                     "tentative_end_date": (
                         resolved_end.isoformat() if resolved_end is not None else None
                     ),
                     "needs_summary": [item.model_dump() for item in needs_summary],
-                    "expected_budget": (
-                        expected_budget.model_dump() if expected_budget else None
-                    ),
+                    "expected_budget": (expected_budget.model_dump() if expected_budget else None),
                 },
             )
         )

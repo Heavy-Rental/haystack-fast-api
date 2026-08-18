@@ -128,7 +128,10 @@ def compute_base_daily_rate(
         driver = pt.CATEGORY_PRICE_DRIVER[category]
         if driver == "capacity":
             value = capacity_kg[i]
-            d_min, d_max = pt.CATEGORY_CAPACITY_KG[category]["min"], pt.CATEGORY_CAPACITY_KG[category]["max"]
+            d_min, d_max = (
+                pt.CATEGORY_CAPACITY_KG[category]["min"],
+                pt.CATEGORY_CAPACITY_KG[category]["max"],
+            )
         else:
             value = platform_height_m[i]
             d_min, d_max = (
@@ -245,7 +248,9 @@ def sample_period_utilization(
     noise, clipped to [0, 1].
     """
     baseline = np.array([pt.CATEGORY_UTILIZATION[c] for c in categories])
-    adjustment = -pt.LEAD_TIME_UTILIZATION_SLOPE * (lead_time_days - pt.LEAD_TIME_UTILIZATION_PIVOT_DAYS)
+    adjustment = -pt.LEAD_TIME_UTILIZATION_SLOPE * (
+        lead_time_days - pt.LEAD_TIME_UTILIZATION_PIVOT_DAYS
+    )
     noise = rng.normal(0, pt.PERIOD_UTILIZATION_NOISE_STD, size=len(categories))
     return np.clip(baseline + adjustment + noise, 0.0, 1.0)
 
@@ -314,7 +319,14 @@ def compute_price_per_day(
     noise = rng.normal(0, noise_std_frac(categories))
 
     raw_price = (
-        base_rates * discount * season * cond_mult * firmness * distance_mult * urgency * (1 + noise)
+        base_rates
+        * discount
+        * season
+        * cond_mult
+        * firmness
+        * distance_mult
+        * urgency
+        * (1 + noise)
     )
     price_clamped = (raw_price < min_rates) | (raw_price > max_rates)
     price_per_day = np.round(np.clip(raw_price, min_rates, max_rates), 2)
@@ -413,7 +425,9 @@ def run_sanity_checks(df: pd.DataFrame, plots_dir: Path, strict: bool) -> None:
     print("\n[Check] Primary size-driver correlation with price_per_day:")
     for category in pt.CATEGORIES:
         subset = df[df["category"] == category]
-        driver_col = "capacity" if pt.CATEGORY_PRICE_DRIVER[category] == "capacity" else "platform_height"
+        driver_col = (
+            "capacity" if pt.CATEGORY_PRICE_DRIVER[category] == "capacity" else "platform_height"
+        )
         corr = subset[driver_col].corr(subset["price_per_day"])
         status = "OK" if corr > 0.3 else "WARN"
         ok = ok and status == "OK"
@@ -422,7 +436,9 @@ def run_sanity_checks(df: pd.DataFrame, plots_dir: Path, strict: bool) -> None:
             secondary_corr = subset["capacity"].corr(subset["price_per_day"])
             print(f"       (secondary) corr(price, capacity)={secondary_corr:.3f}")
 
-    print("\n[Check] Distance price effect (mean price_per_day / baseDailyRate by distance bucket):")
+    print(
+        "\n[Check] Distance price effect (mean price_per_day / baseDailyRate by distance bucket):"
+    )
     near = df["distance_km"] <= 5
     far = df["distance_km"] >= 35
     if near.any() and far.any():
@@ -434,24 +450,36 @@ def run_sanity_checks(df: pd.DataFrame, plots_dir: Path, strict: bool) -> None:
     else:
         print("  [WARN] not enough rows in the near/far distance buckets to check")
 
-    print("\n[Check] period_utilization effect (mean price_per_day / baseDailyRate by utilization tercile):")
+    print(
+        "\n[Check] period_utilization effect (mean price_per_day / baseDailyRate by utilization tercile):"
+    )
     print(f"  range: [{df['period_utilization'].min():.3f}, {df['period_utilization'].max():.3f}]")
     terciles = pd.qcut(df["period_utilization"], 3, labels=["low", "mid", "high"])
-    tercile_ratio = (df["price_per_day"] / df["baseDailyRate"]).groupby(terciles, observed=True).mean()
+    tercile_ratio = (
+        (df["price_per_day"] / df["baseDailyRate"]).groupby(terciles, observed=True).mean()
+    )
     utilization_monotonic = tercile_ratio["low"] < tercile_ratio["mid"] < tercile_ratio["high"]
     status = "OK" if utilization_monotonic else "WARN"
     ok = ok and utilization_monotonic
     print(f"  [{status}] {tercile_ratio.round(3).to_dict()} (expect low < mid < high)")
 
-    print("\n[Check] lead_time_days effect (mean price_per_day / baseDailyRate, near vs far lead time):")
+    print(
+        "\n[Check] lead_time_days effect (mean price_per_day / baseDailyRate, near vs far lead time):"
+    )
     near_lead = df["lead_time_days"] <= 5
     far_lead = df["lead_time_days"] >= 40
     if near_lead.any() and far_lead.any():
-        near_lead_ratio = (df.loc[near_lead, "price_per_day"] / df.loc[near_lead, "baseDailyRate"]).mean()
-        far_lead_ratio = (df.loc[far_lead, "price_per_day"] / df.loc[far_lead, "baseDailyRate"]).mean()
+        near_lead_ratio = (
+            df.loc[near_lead, "price_per_day"] / df.loc[near_lead, "baseDailyRate"]
+        ).mean()
+        far_lead_ratio = (
+            df.loc[far_lead, "price_per_day"] / df.loc[far_lead, "baseDailyRate"]
+        ).mean()
         status = "OK" if near_lead_ratio > far_lead_ratio else "WARN"
         ok = ok and status == "OK"
-        print(f"  [{status}] near(<=5d) ratio={near_lead_ratio:.3f}, far(>=40d) ratio={far_lead_ratio:.3f} (expect near > far)")
+        print(
+            f"  [{status}] near(<=5d) ratio={near_lead_ratio:.3f}, far(>=40d) ratio={far_lead_ratio:.3f} (expect near > far)"
+        )
     else:
         print("  [WARN] not enough rows in the near/far lead-time buckets to check")
 
@@ -492,7 +520,9 @@ def run_sanity_checks(df: pd.DataFrame, plots_dir: Path, strict: bool) -> None:
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    sns.boxplot(data=df, x="category", y="price_per_day", hue="condition", hue_order=pt.CONDITIONS, ax=ax)
+    sns.boxplot(
+        data=df, x="category", y="price_per_day", hue="condition", hue_order=pt.CONDITIONS, ax=ax
+    )
     ax.set_title("price_per_day by condition, per category")
     fig.tight_layout()
     fig.savefig(plots_dir / "price_by_condition.png")
@@ -513,9 +543,13 @@ def run_sanity_checks(df: pd.DataFrame, plots_dir: Path, strict: bool) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
     aerial = df[df["category"].isin(pt.AERIAL_CATEGORIES)]
     non_aerial = df[~df["category"].isin(pt.AERIAL_CATEGORIES)]
-    sns.scatterplot(data=aerial, x="platform_height", y="price_per_day", hue="category", alpha=0.4, ax=axes[0])
+    sns.scatterplot(
+        data=aerial, x="platform_height", y="price_per_day", hue="category", alpha=0.4, ax=axes[0]
+    )
     axes[0].set_title("Aerial: platform_height (primary) vs price")
-    sns.scatterplot(data=non_aerial, x="capacity", y="price_per_day", hue="category", alpha=0.4, ax=axes[1])
+    sns.scatterplot(
+        data=non_aerial, x="capacity", y="price_per_day", hue="category", alpha=0.4, ax=axes[1]
+    )
     axes[1].set_title("Forklift/excavator: capacity (primary) vs price")
     fig.tight_layout()
     fig.savefig(plots_dir / "size_driver_check.png")
@@ -550,30 +584,40 @@ def run_sanity_checks(df: pd.DataFrame, plots_dir: Path, strict: bool) -> None:
     # automatically in sparse regions to keep a stable sample size per bin.
     fig, ax = plt.subplots(figsize=(8, 5))
     utilization_bins = pd.qcut(df["period_utilization"], 20, duplicates="drop")
-    by_utilization = (df["price_per_day"] / df["baseDailyRate"]).groupby(utilization_bins, observed=True).mean()
+    by_utilization = (
+        (df["price_per_day"] / df["baseDailyRate"]).groupby(utilization_bins, observed=True).mean()
+    )
     bin_midpoints = [interval.mid for interval in by_utilization.index]
     ax.plot(bin_midpoints, by_utilization.values, marker=".", linestyle="none", alpha=0.8)
     ax.set_xlabel("period_utilization")
     ax.set_ylabel("price_per_day / baseDailyRate")
-    ax.set_title("period_utilization price effect (mean ratio by quantile bin, expect upward trend)")
+    ax.set_title(
+        "period_utilization price effect (mean ratio by quantile bin, expect upward trend)"
+    )
     fig.tight_layout()
     fig.savefig(plots_dir / "period_utilization_effect_check.png")
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(8, 5))
     lead_time_bins = pd.qcut(df["lead_time_days"], 20, duplicates="drop")
-    by_lead_time = (df["price_per_day"] / df["baseDailyRate"]).groupby(lead_time_bins, observed=True).mean()
+    by_lead_time = (
+        (df["price_per_day"] / df["baseDailyRate"]).groupby(lead_time_bins, observed=True).mean()
+    )
     bin_midpoints = [interval.mid for interval in by_lead_time.index]
     ax.plot(bin_midpoints, by_lead_time.values, marker=".", linestyle="none", alpha=0.8)
     ax.set_xlabel("lead_time_days")
     ax.set_ylabel("price_per_day / baseDailyRate")
-    ax.set_title("lead_time_days price effect (mean ratio by quantile bin, expect mild downward trend)")
+    ax.set_title(
+        "lead_time_days price effect (mean ratio by quantile bin, expect mild downward trend)"
+    )
     fig.tight_layout()
     fig.savefig(plots_dir / "lead_time_effect_check.png")
     plt.close(fig)
 
     print(f"\nPlots written to {plots_dir}")
-    print(f"\nOverall: {'[OK] all checks passed' if ok else '[WARN] one or more checks out of target range'}")
+    print(
+        f"\nOverall: {'[OK] all checks passed' if ok else '[WARN] one or more checks out of target range'}"
+    )
 
     if strict and not ok:
         raise SystemExit(1)

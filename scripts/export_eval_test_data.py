@@ -94,9 +94,7 @@ def main() -> None:
 
     for case in pack["cases"]:
         ingest = _run_call1(case)
-        quote = _run_call2(
-            case, user_id=ingest.user_id, ingest_id=ingest.ingest_id
-        )
+        quote = _run_call2(case, user_id=ingest.user_id, ingest_id=ingest.ingest_id)
         metrics = _score_case(case)
         scores.append(metrics)
         detailed.append(
@@ -106,12 +104,8 @@ def main() -> None:
                 "input": {
                     "project_text": case.get("project_text"),
                     "call1_request_dates": {
-                        "start_date": case.get("call1_expected", {}).get(
-                            "start_date"
-                        ),
-                        "end_date": case.get("call1_expected", {}).get(
-                            "end_date"
-                        ),
+                        "start_date": case.get("call1_expected", {}).get("start_date"),
+                        "end_date": case.get("call1_expected", {}).get("end_date"),
                     },
                 },
                 "expected": {
@@ -239,10 +233,7 @@ def main() -> None:
         text = (case.get("project_text") or "").replace("|", "/").replace("\n", " ")
         if len(text) > 72:
             text = text[:69] + "..."
-        gold_types = (
-            ", ".join(case.get("call1_expected", {}).get("equipment_types") or [])
-            or "—"
-        )
+        gold_types = ", ".join(case.get("call1_expected", {}).get("equipment_types") or []) or "—"
         gold_assets: list[str] = []
         for g in case.get("call2_expected", {}).get("gold_by_need") or []:
             gold_assets.extend(g.get("gold_asset_ids") or [])

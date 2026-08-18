@@ -66,12 +66,15 @@ def test_hit_at_k_and_ndcg() -> None:
         gold_categories=["Scissors Lift"],
         k=1,
     )
-    assert ndcg_at_k(
-        items,
-        gold_asset_ids=["AST-SL-002"],
-        gold_categories=["Scissors Lift"],
-        k=1,
-    ) == 1.0
+    assert (
+        ndcg_at_k(
+            items,
+            gold_asset_ids=["AST-SL-002"],
+            gold_categories=["Scissors Lift"],
+            k=1,
+        )
+        == 1.0
+    )
 
 
 def test_hit_at_k_category_only() -> None:

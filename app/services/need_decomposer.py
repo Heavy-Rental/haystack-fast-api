@@ -30,9 +30,7 @@ def _first_keyword(blob: str, category: str) -> tuple[int, str]:
         idx = blob.find(keyword)
         if idx < 0:
             continue
-        if best[0] < 0 or idx < best[0] or (
-            idx == best[0] and len(keyword) > len(best[1])
-        ):
+        if best[0] < 0 or idx < best[0] or (idx == best[0] and len(keyword) > len(best[1])):
             best = (idx, keyword)
     return best
 
@@ -42,12 +40,15 @@ def _snippet_for_category(text: str, category: str) -> str:
     pos, hit = _first_keyword(blob, category)
     if pos < 0:
         return text.strip()
-    start = max(
-        text.rfind(".", 0, pos),
-        text.rfind("!", 0, pos),
-        text.rfind("?", 0, pos),
-        text.rfind("\n", 0, pos),
-    ) + 1
+    start = (
+        max(
+            text.rfind(".", 0, pos),
+            text.rfind("!", 0, pos),
+            text.rfind("?", 0, pos),
+            text.rfind("\n", 0, pos),
+        )
+        + 1
+    )
     end_at = [
         i
         for i in (

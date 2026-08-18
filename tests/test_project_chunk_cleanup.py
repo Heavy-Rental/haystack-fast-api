@@ -34,9 +34,7 @@ def _write(
     if expires_at is not None:
         meta["expires_at"] = expires_at
     embedder = build_document_embedder(mode="mock", dimension=dimension)
-    docs = embedder.run(
-        documents=[Document(content=content, meta=meta)]
-    )["documents"]
+    docs = embedder.run(documents=[Document(content=content, meta=meta)])["documents"]
     store.write_documents(docs)
 
 

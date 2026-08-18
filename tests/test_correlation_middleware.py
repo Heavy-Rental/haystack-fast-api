@@ -22,9 +22,7 @@ def test_correlation_header_minted_when_missing(client: TestClient) -> None:
     assert len(echoed) >= 8
 
 
-def test_correlation_logged_on_ingest(
-    client: TestClient, caplog: object
-) -> None:
+def test_correlation_logged_on_ingest(client: TestClient, caplog: object) -> None:
     cid = "corr-ingest-xyz"
     with caplog.at_level(logging.INFO, logger="app.request"):  # type: ignore[attr-defined]
         response = client.post(
@@ -43,9 +41,7 @@ def test_correlation_logged_on_ingest(
     assert any("submitprojectspecification" in m for m in messages)
     request_records = [r for r in records if r.name == "app.request"]
     assert request_records
-    assert any(
-        getattr(r, "correlation_id", None) == cid for r in request_records
-    )
+    assert any(getattr(r, "correlation_id", None) == cid for r in request_records)
 
 
 def test_traceparent_accepted_without_error(client: TestClient) -> None:

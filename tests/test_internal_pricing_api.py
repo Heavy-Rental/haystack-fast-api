@@ -76,9 +76,7 @@ def api_client() -> TestClient:
     app.dependency_overrides.clear()
 
 
-def test_multi_item_quote_shape(
-    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_multi_item_quote_shape(api_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         internal_pricing,
         "resolve_pricing_schema",

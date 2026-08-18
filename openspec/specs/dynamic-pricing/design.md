@@ -114,6 +114,7 @@ DB_NAME_TO_FEATURE_NAME = {
 }
 FEATURE_NAME_TO_DB_NAME = {v: k for k, v in DB_NAME_TO_FEATURE_NAME.items()}
 
+
 def to_feature_name(db_category_name: str) -> str: ...  # KeyError on unrecognized input
 def to_db_name(feature_category_name: str) -> str: ...  # KeyError on unrecognized input
 ```

@@ -48,9 +48,7 @@ def test_live_empty_or_seeded_read_does_not_use_postgres() -> None:
 def test_live_neighbors_template_returns_list() -> None:
     _skip_unless_enabled()
     backend = _try_backend()
-    hits = neo4j_cypher_read(
-        template="asset_neighbors", asset_id="AST-SL-001", backend=backend
-    )
+    hits = neo4j_cypher_read(template="asset_neighbors", asset_id="AST-SL-001", backend=backend)
     assert isinstance(hits, list)
     for row in hits:
         assert "id" in row

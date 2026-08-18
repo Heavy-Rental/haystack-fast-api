@@ -98,9 +98,7 @@ class DimensionEnforcingDocumentEmbedder:
             if embedding is None:
                 resized.append(doc)
                 continue
-            resized.append(
-                replace(doc, embedding=resize_embedding(embedding, self.dimension))
-            )
+            resized.append(replace(doc, embedding=resize_embedding(embedding, self.dimension)))
         return {"documents": resized, "meta": dict(out.get("meta") or {})}
 
 
@@ -193,9 +191,7 @@ def build_document_embedder(
             "model": sentence_transformers_model,
             "progress_bar": False,
         }
-        st_kwargs.update(
-            _maybe_st_truncate_kwargs(SentenceTransformersDocumentEmbedder, dimension)
-        )
+        st_kwargs.update(_maybe_st_truncate_kwargs(SentenceTransformersDocumentEmbedder, dimension))
         inner = SentenceTransformersDocumentEmbedder(**st_kwargs)
         return DimensionEnforcingDocumentEmbedder(inner, dimension)
     raise ValueError(f"unsupported indexing embedder mode: {mode!r}")
