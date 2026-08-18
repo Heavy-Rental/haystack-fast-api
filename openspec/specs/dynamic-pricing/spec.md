@@ -2,11 +2,11 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | Phase 2a/2b/2c **implemented**. Phase 6 / S6 **as-built (2026-08-12)** — in-process agent tool `predict_asset_price` → `pricing_client` (same entrypoint as pipeline); never silent zeros; `tests/test_predict_asset_price_tool.py`. Phase 2d-i/2d-ii/2d-iii **done**; Phase 2e promotion **done (2026-08-17)** with v1 rollback artifacts and a 27-asset production-path smoke. Phase 3 (real-data blend + scheduled retrain) not yet implemented. Phase 7 Pricing Workers [7]×N **as-built S7.3**; Call 2 graph enrich **as-built S7.5** (`RECOMMEND_VIA_AGENT_GRAPH`) |
-| **Feature module** | `app/services/pricing/` — **implemented** (2026-08-11): `model.py`, `train.py`, `feature_schema.py`, `pricing_tables.py`, `category_mapping.py`, `repository.py`, `read_resilience.py`, `artifacts/` |
+| **Status** | Phase 2a/2b/2c implemented; Phase 2d and Phase 2e promotion done. Phase 3a foundations **implemented and live-verified (2026-08-18)**; Phase 3b real-data blend, Phase 3c retrain orchestration, and Phase 3d scheduler/app wiring remain pending. Phase 6/S6 and Phase 7 pricing-agent integrations remain as-built. |
+| **Feature module** | `app/services/pricing/` — implemented core plus Phase 3a reusable `promotion_gate.py`; serving/retrain artifacts remain under `artifacts/` |
 | **Standards** | OpenSpec · Spec-kit user stories · OpenSPDD (see [`design.md`](./design.md)) |
 | **Depends on** | [`../project-setup/spec.md`](../project-setup/spec.md); [`../domain-seed-data/spec.md`](../domain-seed-data/spec.md) (Phase 2 prep dependency — data executed/verified and category-name normalization implemented 2026-08-11) |
-| **Related, not specs** | `docs/dynamic-pricing-masterplan.md` (decision log); `docs/dynamic-pricing-execution-plan.md` (day-by-day tasks) |
+| **Related, not specs** | `docs/dynamic-pricing-masterplan.md`; `docs/dynamic-pricing-execution-plan.md`; `docs/dynamic-pricing-scheduled-retrain-plan.md` |
 | **Built on** | `ml-experiments/` — Phase 1 offline experimentation (scratch, outside SDD) |
 | **Related capabilities** | [`../recommendation-pipeline/spec.md`](../recommendation-pipeline/spec.md); [`../equipment-recommendation/spec.md`](../equipment-recommendation/spec.md) |
 | **Legacy source** | `specification/SPEC-dynamic-pricing.md` (removed 2026-08-13; see [`../../TRACEABILITY.md`](../../TRACEABILITY.md)) |
@@ -22,6 +22,8 @@
 > **Internal pricing quote API note (2026-08-11):** Beyond the in-process `predict_price(...)` the recommendation pipeline uses, Spring Boot needs a synchronous, service-to-service HTTP endpoint for an authoritative per-asset quote at checkout (`POST /internal/v1/pricing/quote`) — a consumer this spec didn't originally anticipate. This is **not** a renter-facing route (called only by Spring Boot's backend, never a browser/mobile client) and does not reverse the "no public `/predict-price` renter route" outcome below. **Hard dependency**: this endpoint needs Phase 2a's real per-asset guardrail clamping and the category-name mapping fix (both elsewhere in this doc) already in place — it cannot be built against `ml-experiments/predict_price.py`'s static-table stand-in without returning Spring Boot the wrong guardrail-bound shape it was already told to expect. See "Requirement: Internal pricing quote endpoint" (US-4) and `design.md`'s "Internal quote API" for the full contract.
 
 
+> **Phase 3a foundation note (2026-08-18):** reusable promotion validation and the read-only real-training-data quality probe are implemented. The live `primary_snapshot` probe measured 98 booking-item rows/76 realized rows, with no null, zero, or negative `daily_rate`/`subtotal` values and positive realized signal in every ML category. This does **not** mean scheduled retraining is live: blend/cutover (3b), retrain orchestration (3c), and APScheduler/app wiring (3d) remain pending.
+>
 ---
 
 ## Purpose
@@ -39,7 +41,7 @@ When this capability is implemented:
 - The model output is **price per day** for a given duration window. There is **no** public `/predict-price` renter route (in-process only). The recommendation pipeline may surface structured pricing on `item.pricing` for the portal mockup: **`daily_rate`** (duration-scoped prediction) and app-layer **`total_price` = `daily_rate × duration_days`** — not a fabricated weekly rate. Haystack does not persist this value: `predict_price(...)` returns it on the response only, and Spring Boot persists it to `RecommendationItem.mlPredictedPrice` on its side (locked 2026-08-11 — see `docs/dynamic-pricing-masterplan.md` change log, 2026-08-10/2026-08-11).
 - Every read that filters or buckets by `AssetCategory.name` normalizes between the DB's canonical business names and `feature_schema.CATEGORIES`'s naming convention — `period_utilization` reflects real bookings, not a silently-substituted static constant.
 - Spring Boot can request an authoritative, guardrail-clamped price per asset at checkout via a new internal-only `POST /internal/v1/pricing/quote` endpoint — service-to-service only, never called directly by a renter-facing client. See `design.md`'s "Internal quote API".
-- A manual "retrain now" path exists as a demo safety net, without requiring the full APScheduler-based scheduled retrain (Phase 3).
+- Phase 3a provides a reusable validate-before-promote gate and a read-only real-price quality probe. No manual or scheduled runtime trigger exists yet; the approved Phase 3 plan makes the monthly scheduler (3d) the sole trigger and scraps the never-built manual HTTP endpoint.
 - The feature schema, encoding rules, and artifact format match what Phase 1b already validated — no silent re-derivation of decisions already locked in the masterplan.
 
 ---
@@ -49,9 +51,10 @@ When this capability is implemented:
 ### In scope
 
 - `app/services/pricing/` package: `model.py` (load + predict), `train.py` (retrain), `feature_schema.py` (ported from `ml-experiments/feature_schema.py`), `artifacts/` (`.pkl` + `current.json`). **Implemented** (2026-08-11, Phase 2a) — also added `category_mapping.py` (the DB-name fix below), and `repository.py`/`read_resilience.py`, relocated into this package from `app/repositories/` (Phase 1e; that directory is now empty). See [`design.md`](./design.md) "Architecture" for the as-built layout.
+- **Phase 3a promotion foundation:** `app/services/pricing/promotion_gate.py` is the canonical shared current-vs-candidate evaluation/gate implementation. `ml-experiments/candidate_validation_check.py` imports it while preserving its exact 27-asset and SHA-pinned historical behavior; scheduled jobs will use minimum-asset mode.
 - Guardrail clamping of the raw model output to `Asset.minDailyRate`/`Asset.maxDailyRate`. **Implemented**: `min_daily_rate`/`max_daily_rate` are required `predict_price(...)` parameters, clamped against directly — no static per-category fallback exists in this package (unlike the `ml-experiments` prototype it supersedes).
 - An in-process `predict_price(...)` function, called directly from the pipeline — not an HTTP route. **Implemented** as `app/services/pricing/model.py`'s `predict_price(...)`; **wired** into `app.pipelines` (2026-08-11, Phase 2b) — `pricing_client.py`'s `predict_price_for_asset()` now calls it directly, no longer the `ml-experiments` prototype. See Implementation tasks.
-- A manual "retrain now" endpoint (internal/ops use, not renter-facing). `train.py`'s `retrain()` (in-process retrain + `model.reload_model()` hot-swap) **implemented**; the HTTP endpoint itself moved out of Phase 2b's lean scope (2026-08-11 resequencing) to run alongside subtask 5 (demo prep) — still not yet implemented.
+- `train.py::retrain()` remains an in-process helper, but no HTTP retrain endpoint was ever implemented. The Phase 3 decision scraps that endpoint; monthly scheduler wiring remains pending Phase 3d.
 - Minimal SQLAlchemy read models for exactly the columns pricing touches — mapped onto the existing Spring-Boot-owned schema, no new tables, no Alembic. Includes `Booking.startDate`/`endDate`/`status`, `BookingItem.assetId` (the actual booking↔asset link), and `Asset.category_id`/`capacity`/`platform_height`, needed for `period_utilization`'s live query. **Implemented** (2026-08-10, Phase 1e; relocated 2026-08-11, Phase 2a): `app/models/asset_category.py`/`asset.py`/`booking.py`/`booking_item.py` (unchanged, still at `app/models/`); `app/services/pricing/repository.py`; `app/services/pricing/read_resilience.py` (tiered fallback, see [`design.md`](./design.md)).
 - **Category name normalization** between `AssetCategory.name` (DB canonical business names) and `feature_schema.CATEGORIES` (ML naming convention) — found missing 2026-08-11. **Fixed same day** via `app/services/pricing/category_mapping.py`. See "Requirement: Category name normalization" below and `design.md`.
 - **`POST /internal/v1/pricing/quote`**: internal, service-to-service HTTP endpoint (Spring Boot → Haystack) returning an authoritative, guardrail-clamped quote per requested asset for a rental window. Not renter-facing; not registered under the public `/api/v1` router. Reuses `app/services/pricing/model.py`'s `predict_price(...)` — no second prediction path. Full request/response contract: `design.md` "Internal quote API". Added 2026-08-11, after Spring Boot proposed the contract. **Implemented and verified (2026-08-11)** — `app/api/internal_pricing.py`, registered directly on the app (not via `api_router`), plus a new `app/services/pricing/repository.py::get_asset_for_pricing()` to resolve category/condition/capacity/platform_height/guardrail bounds server-side from `asset_id` alone. One implementation resolution beyond the illustrative contract: `asset_id` is `int` (matches the real `Asset.id` primary key), not the string-code form design.md's example JSON showed.
@@ -61,7 +64,7 @@ When this capability is implemented:
 
 - `/predict-price` as a **public, renter-facing** HTTP endpoint (masterplan: resolved as in-process function call for the recommendation pipeline). Distinct from the internal `/internal/v1/pricing/quote` endpoint above, which only Spring Boot's backend calls, never a renter client.
 - `POST /internal/v1/pricing/estimate` — considered (Spring Boot's original proposal) and dropped: the browse/detail page shows a flat, non-ML base price before checkout, so no scenario needs a lightweight live-ML call before a quote exists.
-- Full APScheduler scheduled retrain (Phase 3).
+- Phase 3b–3d runtime work: real-row extraction/blend, scheduled retrain orchestration, artifact promotion/rollback, APScheduler, and app lifespan wiring. Phase 3a foundations are implemented.
 - Real geocoding for `distance_km` (Phase 1 uses a sampled proxy; still true in Phase 2).
 - `purchaseYear` as a feature (evaluated in Phase 1b, not added — see masterplan).
 - `booking_month`/seasonality as a feature (evaluated in Phase 1d, not added — `period_utilization` already captures realized seasonality).
@@ -99,15 +102,15 @@ As the agentic recommendation pipeline, when I have a candidate asset and a prop
 
 9. **Given** neither `primary_snapshot` nor `public` has the needed schema/relation (cold start), **When** `predict_price(...)` is called, **Then** it fails loud (raises) rather than returning a fabricated price.
 
-### User Story 2 - Manual retrain as a demo safety net (Priority: P2)
+### Historical User Story 2 - Manual retrain demo safety net (superseded; never implemented)
 
-As an operator, I need to trigger a retrain on demand (without redeploying) so a stale model can be refreshed before a demo, ahead of the real scheduled retrain landing in Phase 3.
+This story was planned during Phase 2 but never implemented. The Phase 3 decision supersedes it with a monthly scheduler as the sole runtime trigger; final removal from the completed scheduled-retrain requirement occurs after Phase 3d.
 
-**Independent Test:** Invoke retrain path; confirm `artifacts/current.json` `trained_at` updates and subsequent prediction reflects new model.
+**Current verification:** route inventory confirms no manual retrain HTTP route exists.
 
 **Acceptance Scenarios:**
 
-1. **Given** new/updated historical booking data is available, **When** the manual retrain path is invoked, **Then** `train.py`'s logic runs, `artifacts/model.pkl` and `artifacts/current.json` are overwritten, and subsequent `predict_price(...)` calls use the new model without an app restart.
+1. **Given** Phase 3a is complete but Phase 3d is not, **When** route inventory is inspected, **Then** no manual or scheduled retrain HTTP route exists; callers may use `train.py::retrain()` only as a direct development helper.
 
 ### User Story 3 - Prediction never reaches renters directly (Priority: P1)
 
@@ -183,17 +186,18 @@ The pricing package SHALL expose an in-process `predict_price(...)` function ret
 - **WHEN** `predict_price(...)` is called
 - **THEN** `lead_time_days` is derived without a new DB column
 
-### Requirement: Manual retrain path (US-2)
+### Historical Requirement: Manual retrain path (US-2, superseded)
 
-A manual "retrain now" path SHALL run `train.py` logic, overwrite `artifacts/model.pkl` and `artifacts/current.json`, and make subsequent `predict_price(...)` calls use the new model without app restart. The path MUST NOT be registered as a public renter route until auth SDD exists (network/ops restriction interim).
+The manual HTTP retrain path was never implemented and MUST NOT be added. The approved Phase 3 runtime design uses a default-disabled monthly scheduler as the sole trigger once Phase 3d lands; `train.py::retrain()` remains a direct in-process helper, not an API contract.
 
-#### Scenario: Retrain hot-swap
-- **WHEN** manual retrain is invoked successfully
-- **THEN** `trained_at` updates and next predictions use the new model without restart
+#### Scenario: No manual retrain route during Phase 3a
+- **WHEN** application routes are inventoried after Phase 3a
+- **THEN** no manual retrain HTTP route exists
+- **AND** the scheduled runtime trigger remains pending Phase 3d
 
 ### Requirement: No renter-facing predict route (US-3)
 
-Pricing predictions SHALL NOT be exposed through any renter-facing route. Invocation is limited to `app.pipelines`, the internal service-to-service `POST /internal/v1/pricing/quote` endpoint (US-4, Spring Boot only), the in-process agent tool `predict_asset_price` (US-5), or protected internal/ops retrain.
+Pricing predictions SHALL NOT be exposed through any renter-facing route. Invocation is limited to `app.pipelines`, the internal service-to-service `POST /internal/v1/pricing/quote` endpoint (US-4, Spring Boot only), or the in-process agent tool `predict_asset_price` (US-5).
 
 #### Scenario: No public /predict-price
 - **WHEN** public routers are inventoried
@@ -386,12 +390,54 @@ The system SHALL reload the promoted serving artifacts through the production mo
 
 ---
 
+### Requirement: Reusable validated-promotion gate foundation (Phase 3a)
+
+Pricing SHALL expose one canonical current-vs-candidate validation implementation for both historical one-time validation and future recurring retrain jobs.
+
+#### Scenario: Historical exact fleet completeness is preserved
+
+- **GIVEN** the Phase 2d candidate-validation script
+- **WHEN** it assesses the promotion gate
+- **THEN** it SHALL call the shared gate in exact-count mode with the historical expected asset count of 27
+- **AND** a 26-asset input SHALL fail completeness exactly as before the extraction
+
+#### Scenario: Recurring jobs tolerate fleet growth
+
+- **GIVEN** a future scheduled retrain job
+- **WHEN** it calls the shared gate without an exact expected count
+- **THEN** completeness SHALL use `min_asset_count` (default 1) rather than pinning the fleet to 27
+- **AND** clamp-reduction, candidate-ceiling, common-holdout MAE/R², artifact-contract, model-feature, and finite-prediction safeguards SHALL remain shared
+
+#### Scenario: Historical script-specific provenance stays outside the reusable gate
+
+- **GIVEN** the frozen Phase 2d v2 CSV and comparison chart
+- **WHEN** `candidate_validation_check.py` runs
+- **THEN** SHA-pinned candidate-data provenance, chart rendering, result printing, and artifact immutability checks SHALL remain script-owned
+- **AND** the reusable service module SHALL perform no artifact promotion or serving-model reload
+
+### Requirement: Read-only real-training-data quality gate (Phase 3a)
+
+Before Phase 3b blends real booking prices, pricing SHALL provide a read-only probe over `booking_items`, `bookings`, `assets`, and `asset_categories` using the existing pricing-schema resolver.
+
+#### Scenario: Price completeness is visible by status and category
+
+- **GIVEN** live booking line items
+- **WHEN** the quality probe runs
+- **THEN** it SHALL report row counts and null/zero/negative counts and percentages for `daily_rate` and `subtotal` grouped separately by booking status and normalized ML category
+
+#### Scenario: Phase 3b readiness fails loud
+
+- **GIVEN** realized statuses `{CONFIRMED, MOBILISED, COMPLETED}`
+- **WHEN** there are no realized rows, any realized price is negative, or any production ML category lacks a positive realized `daily_rate` or `subtotal`
+- **THEN** the probe SHALL report a failed gate and exit non-zero
+- **AND** it SHALL never write a database row or model artifact
+
 ## Verification
 
 - Unit tests (new, under `tests/`): feature schema transforms (one-hot columns, ordinal mapping, NaN passthrough for non-aerial `platform_height`), guardrail clamping (below-min, above-max, in-range cases), prediction output shape/type. **Done** (2026-08-11): `tests/test_pricing_feature_schema.py`, `tests/test_pricing_model.py`.
 - Manual smoke: call `predict_price(...)` for one asset per category (mirroring `ml-experiments/shap_review.py`'s per-category sweeps) and confirm clamped output is within `[minDailyRate, maxDailyRate]`. **Done** — both as a unit test (`test_predict_price_one_per_category_smoke`) and live against all 27 real `heavy_rental` assets (2026-08-11); see execution-plan.md's Phase 2d entry for a finding from that live run (guardrail/duration-discount scale calibration, not a Phase 2a defect).
 - Illustrative, non-exhaustive: `ml-experiments/demo_scenarios.py` — condition-effect and duration-effect scenario pairs, raw vs. guardrail-clamped output side by side. Not a substitute for unit tests or `shap_review.py`.
-- Manual retrain smoke: invoke retrain path, confirm `artifacts/current.json` `trained_at` updates and subsequent prediction reflects the new model.
+- Retrain route inventory: confirm no manual retrain HTTP route exists. Scheduler start/stop verification is deferred to Phase 3d.
 - Regression check: re-run `ml-experiments/category_metrics.py`-equivalent logic against the productionized model periodically; flag if any category's MAE/R² drifts materially from reference metrics in design.
 - Read-resilience unit tests: mock the session/engine to raise `UndefinedTable` on demand. Cover all three tiers: (1) transient failure that clears within the retry budget still returns an undegraded prediction, (2) sustained failure falls back to `public` and the returned `PriceResult` is marked degraded, (3) both schemas unavailable raises rather than returning a price. Also cover that a single call never mixes sources across its reads.
 - Category-normalization test: exercise `compute_period_utilization()`/`spec_band()` with **real DB-shaped** `AssetCategory.name` values (`"Excavator"`, `"Scissors Lift"`, etc.) through the actual `WHERE` clause — not `session.execute` mocked to bypass it, the gap that let the 2026-08-11 mismatch ship unnoticed. At least one test should run against a live/test Postgres instance (or a query-builder-level assertion on the generated SQL) rather than only a fully mocked session.
@@ -404,6 +450,9 @@ The system SHALL reload the promoted serving artifacts through the production mo
 - Phase 2e promotion verification: `tests/test_pricing_phase2e_promotion.py` locks v1 rollback and v2 serving identities and exercises all categories through the reloaded production model. `ml-experiments/phase2e_serving_smoke.py` live-verified 27 undegraded `primary_snapshot` assets through `predict_price()`; clamp rates exactly reproduced the candidate at 1/7/14/30 days, including the excavator watch case. Phase 2e focused tests, scoped Ruff, and diff hygiene passed; the repository default suite finished with 420 passed and 5 skipped. **Implemented 2026-08-17.**
 
 ---
+
+- Phase 3a promotion-gate tests: generalized minimum/exact asset-count modes and invalid thresholds; historical `tests/test_candidate_validation_check.py` unchanged. **Implemented 2026-08-18:** focused Phase 3a suite 15/15; full suite 427 passed, 5 skipped.
+- Phase 3a real-data probe tests: four-table SQL shape, schema-translation execution options, category normalization, null/zero summaries, and all-category positive-signal gate. Live `primary_snapshot` result: 98 total/76 realized rows; zero invalid price values; PASS. **Implemented 2026-08-18.**
 
 ## Implementation tasks
 
@@ -418,6 +467,8 @@ Maps to `docs/dynamic-pricing-execution-plan.md` Day 4–5 subtasks:
 5. ☑ **Phase 2d-iii candidate validation — done (2026-08-13), `HR-146-ml-candidate-validation`.** Added the direct-artifact, common-input validation script and 8 focused tests. The formal gate locks 27 assets/20 km/fallback utilization/zero lead time, verifies the ignored v2 CSV's SHA-256, row counts, and candidate metrics, and reports an actionable regeneration command when it is absent. The live 1/7/14/30-day run and common-v2-holdout comparison passed every explicit promotion gate. No artifact was renamed, copied, overwritten, or reloaded by Phase 2d-iii; the separate Phase 2e promotion subsequently completed. The ignored chart shows no category regression; excavator is the documented residual watch item.
 
 6. ☑ **Phase 2e model promotion — done (2026-08-17), `HR-177-ml-promote-calibrated-model-to-production`.** Preserved the former serving pair as `model_v1.pkl`/`current_v1.json`, retained the reviewed v2 pair, and copied v2 byte-for-byte onto `model.pkl`/`current.json`. Added artifact-identity and production-path tests plus a live smoke that calls `reload_model()` and `predict_price()` over all 27 real assets at 1/7/14/30 days. The serving model reports `prod-2026-08-13`; aggregate and excavator clamp rates exactly match Phase 2d-iii. Final verification: 420 tests passed, 5 skipped; Phase 2e scoped Ruff and diff hygiene passed.
+
+7. ☑ **Phase 3a foundations — done (2026-08-18).** Extracted `app/services/pricing/promotion_gate.py`, refactored the historical candidate script to use it without changing its exact 27-asset behavior, generalized recurring-job completeness with `expected_asset_count=None`/`min_asset_count=1`, added the read-only four-table real-price probe, and live-verified Phase 3b data readiness. Phase 3b–3d remain pending.
 
 **External dependency — resolved (2026-08-11):** richer Spring Boot seed data per [`../domain-seed-data/spec.md`](../domain-seed-data/spec.md) landed same-day and was independently verified (8→27 assets, 20→90 bookings, full status/condition coverage, 0 orphaned bookings). Combined with task 1's category-mapping fix (also done same-day), `period_utilization` now genuinely reflects live bookings — both halves of what Phase 2's own verification needed are in place.
 
@@ -436,7 +487,7 @@ Full rationale: `docs/dynamic-pricing-masterplan.md`. Summary for implementers:
 | No Alembic / no new tables | Spring Boot owns schema; Python maps onto existing tables only |
 | Pricing does not persist `mlPredictedPrice` — returns it in the response instead (**locked 2026-08-11**) | `mlPredictedPrice` is a JPA-mapped field Spring Boot already owns; a second writer risks being clobbered by either the entity's own flush or the sync job's merge-upsert. Makes pricing's DB access read-only. |
 | Sync SQLAlchemy + psycopg only | Matches project-setup environment default |
-| Manual retrain now, full APScheduler later | Demo safety net now; scheduled retrain is Phase 3 |
+| Monthly scheduler is the sole planned runtime trigger; no manual HTTP retrain route | The manual endpoint was never built and is scrapped. Phase 3a supplies validation/data-readiness foundations; scheduler wiring remains Phase 3d. |
 | `period_utilization`/`lead_time_days` both kept, despite correlation | Answer different questions; SHAP compares which the model leans on |
 | `period_utilization` grouped by category **+ spec-band** | Raw category alone is misleading (small vs. large excavator) |
 | Spec-band boundaries are fixed constants | Reproducible, don't drift with fleet composition |
@@ -451,7 +502,7 @@ Full rationale: `docs/dynamic-pricing-masterplan.md`. Summary for implementers:
 | Quote audit fields: `model_version` + `was_clamped` persisted by Spring Boot; `raw_price` deliberately excluded | `raw_price` is redundant whenever `was_clamped=false` (equals `daily_rate`), and even when clamped it's a model-calibration signal better tracked as Haystack-side monitoring than a permanent per-quote-item column in Spring's transactional schema |
 | Recommend-price vs. quote-price drift: intentionally not reconciled (open item) | `period_utilization`/`lead_time_days` are live signals by design; re-pricing at quote time is expected to sometimes differ from an earlier recommend-time price — not a bug to eliminate |
 
-**Non-goals**: renter-facing pricing API/UI, real geocoding, `purchaseYear` feature, `booking_month`/seasonality feature, fuel-price feature, Alembic migrations, async DB access, full auth/JWT stack (retrain path and internal quote endpoint should not assume protection until auth exists — restrict at network/ops level interim), `POST /internal/v1/pricing/estimate`.
+**Non-goals**: renter-facing pricing API/UI, real geocoding, `purchaseYear` feature, `booking_month`/seasonality feature, fuel-price feature, Alembic migrations, async DB access, full auth/JWT stack (the internal quote endpoint remains network/ops restricted until auth exists), `POST /internal/v1/pricing/estimate`.
 
 ---
 
@@ -480,5 +531,6 @@ Full rationale: `docs/dynamic-pricing-masterplan.md`. Summary for implementers:
 | 2.11.0 | 2026-08-13 (Phase 2d-iii implemented) | Added `candidate_validation_check.py` plus 5 focused tests; directly compared current/candidate artifacts over identical production-schema rows for all 27 live assets at 1/7/14/30 days and over the same deterministic v2 holdout. Candidate 7/14-day clamp rates were 25.93%/29.63% vs. current 92.59%/100%; common-holdout MAE/R² were 16.6376/0.9866 vs. 151.2595/0.1165. Every explicit gate passed. Artifact hashes stayed unchanged and no reload/promotion occurred; Phase 2e is unblocked but separate. |
 | 2.11.1 | 2026-08-13 (Phase 2d-iii gap audit/final convergence) | Restored the approved Phase 2d-ii calibration constants that were documented and used for candidate generation but missing from tracked `ml-experiments/pricing_tables.py`; fresh seed-42 generation byte-matches the ignored candidate CSV (`sha256=3b2b79d28f42fe62e2971f48b055af0cabecadc3b5fb0b7463a58929766e2d05`). Locked artifact/data/input/output identities, added CSV hash/row-count/candidate-metric provenance, actionable missing-data guidance, invalid-guardrail and non-finite-prediction rejection, and expanded focused coverage 5→8. The category heatmap showed improvement everywhere, with excavator retained as the residual watch item. Final verification: 8 focused tests and 391 full-suite tests passed and 5 tests skipped; Ruff and diff hygiene passed. Live gate results and serving artifacts are unchanged. |
 | 2.12.0 | 2026-08-17 (Phase 2e implemented) | Promoted the validated v2 candidate to the serving filenames after preserving byte-exact v1 rollback artifacts; retained both versioned generations. Added an identity-checked serving smoke and tests, called `reload_model()`, and verified all 27 undegraded live assets through `predict_price()` at 1/7/14/30 days. Serving clamp rates exactly reproduce the candidate (11.11%/25.93%/29.63%/29.63% overall; 0%/42.86%/57.14%/57.14% for excavator), with model version `prod-2026-08-13`. |
+| 3.0.0 | 2026-08-18 (Phase 3a implemented) | Added the reusable promotion gate and read-only real-training-data quality gate requirements/scenarios. Preserved historical exact-27 validation while adding recurring-job minimum-asset mode. Recorded live data readiness (98 total/76 realized rows; no null/zero/negative price values; all four categories positive), Phase 3a tests/full regression, and explicit 3b–3d pending boundaries. |
 
 **Design / feature schema / artifacts / Phase 3 cutover:** [`design.md`](./design.md)
