@@ -163,7 +163,11 @@ def _is_aerial_asset(*parts: Any) -> bool:
                 if int(part.get("category_id")) in _AERIAL_CATEGORY_IDS:
                     return True
             except (TypeError, ValueError):
-                pass
+                logger.debug(
+                    "Invalid category_id while classifying aerial asset; "
+                    "falling back to text matching.",
+                    exc_info=True,
+                )
             blob = " ".join(str(part.get(k) or "") for k in ("equipment_type", "category", "name"))
         else:
             blob = str(part or "")
