@@ -89,7 +89,8 @@ def score_need_match(unit_need: dict[str, Any], candidate: dict[str, Any]) -> fl
             if plat is not None and float(plat) >= need_h:
                 score += 0.20
         except (TypeError, ValueError):
-            pass
+            # Ignore invalid/unparseable platform_height and leave height contribution at 0.
+            score += 0.0
 
     if _is_available(candidate):
         score += 0.15

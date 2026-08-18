@@ -97,8 +97,13 @@ def discard_project_knowledge_session(
         session = reg.get(uid, iid)
         if store is None:
             store = session.document_store
-    except Exception:  # noqa: BLE001 — session may already be gone
-        session = None
+    except Exception as exc:  # noqa: BLE001 — session may already be gone
+        logger.debug(
+            "discard_session lookup skipped user_id=%s ingest_id=%s: %s",
+            uid,
+            iid,
+            exc,
+        )
 
     deleted_n = 0
     if delete_chunks and store is not None:
