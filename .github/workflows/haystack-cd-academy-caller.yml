@@ -68,15 +68,11 @@ jobs:
   haystack-cd:
     name: Haystack CD pipeline
     uses: ./.github/workflows/haystack-cd-academy.yml
-    environment: ${{ inputs.aws_environment }}
     with:
       action: ${{ inputs.action }}
       aws_environment: ${{ inputs.aws_environment }}
       image_ref: ${{ inputs.image_ref }}
       image_http_url: ${{ inputs.image_http_url }}
-    # Explicit secrets only (Semgrep: yaml.github-actions.security.secrets-inherit)
-    secrets:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      aws_access_key_id: ${{ inputs.aws_access_key_id }}
+      aws_secret_access_key: ${{ inputs.aws_secret_access_key }}
+      aws_session_token: ${{ inputs.aws_session_token }}
