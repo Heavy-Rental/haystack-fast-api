@@ -6,8 +6,7 @@ from app.services.indexing import is_placeholder_project_text, merge_ingest_sour
 from app.services.need_decomposer import StubNeedDecomposer, split_needs_from_text
 
 _POSTMAN_BRIEF = (
-    "Need one forklift for loading bay and indoor elevated work about 8m "
-    "for scissors lift."
+    "Need one forklift for loading bay and indoor elevated work about 8m for scissors lift."
 )
 
 

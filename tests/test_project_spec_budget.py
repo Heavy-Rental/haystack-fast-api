@@ -97,9 +97,7 @@ def test_words_only_and_height_not_budget() -> None:
     budget, warnings = extract_expected_budget("Tight budget and low cost site work.")
     assert budget is None
     assert any("not found" in w for w in warnings)
-    budget, warnings = extract_expected_budget(
-        "Indoor elevated work ~8m for scissors lift."
-    )
+    budget, warnings = extract_expected_budget("Indoor elevated work ~8m for scissors lift.")
     assert budget is None
     assert any("not found" in w for w in warnings)
     budget, warnings = extract_expected_budget("Need 20 ton excavators on site.")

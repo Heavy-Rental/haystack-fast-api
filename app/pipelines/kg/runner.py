@@ -75,9 +75,7 @@ def run_knowledge_graph(
         kg_built=True,
         kg_node_count=int(save_out.get("node_count") or node_count),
         kg_relationship_count=int(
-            save_out.get("relationship_count")
-            or gen_out.get("relationship_count")
-            or 0
+            save_out.get("relationship_count") or gen_out.get("relationship_count") or 0
         ),
         kg_artifact_path=str(save_out.get("artifact_path") or ""),
         kg_transform_applied=transform_applied,

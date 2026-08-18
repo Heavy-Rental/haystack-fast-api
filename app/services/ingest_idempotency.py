@@ -40,9 +40,7 @@ class InMemoryIdempotencyStore:
     def __init__(self, *, ttl_seconds: float | None = 86400.0) -> None:
         self._ttl_seconds = ttl_seconds
         self._lock = threading.RLock()
-        self._entries: dict[
-            str, tuple[float | None, IngestFromProjectSpecResponse]
-        ] = {}
+        self._entries: dict[str, tuple[float | None, IngestFromProjectSpecResponse]] = {}
         self._inflight: dict[str, threading.Event] = {}
         self._inflight_errors: dict[str, BaseException] = {}
 
@@ -144,9 +142,7 @@ def get_ingest_idempotency_store() -> InMemoryIdempotencyStore:
             from app.config import get_settings
 
             settings = get_settings()
-            _store = InMemoryIdempotencyStore(
-                ttl_seconds=settings.idempotency_ttl_seconds
-            )
+            _store = InMemoryIdempotencyStore(ttl_seconds=settings.idempotency_ttl_seconds)
         return _store
 
 
@@ -157,7 +153,5 @@ def reset_ingest_idempotency_store() -> InMemoryIdempotencyStore:
         from app.config import get_settings
 
         settings = get_settings()
-        _store = InMemoryIdempotencyStore(
-            ttl_seconds=settings.idempotency_ttl_seconds
-        )
+        _store = InMemoryIdempotencyStore(ttl_seconds=settings.idempotency_ttl_seconds)
         return _store

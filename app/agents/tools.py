@@ -135,9 +135,7 @@ def build_session_tools(
         TOOL_PROJECT_VECTOR_SEARCH: build_project_vector_search_tool(
             session, settings=settings, default_top_k=top_k
         ),
-        TOOL_PROJECT_KG_QUERY: build_project_kg_query_tool(
-            session, default_limit=max(top_k, 10)
-        ),
+        TOOL_PROJECT_KG_QUERY: build_project_kg_query_tool(session, default_limit=max(top_k, 10)),
     }
 
 

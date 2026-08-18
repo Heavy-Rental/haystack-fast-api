@@ -113,9 +113,7 @@ def test_price_for_unknown_asset_id_rejected() -> None:
     }
 
     with pytest.raises(StateTransitionError, match="unknown asset_id"):
-        validate_state_transition(
-            ROLE_PRICING_WORKER, current, proposed, need_id="need_access"
-        )
+        validate_state_transition(ROLE_PRICING_WORKER, current, proposed, need_id="need_access")
 
 
 def test_legal_fleet_by_need_write_ok() -> None:
@@ -164,9 +162,7 @@ def test_gate_false_blocks_fleet_write() -> None:
     }
 
     with pytest.raises(StateTransitionError, match="indexing_ok is false"):
-        validate_state_transition(
-            ROLE_FLEET_WORKER, current, proposed, need_id="need_access"
-        )
+        validate_state_transition(ROLE_FLEET_WORKER, current, proposed, need_id="need_access")
 
     with pytest.raises(StateTransitionError, match="indexing_ok is false"):
         write_fleet_slice(
@@ -207,13 +203,9 @@ def test_silent_zero_price_rejected() -> None:
         candidates=[{"asset_id": "AST-SL-001"}],
     )
     proposed = deepcopy(current)
-    proposed["prices_by_need"] = {
-        "need_access": [{"asset_id": "AST-SL-001", "daily_rate": 0.0}]
-    }
+    proposed["prices_by_need"] = {"need_access": [{"asset_id": "AST-SL-001", "daily_rate": 0.0}]}
     with pytest.raises(StateTransitionError, match="silent zero"):
-        validate_state_transition(
-            ROLE_PRICING_WORKER, current, proposed, need_id="need_access"
-        )
+        validate_state_transition(ROLE_PRICING_WORKER, current, proposed, need_id="need_access")
 
 
 def test_coordinator_cannot_invent_asset_id() -> None:
@@ -227,9 +219,7 @@ def test_coordinator_cannot_invent_asset_id() -> None:
     }
     proposed = deepcopy(current)
     proposed["recommendation"] = {
-        "results_by_need": [
-            {"need_id": "need_access", "item": {"asset_id": "AST-HALLUCINATED"}}
-        ],
+        "results_by_need": [{"need_id": "need_access", "item": {"asset_id": "AST-HALLUCINATED"}}],
         "warnings": [],
     }
     with pytest.raises(StateTransitionError, match="cannot invent asset_id"):
@@ -261,6 +251,4 @@ def test_fleet_worker_cannot_write_other_need_slice() -> None:
         },
     }
     with pytest.raises(StateTransitionError, match="cannot write"):
-        validate_state_transition(
-            ROLE_FLEET_WORKER, current, proposed, need_id="need_access"
-        )
+        validate_state_transition(ROLE_FLEET_WORKER, current, proposed, need_id="need_access")

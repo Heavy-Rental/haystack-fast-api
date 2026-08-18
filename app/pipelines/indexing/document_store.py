@@ -60,10 +60,7 @@ def normalize_document_store_mode(mode: str | None) -> DocumentStoreMode:
     normalized = str(mode if mode is not None else "memory").strip().lower()
     if normalized not in _ALLOWED_MODES:
         allowed = ", ".join(sorted(_ALLOWED_MODES))
-        raise ValueError(
-            f"unsupported INDEXING_DOCUMENT_STORE mode: {mode!r}; "
-            f"allowed: {allowed}"
-        )
+        raise ValueError(f"unsupported INDEXING_DOCUMENT_STORE mode: {mode!r}; allowed: {allowed}")
     return normalized  # type: ignore[return-value]
 
 
@@ -172,11 +169,7 @@ def build_document_store(
     resolved_mode = normalize_document_store_mode(
         mode if mode is not None else cfg.indexing_document_store
     )
-    dim = (
-        embedding_dimension
-        if embedding_dimension is not None
-        else cfg.indexing_embedding_dim
-    )
+    dim = embedding_dimension if embedding_dimension is not None else cfg.indexing_embedding_dim
 
     if resolved_mode == "memory":
         return InMemoryDocumentStore()
@@ -251,14 +244,10 @@ def tenant_meta_filters(
 ) -> dict[str, Any]:
     """Filter dict matching ``meta.user_id`` (+ optional ``meta.ingest_id``)."""
     uid = (user_id or "").strip()
-    conditions: list[dict[str, Any]] = [
-        {"field": "meta.user_id", "operator": "==", "value": uid}
-    ]
+    conditions: list[dict[str, Any]] = [{"field": "meta.user_id", "operator": "==", "value": uid}]
     iid = (ingest_id or "").strip() if ingest_id is not None else ""
     if iid:
-        conditions.append(
-            {"field": "meta.ingest_id", "operator": "==", "value": iid}
-        )
+        conditions.append({"field": "meta.ingest_id", "operator": "==", "value": iid})
     if len(conditions) == 1:
         return conditions[0]
     return {"operator": "AND", "conditions": conditions}

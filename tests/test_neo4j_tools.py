@@ -126,9 +126,7 @@ def test_empty_backend_returns_empty_list() -> None:
     """Scenario: Empty backend returns empty list."""
     backend = FakeNeo4jBackend()
     assert backend.is_empty is True
-    result = neo4j_cypher_read(
-        template="asset_neighbors", asset_id="AST-SL-001", backend=backend
-    )
+    result = neo4j_cypher_read(template="asset_neighbors", asset_id="AST-SL-001", backend=backend)
     assert result == []
 
 
@@ -193,9 +191,7 @@ def test_populate_trigger_non_blocking() -> None:
 def test_recommend_not_blocked_when_neo4j_empty() -> None:
     """Scenario: Recommend is not blocked when Neo4j is empty (K-3)."""
     assets, bookings = _seed()
-    catalog = build_recommend_tool_catalog(
-        backend="fake", assets=assets, bookings=bookings
-    )
+    catalog = build_recommend_tool_catalog(backend="fake", assets=assets, bookings=bookings)
     assert TOOL_NEO4J_CYPHER_READ in catalog
     assert catalog.neo4j.is_empty is True
 
@@ -217,11 +213,7 @@ def test_recommend_not_blocked_when_neo4j_empty() -> None:
         if t.get("node") == "fleet_worker" and t.get("status") == "start"
     ]
     assert fleet_starts
-    neo4j_calls = [
-        t
-        for t in state["tool_traces"]
-        if t.get("tool") == TOOL_NEO4J_CYPHER_READ
-    ]
+    neo4j_calls = [t for t in state["tool_traces"] if t.get("tool") == TOOL_NEO4J_CYPHER_READ]
     assert neo4j_calls == []
 
     plan_fleet = [
@@ -240,9 +232,7 @@ def test_recommend_not_blocked_when_neo4j_empty() -> None:
 
 def test_delegator_skips_neo4j_when_empty() -> None:
     catalog = build_recommend_tool_catalog(backend="fake")
-    state = empty_recommend_state(
-        user_id="u-test", ingest_id="ing-test", indexing_ok=True
-    )
+    state = empty_recommend_state(user_id="u-test", ingest_id="ing-test", indexing_ok=True)
     state["project"]["needs"] = [
         {
             "need_id": "need_access",
@@ -252,11 +242,7 @@ def test_delegator_skips_neo4j_when_empty() -> None:
         }
     ]
     result = make_delegator(catalog=catalog)(state)
-    fleet = next(
-        item
-        for item in result["work_plan"]
-        if item["worker_kind"] == WORKER_KIND_FLEET
-    )
+    fleet = next(item for item in result["work_plan"] if item["worker_kind"] == WORKER_KIND_FLEET)
     assert TOOL_NEO4J_CYPHER_READ in (fleet.get("skip_tools") or [])
     assert TOOL_NEO4J_CYPHER_READ not in fleet["tool_allowlist"]
 
@@ -264,9 +250,7 @@ def test_delegator_skips_neo4j_when_empty() -> None:
 def test_delegator_includes_neo4j_when_graph_present() -> None:
     backend = FakeNeo4jBackend.from_fixture(FIXTURES / "neo4j_graph.json")
     catalog = build_recommend_tool_catalog(backend="fake", neo4j=backend)
-    state = empty_recommend_state(
-        user_id="u-test", ingest_id="ing-test", indexing_ok=True
-    )
+    state = empty_recommend_state(user_id="u-test", ingest_id="ing-test", indexing_ok=True)
     state["project"]["needs"] = [
         {
             "need_id": "need_access",
@@ -276,11 +260,7 @@ def test_delegator_includes_neo4j_when_graph_present() -> None:
         }
     ]
     result = make_delegator(catalog=catalog)(state)
-    fleet = next(
-        item
-        for item in result["work_plan"]
-        if item["worker_kind"] == WORKER_KIND_FLEET
-    )
+    fleet = next(item for item in result["work_plan"] if item["worker_kind"] == WORKER_KIND_FLEET)
     assert TOOL_NEO4J_CYPHER_READ in fleet["tool_allowlist"]
     assert TOOL_NEO4J_CYPHER_READ not in (fleet.get("skip_tools") or [])
 
@@ -308,7 +288,7 @@ def test_fleet_worker_attaches_graph_notes_when_available() -> None:
         if t.get("tool") == TOOL_NEO4J_CYPHER_READ and t.get("status") == "ok"
     ]
     assert neo4j_ok
-    notes = (state["fleet_by_need"]["need_access"].get("graph_notes") or [])
+    notes = state["fleet_by_need"]["need_access"].get("graph_notes") or []
     note_ids = {n.get("id") for n in notes}
     assert "ATT-SL-RAIL" in note_ids
     assert "kg-2" in (state["fleet_by_need"]["need_access"].get("source_tables") or [])
@@ -417,9 +397,7 @@ def test_recommend_not_blocked_when_neo4j_unavailable() -> None:
         if t.get("node") == "fleet_worker" and t.get("status") == "start"
     ]
     assert fleet_starts
-    neo4j_calls = [
-        t for t in state["tool_traces"] if t.get("tool") == TOOL_NEO4J_CYPHER_READ
-    ]
+    neo4j_calls = [t for t in state["tool_traces"] if t.get("tool") == TOOL_NEO4J_CYPHER_READ]
     assert neo4j_calls == []
 
     plan_fleet = [
@@ -449,8 +427,7 @@ def test_bolt_mapper_matches_fixture_templates() -> None:
         for node in fake.nodes()
     ]
     raw_rels = [
-        {"from": rel["from"], "to": rel["to"], "type": rel["type"]}
-        for rel in fake.relationships()
+        {"from": rel["from"], "to": rel["to"], "type": rel["type"]} for rel in fake.relationships()
     ]
     nodes, rels = map_fleet_graph(raw_nodes, raw_rels)
     backend = BoltNeo4jBackend.from_mapped(nodes, rels)

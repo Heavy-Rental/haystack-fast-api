@@ -39,9 +39,7 @@ class SynthesisSchemaError(ValueError):
 def validate_recommendation_shape(results: Any) -> None:
     """Reject malformed ``results_by_need`` rows before F-2 apply."""
     if not isinstance(results, list):
-        raise SynthesisSchemaError(
-            f"results_by_need must be a list, got {type(results).__name__}"
-        )
+        raise SynthesisSchemaError(f"results_by_need must be a list, got {type(results).__name__}")
     for i, row in enumerate(results):
         if not isinstance(row, dict):
             raise SynthesisSchemaError(f"results_by_need[{i}] must be a dict")
@@ -51,14 +49,10 @@ def validate_recommendation_shape(results: Any) -> None:
             raise SynthesisSchemaError(f"results_by_need[{i}] missing item")
         item = row.get("item")
         if item is not None and not isinstance(item, dict):
-            raise SynthesisSchemaError(
-                f"results_by_need[{i}].item must be a dict or null"
-            )
+            raise SynthesisSchemaError(f"results_by_need[{i}].item must be a dict or null")
         warnings = row.get("warnings")
         if not isinstance(warnings, list):
-            raise SynthesisSchemaError(
-                f"results_by_need[{i}].warnings must be a list"
-            )
+            raise SynthesisSchemaError(f"results_by_need[{i}].warnings must be a list")
 
 
 def _need_rows(state: RecommendAgentState | dict[str, Any]) -> list[dict[str, Any]]:
@@ -92,13 +86,9 @@ def _pick_item(
     price_rows: list[dict[str, Any]] | None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     warnings: list[str] = []
-    candidates = [
-        c for c in (slice_.get("candidates") or []) if isinstance(c, dict)
-    ]
+    candidates = [c for c in (slice_.get("candidates") or []) if isinstance(c, dict)]
     if not candidates:
-        warnings.append(
-            f"no fleet match for need_id={need.get('need_id')!r}"
-        )
+        warnings.append(f"no fleet match for need_id={need.get('need_id')!r}")
         return None, warnings
 
     priced = _price_index(price_rows)
@@ -181,14 +171,10 @@ def synthesize_recommendation(
     started = now()
     current = deepcopy(dict(state))
     results: list[dict[str, Any]] = []
-    top_warnings: list[str] = list(
-        (current.get("recommendation") or {}).get("warnings") or []
-    )
+    top_warnings: list[str] = list((current.get("recommendation") or {}).get("warnings") or [])
 
     if not indexing_ok(current):
-        top_warnings.append(
-            "indexing gate refused: indexing_ok=false; no recommend"
-        )
+        top_warnings.append("indexing gate refused: indexing_ok=false; no recommend")
     else:
         fleet = current.get("fleet_by_need") or {}
         prices = current.get("prices_by_need") or {}
@@ -213,10 +199,10 @@ def synthesize_recommendation(
                     )
                     item = apply_rationale_only(item, payload)
                 except Exception:
-                    logger.exception("recommend synthesis rationale failed; keeping tool-backed item")
-            results.append(
-                {"need_id": need_id, "item": item, "warnings": warnings}
-            )
+                    logger.exception(
+                        "recommend synthesis rationale failed; keeping tool-backed item"
+                    )
+            results.append({"need_id": need_id, "item": item, "warnings": warnings})
 
     validate_recommendation_shape(results)
 

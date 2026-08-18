@@ -136,7 +136,5 @@ def test_pgvector_table_name_stable() -> None:
     _skip_unless_enabled()
     store = _try_store(8)
     # Attribute may vary by integration version; table_name is constructor kw.
-    name = getattr(store, "table_name", None) or getattr(
-        store, "_table_name", PGVECTOR_TABLE_NAME
-    )
+    name = getattr(store, "table_name", None) or getattr(store, "_table_name", PGVECTOR_TABLE_NAME)
     assert name == PGVECTOR_TABLE_NAME

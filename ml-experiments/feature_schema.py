@@ -50,7 +50,6 @@ Phase 2 productionizes the pricing service.
 """
 
 import pandas as pd
-
 import pricing_tables as pt
 
 CATEGORIES = ["forklift", "scissor lift", "boom lift", "excavator"]

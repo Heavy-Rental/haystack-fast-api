@@ -36,9 +36,7 @@ def test_resolve_pricing_schema_prefers_public(monkeypatch) -> None:
 
     assert resolution.schema == "public"
     assert resolution.degraded is False
-    assert resolution.execution_options == {
-        "schema_translate_map": {"primary_snapshot": "public"}
-    }
+    assert resolution.execution_options == {"schema_translate_map": {"primary_snapshot": "public"}}
     session.execute.assert_called_once()
     get_settings.cache_clear()
 
@@ -82,9 +80,7 @@ def test_resolve_pricing_schema_sustained_degrades_to_public() -> None:
 
     assert resolution.schema == "public"
     assert resolution.degraded is True
-    assert resolution.execution_options == {
-        "schema_translate_map": {"primary_snapshot": "public"}
-    }
+    assert resolution.execution_options == {"schema_translate_map": {"primary_snapshot": "public"}}
     assert session.execute.call_count == 4
 
 

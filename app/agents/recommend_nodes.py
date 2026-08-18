@@ -140,9 +140,7 @@ def _invoke_project_tool(
     return list(raw), None
 
 
-def _research_notes(
-    hits: list[dict[str, Any]] | None, *, error: str | None = None
-) -> str:
+def _research_notes(hits: list[dict[str, Any]] | None, *, error: str | None = None) -> str:
     if hits is None:
         return "project_vector_search skipped (not registered)."
     if error:
@@ -157,9 +155,7 @@ def _research_notes(
     return "\n".join(lines)
 
 
-def _graph_notes(
-    hits: list[dict[str, Any]] | None, *, error: str | None = None
-) -> str:
+def _graph_notes(hits: list[dict[str, Any]] | None, *, error: str | None = None) -> str:
     if hits is None:
         return "project_kg_query skipped (not registered)."
     if error:
@@ -298,9 +294,7 @@ def make_delegator(
                         {
                             "worker_kind": WORKER_KIND_PRICING,
                             "need_id": need_id,
-                            "tool_allowlist": list(
-                                tools_for_worker(WORKER_KIND_PRICING)
-                            ),
+                            "tool_allowlist": list(tools_for_worker(WORKER_KIND_PRICING)),
                         }
                     )
         validate_work_plan(plan)
@@ -339,18 +333,14 @@ def _batches(items: list[str], cap: int) -> list[list[str]]:
     return [items[i : i + width] for i in range(0, len(items), width)]
 
 
-def _find_need(
-    state: RecommendAgentState | dict[str, Any], need_id: str
-) -> dict[str, Any]:
+def _find_need(state: RecommendAgentState | dict[str, Any], need_id: str) -> dict[str, Any]:
     for need in (_as_dict(state).get("project") or {}).get("needs") or []:
         if isinstance(need, dict) and str(need.get("need_id")) == need_id:
             return need
     return {"need_id": need_id}
 
 
-def _fleet_plan_item(
-    state: RecommendAgentState | dict[str, Any], need_id: str
-) -> dict[str, Any]:
+def _fleet_plan_item(state: RecommendAgentState | dict[str, Any], need_id: str) -> dict[str, Any]:
     for item in _as_dict(state).get("work_plan") or []:
         if not isinstance(item, dict):
             continue
@@ -450,9 +440,7 @@ def run_fleet_worker(
             if not asset_id:
                 continue
             tool_started = now()
-            hits = list(
-                read(template=TEMPLATE_ASSET_NEIGHBORS, asset_id=asset_id) or []
-            )
+            hits = list(read(template=TEMPLATE_ASSET_NEIGHBORS, asset_id=asset_id) or [])
             working["tool_traces"] = _append_trace(
                 working,
                 role="worker",
@@ -526,9 +514,7 @@ def run_pricing_worker(
     )
 
     slice_ = (working.get("fleet_by_need") or {}).get(need_id) or {}
-    candidates = [
-        c for c in (slice_.get("candidates") or []) if isinstance(c, dict)
-    ]
+    candidates = [c for c in (slice_.get("candidates") or []) if isinstance(c, dict)]
     duration = duration_days_from_run(working)
     run = working.get("run") or {}
     start = _parse_date(run.get("start_date"))
@@ -595,9 +581,7 @@ def run_pricing_worker(
         }
         rows.append(row)
 
-    traced = apply_partition_write(
-        ROLE_PRICING_WORKER, state, working, need_id=need_id
-    )
+    traced = apply_partition_write(ROLE_PRICING_WORKER, state, working, need_id=need_id)
     if rows:
         updated = write_price_rows(traced, need_id, rows)
     else:
@@ -612,9 +596,7 @@ def run_pricing_worker(
         status="completed",
         duration_ms=elapsed_ms(started),
     )
-    return apply_partition_write(
-        ROLE_PRICING_WORKER, updated, done, need_id=need_id
-    )
+    return apply_partition_write(ROLE_PRICING_WORKER, updated, done, need_id=need_id)
 
 
 def make_execute_needs(
@@ -641,9 +623,7 @@ def make_execute_needs(
                 slice_ = (current.get("fleet_by_need") or {}).get(need_id) or {}
                 if not (slice_.get("candidates") or []):
                     continue
-                current = run_pricing_worker(
-                    current, need_id, catalog, price_fn=price_fn
-                )
+                current = run_pricing_worker(current, need_id, catalog, price_fn=price_fn)
         return {
             "fleet_by_need": current.get("fleet_by_need") or {},
             "prices_by_need": current.get("prices_by_need") or {},
@@ -659,9 +639,7 @@ def make_synthesis_node(
     rationale_fn: Callable[..., str] | None = None,
 ) -> Callable[[RecommendAgentState], dict[str, Any]]:
     def synthesis(state: RecommendAgentState) -> dict[str, Any]:
-        result = synthesize_recommendation(
-            state, agent_mode=agent_mode, rationale_fn=rationale_fn
-        )
+        result = synthesize_recommendation(state, agent_mode=agent_mode, rationale_fn=rationale_fn)
         return {
             "recommendation": result["recommendation"],
             "tool_traces": result["tool_traces"],

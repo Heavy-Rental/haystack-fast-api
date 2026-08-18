@@ -44,9 +44,7 @@ def _serialize_node(node: Any, *, score: float | None = None) -> dict[str, Any]:
     # Keep payload bounded for tool / API responses
     preview = page[:500] if page else _properties_text(props)[:500]
     slim_props = {
-        k: v
-        for k, v in props.items()
-        if k != "page_content" and not isinstance(v, (dict, list))
+        k: v for k, v in props.items() if k != "page_content" and not isinstance(v, (dict, list))
     }
     out: dict[str, Any] = {
         "node_id": _node_id(node),

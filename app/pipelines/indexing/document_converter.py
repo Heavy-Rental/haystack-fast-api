@@ -121,9 +121,7 @@ class SourceDocumentConverter:
             "conversion_warnings": warnings,
         }
 
-    def _convert_structured(
-        self, sources: list[ByteStream]
-    ) -> tuple[list[Document], list[str]]:
+    def _convert_structured(self, sources: list[ByteStream]) -> tuple[list[Document], list[str]]:
         docs: list[Document] = []
         warnings: list[str] = []
         for mime, group in _group_by_mime(sources).items():
@@ -135,29 +133,21 @@ class SourceDocumentConverter:
             elif mime == MIME_XLSX:
                 d, w = _safe_convert(converter=self._xlsx, sources=group, label="xlsx")
             else:
-                names = [
-                    str((s.meta or {}).get("file_path") or "upload") for s in group
-                ]
+                names = [str((s.meta or {}).get("file_path") or "upload") for s in group]
                 w = [f"no structured converter for mime={mime!r} ({', '.join(names)})"]
                 d = []
-            docs.extend(
-                self._with_kind_meta(d, data_kind="structured", mime=mime)
-            )
+            docs.extend(self._with_kind_meta(d, data_kind="structured", mime=mime))
             warnings.extend(w)
         return docs, warnings
 
-    def _convert_unstructured(
-        self, sources: list[ByteStream]
-    ) -> tuple[list[Document], list[str]]:
+    def _convert_unstructured(self, sources: list[ByteStream]) -> tuple[list[Document], list[str]]:
         docs: list[Document] = []
         warnings: list[str] = []
         for mime, group in _group_by_mime(sources).items():
             if mime in {MIME_TEXT_PLAIN, None}:
                 d, w = _safe_convert(converter=self._text, sources=group, label="text")
             elif mime == MIME_MARKDOWN:
-                d, w = _safe_convert(
-                    converter=self._markdown, sources=group, label="markdown"
-                )
+                d, w = _safe_convert(converter=self._markdown, sources=group, label="markdown")
             elif mime == MIME_HTML:
                 d, w = _safe_convert(converter=self._html, sources=group, label="html")
             elif mime == MIME_PDF:
@@ -165,16 +155,10 @@ class SourceDocumentConverter:
             elif mime == MIME_DOCX:
                 d, w = _safe_convert(converter=self._docx, sources=group, label="docx")
             else:
-                names = [
-                    str((s.meta or {}).get("file_path") or "upload") for s in group
-                ]
-                w = [
-                    f"no unstructured converter for mime={mime!r} ({', '.join(names)})"
-                ]
+                names = [str((s.meta or {}).get("file_path") or "upload") for s in group]
+                w = [f"no unstructured converter for mime={mime!r} ({', '.join(names)})"]
                 d = []
-            docs.extend(
-                self._with_kind_meta(d, data_kind="unstructured", mime=mime)
-            )
+            docs.extend(self._with_kind_meta(d, data_kind="unstructured", mime=mime))
             warnings.extend(w)
         return docs, warnings
 

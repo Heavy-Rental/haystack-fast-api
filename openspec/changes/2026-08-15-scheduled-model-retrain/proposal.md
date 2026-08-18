@@ -108,8 +108,8 @@ def assess_gate(
     accuracy: pd.DataFrame,
     *,
     actual_asset_count: int,
-    expected_asset_count: int | None = None,   # exact-match mode (script, unchanged)
-    min_asset_count: int = 1,                  # sanity-floor mode (scheduled job)
+    expected_asset_count: int | None = None,  # exact-match mode (script, unchanged)
+    min_asset_count: int = 1,  # sanity-floor mode (scheduled job)
 ) -> GateDecision: ...
 ```
 
@@ -130,6 +130,7 @@ add `created_at`/`total_amount` (§5.7).
 
 ```python
 REALIZED_PRICE_STATUSES = {"CONFIRMED", "MOBILISED", "COMPLETED"}
+
 
 def fetch_real_training_rows(
     db: Session,
@@ -181,8 +182,8 @@ pass neither and are unaffected):
 ```python
 def train(
     *,
-    data: pd.DataFrame | None = None,        # bypasses pd.read_csv(data_path) when given
-    sample_weight: np.ndarray | None = None, # threaded into model.fit(...)
+    data: pd.DataFrame | None = None,  # bypasses pd.read_csv(data_path) when given
+    sample_weight: np.ndarray | None = None,  # threaded into model.fit(...)
     data_path: Path = DEFAULT_DATA_PATH,
     seed: int = 42,
     test_size: float = 0.2,
@@ -202,6 +203,7 @@ PREVIOUS_META_PATH = ARTIFACTS_DIR / "current_previous.json"
 STATE_PATH = ARTIFACTS_DIR / "retrain_state.json"
 
 Status = Literal["promoted", "gate_failed", "error"]
+
 
 def run_scheduled_retrain() -> RetrainOutcome: ...  # never raises
 def load_state() -> RetrainState: ...
@@ -265,6 +267,7 @@ def compute_next_run_time(settings: Settings) -> datetime:
     not yet due -> wait until exactly when due."""
     ...
 
+
 def build_scheduler(settings: Settings) -> AsyncIOScheduler:
     """Registers one job, id="pricing-scheduled-retrain",
     IntervalTrigger(days=settings.pricing_retrain_interval_days),
@@ -279,9 +282,15 @@ already used for `indexing_via_agent_gate`/`recommend_via_agent_graph`:
 ```python
 pricing_retrain_enabled: bool = Field(default=False, alias="PRICING_RETRAIN_ENABLED")
 pricing_retrain_interval_days: int = Field(default=30, alias="PRICING_RETRAIN_INTERVAL_DAYS", ge=1)
-pricing_retrain_misfire_grace_seconds: int = Field(default=6 * 3600, alias="PRICING_RETRAIN_MISFIRE_GRACE_SECONDS", ge=0)
-pricing_retrain_min_real_rows_per_category: int = Field(default=20, alias="PRICING_RETRAIN_MIN_REAL_ROWS_PER_CATEGORY", ge=1)
-pricing_retrain_real_sample_weight: float = Field(default=5.0, alias="PRICING_RETRAIN_REAL_SAMPLE_WEIGHT", ge=0)
+pricing_retrain_misfire_grace_seconds: int = Field(
+    default=6 * 3600, alias="PRICING_RETRAIN_MISFIRE_GRACE_SECONDS", ge=0
+)
+pricing_retrain_min_real_rows_per_category: int = Field(
+    default=20, alias="PRICING_RETRAIN_MIN_REAL_ROWS_PER_CATEGORY", ge=1
+)
+pricing_retrain_real_sample_weight: float = Field(
+    default=5.0, alias="PRICING_RETRAIN_REAL_SAMPLE_WEIGHT", ge=0
+)
 ```
 
 `pricing_retrain_enabled` **must default to `False`**: several existing tests

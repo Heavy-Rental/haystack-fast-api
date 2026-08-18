@@ -77,8 +77,7 @@ def parse_needs_json(raw: str) -> list[DecomposedNeed]:
         if not isinstance(item, dict):
             continue
         payload = {
-            "need_id": str(item.get("need_id") or f"need_{index}").strip()
-            or f"need_{index}",
+            "need_id": str(item.get("need_id") or f"need_{index}").strip() or f"need_{index}",
             "description": str(item.get("description") or "").strip(),
             "equipment_hints": item.get("equipment_hints") or [],
             "quantity": item.get("quantity", 1),
@@ -188,8 +187,6 @@ def _extract_message_content(payload: dict[str, Any]) -> str:
     if isinstance(content, str):
         return content
     if isinstance(content, list):
-        parts = [
-            str(part.get("text", "")) for part in content if isinstance(part, dict)
-        ]
+        parts = [str(part.get("text", "")) for part in content if isinstance(part, dict)]
         return "".join(parts)
     return ""

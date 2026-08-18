@@ -25,9 +25,5 @@ class BookingItem(Base):
     __table_args__: ClassVar[dict] = {"schema": "primary_snapshot"}
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    booking_id: Mapped[int | None] = mapped_column(
-        ForeignKey("primary_snapshot.bookings.id")
-    )
-    asset_id: Mapped[int | None] = mapped_column(
-        ForeignKey("primary_snapshot.assets.id")
-    )
+    booking_id: Mapped[int | None] = mapped_column(ForeignKey("primary_snapshot.bookings.id"))
+    asset_id: Mapped[int | None] = mapped_column(ForeignKey("primary_snapshot.assets.id"))

@@ -32,9 +32,7 @@ class ProjectKnowledgeSession:
     document_store: Any
     knowledge_graph: Any | None = None
     kg_artifact_path: str | None = None
-    created_at: datetime = field(
-        default_factory=lambda: datetime.now(UTC)
-    )
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     meta: dict[str, Any] = field(default_factory=dict)
 
 
@@ -100,6 +98,9 @@ def reset_project_knowledge_registry() -> ProjectKnowledgeSessionRegistry:
 
 def load_knowledge_graph_from_artifact(path: str | Path) -> Any:
     """Load a Ragas KnowledgeGraph from a JSON artifact path."""
+    from app.pipelines.kg.ragas_compat import ensure_langchain_community_vertexai_chat
+
+    ensure_langchain_community_vertexai_chat()
     from ragas.testset.graph import KnowledgeGraph
 
     artifact = Path(path)

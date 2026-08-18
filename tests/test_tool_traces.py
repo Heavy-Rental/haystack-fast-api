@@ -104,9 +104,7 @@ def _price_fn(**kwargs):
 
 def _run_happy():
     assets, bookings = _seed()
-    catalog = build_recommend_tool_catalog(
-        backend="fake", assets=assets, bookings=bookings
-    )
+    catalog = build_recommend_tool_catalog(backend="fake", assets=assets, bookings=bookings)
     return run_recommend_graph(
         user_id="u-traces",
         ingest_id="ing-traces",
@@ -136,9 +134,7 @@ def test_fanout_traces_have_need_id() -> None:
     """Scenario: Fan-out traces have need_id."""
     state = _run_happy()
     fanout = [
-        t
-        for t in state["tool_traces"]
-        if t.get("node") in {"fleet_worker", "pricing_worker"}
+        t for t in state["tool_traces"] if t.get("node") in {"fleet_worker", "pricing_worker"}
     ]
     assert fanout
     for event in fanout:
@@ -150,9 +146,7 @@ def test_fanout_traces_have_need_id() -> None:
 def test_duration_ms_non_negative_on_terminal_spans() -> None:
     """Scenario: Duration is non-negative."""
     state = _run_happy()
-    terminal = [
-        t for t in state["tool_traces"] if t.get("status") in TERMINAL_STATUSES
-    ]
+    terminal = [t for t in state["tool_traces"] if t.get("status") in TERMINAL_STATUSES]
     assert terminal
     for event in terminal:
         assert "duration_ms" in event, f"missing duration_ms on {event}"

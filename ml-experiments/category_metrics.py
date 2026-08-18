@@ -18,20 +18,21 @@ evaluated against, not train-set performance.
 import argparse
 from pathlib import Path
 
+import feature_schema as fs
 import joblib
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.model_selection import train_test_split
 
-import feature_schema as fs
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data", type=Path, default=SCRIPT_DIR / "data" / "synthetic_pricing_data.csv")
+    parser.add_argument(
+        "--data", type=Path, default=SCRIPT_DIR / "data" / "synthetic_pricing_data.csv"
+    )
     parser.add_argument("--model", type=Path, default=SCRIPT_DIR / "artifacts" / "model.pkl")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--test-size", type=float, default=0.2)
@@ -39,7 +40,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def compute_per_category_metrics(df: pd.DataFrame, model, seed: int, test_size: float) -> pd.DataFrame:
+def compute_per_category_metrics(
+    df: pd.DataFrame, model, seed: int, test_size: float
+) -> pd.DataFrame:
     X = fs.build_features(df)
     y = fs.get_target(df)
     _, X_test, _, y_test, _, df_test = train_test_split(
@@ -69,9 +72,13 @@ def compute_per_category_metrics(df: pd.DataFrame, model, seed: int, test_size: 
 def render_table_png(summary: pd.DataFrame, out_path: Path) -> None:
     display = summary.reset_index().rename(columns={"index": "category"})
     display.columns = [
-        {"n": "n", "mae": "MAE", "r2": "R2", "mean_actual": "mean price", "mae_pct_of_mean": "MAE % of mean"}.get(
-            c, c
-        )
+        {
+            "n": "n",
+            "mae": "MAE",
+            "r2": "R2",
+            "mean_actual": "mean price",
+            "mae_pct_of_mean": "MAE % of mean",
+        }.get(c, c)
         for c in display.columns
     ]
 

@@ -18,6 +18,19 @@ from app.pipelines.kg.saver import KnowledgeGraphSaver, safe_user_path_segment
 from app.services.indexing import IndexingIngestService
 
 
+def test_ragas_graph_imports_chat_vertexai_from_google_package() -> None:
+    from langchain_google_vertexai import ChatVertexAI as GoogleChatVertexAI
+
+    from app.pipelines.kg.ragas_compat import ensure_langchain_community_vertexai_chat
+
+    ensure_langchain_community_vertexai_chat()
+    from langchain_community.chat_models.vertexai import ChatVertexAI
+    from ragas.testset.graph import KnowledgeGraph
+
+    assert KnowledgeGraph is not None
+    assert ChatVertexAI is GoogleChatVertexAI
+
+
 def test_safe_user_path_segment() -> None:
     assert safe_user_path_segment("user/../x") == "user_.._x"
     assert safe_user_path_segment("normal-user_1") == "normal-user_1"
@@ -69,9 +82,7 @@ def test_run_knowledge_graph_user_scoped(tmp_path: Path) -> None:
     assert "alice" in result.kg_artifact_path
 
 
-def test_service_always_builds_kg_artifact(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_service_always_builds_kg_artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
     monkeypatch.setenv("KG_ARTIFACT_DIR", str(tmp_path))
     monkeypatch.setenv("KG_APPLY_TRANSFORMS", "false")
@@ -103,9 +114,7 @@ def test_service_always_builds_kg_artifact(
     get_settings.cache_clear()
 
 
-def test_two_users_distinct_kg_paths(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_two_users_distinct_kg_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
     monkeypatch.setenv("KG_ARTIFACT_DIR", str(tmp_path))
     get_settings.cache_clear()
@@ -132,9 +141,7 @@ def test_two_users_distinct_kg_paths(
     get_settings.cache_clear()
 
 
-def test_service_kg_failure_hard_fails(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_service_kg_failure_hard_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
     monkeypatch.setenv("KG_ARTIFACT_DIR", str(tmp_path))
     get_settings.cache_clear()
@@ -154,10 +161,13 @@ def test_service_kg_failure_hard_fails(
             embedder=build_document_embedder(mode="mock", dimension=4),
         )
     )
-    with patch(
-        "app.pipelines.kg.runner.run_knowledge_graph",
-        return_value=failed,
-    ), pytest.raises(BadRequestError, match="simulated kg failure"):
+    with (
+        patch(
+            "app.pipelines.kg.runner.run_knowledge_graph",
+            return_value=failed,
+        ),
+        pytest.raises(BadRequestError, match="simulated kg failure"),
+    ):
         service.ingest_from_project_spec(
             user_id="u_fail",
             project_text="Need excavator",

@@ -104,9 +104,7 @@ def test_project_worker_calls_vector_and_kg_before_decompose() -> None:
             kg_calls,
         ),
     )
-    state = empty_recommend_state(
-        user_id="u-w5", ingest_id="ing-w5", indexing_ok=True
-    )
+    state = empty_recommend_state(user_id="u-w5", ingest_id="ing-w5", indexing_ok=True)
     result = make_project_worker(
         "Need a scissors lift indoors at 8m.",
         catalog=catalog,
@@ -158,9 +156,7 @@ def test_project_worker_empty_hits_are_explicit() -> None:
 def test_project_worker_missing_tools_do_not_block() -> None:
     """Scenario: Missing tools do not block recommend."""
     assets, bookings = _seed()
-    catalog = build_recommend_tool_catalog(
-        backend="fake", assets=assets, bookings=bookings
-    )
+    catalog = build_recommend_tool_catalog(backend="fake", assets=assets, bookings=bookings)
     assert TOOL_PROJECT_VECTOR_SEARCH not in catalog
     assert TOOL_PROJECT_KG_QUERY not in catalog
 
@@ -176,9 +172,10 @@ def test_project_worker_missing_tools_do_not_block() -> None:
         fanout_cap=1,
     )
     project = state["project"]
-    assert "skip" in project["research_notes"].lower() or "not registered" in project[
-        "research_notes"
-    ].lower()
+    assert (
+        "skip" in project["research_notes"].lower()
+        or "not registered" in project["research_notes"].lower()
+    )
     assert project["needs"]
     assert state["recommendation"]["results_by_need"]
     worker_tools = [
@@ -212,9 +209,10 @@ def test_project_worker_tool_error_is_soft_fail() -> None:
         catalog=catalog,
         decomposer=FixtureOneNeedDecomposer(),
     )(state)
-    assert "unavail" in result["project"]["research_notes"].lower() or "error" in result[
-        "project"
-    ]["research_notes"].lower()
+    assert (
+        "unavail" in result["project"]["research_notes"].lower()
+        or "error" in result["project"]["research_notes"].lower()
+    )
     assert result["project"]["needs"][0]["need_id"] == "need_access"
 
 

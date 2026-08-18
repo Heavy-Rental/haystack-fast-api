@@ -59,9 +59,7 @@ def test_convert_csv_structured() -> None:
 
 def test_convert_json_as_text() -> None:
     out = SourceDocumentConverter().run(
-        structured_sources=[
-            _bs("needs.json", b'{"equipment":"fork lift","qty":1}')
-        ]
+        structured_sources=[_bs("needs.json", b'{"equipment":"fork lift","qty":1}')]
     )
     assert out["structured_document_count"] == 1
     assert "fork lift" in (out["documents"][0].content or "")
@@ -77,9 +75,7 @@ def test_convert_xlsx() -> None:
     ws["B2"] = 1
     buf = BytesIO()
     wb.save(buf)
-    out = SourceDocumentConverter().run(
-        structured_sources=[_bs("fleet.xlsx", buf.getvalue())]
-    )
+    out = SourceDocumentConverter().run(structured_sources=[_bs("fleet.xlsx", buf.getvalue())])
     assert out["structured_document_count"] >= 1
     joined = " ".join(d.content or "" for d in out["documents"])
     assert "Fork Lift" in joined
@@ -91,9 +87,7 @@ def test_convert_docx() -> None:
     doc.add_paragraph("Need scissors lift for indoor mezzanine")
     buf = BytesIO()
     doc.save(buf)
-    out = SourceDocumentConverter().run(
-        unstructured_sources=[_bs("spec.docx", buf.getvalue())]
-    )
+    out = SourceDocumentConverter().run(unstructured_sources=[_bs("spec.docx", buf.getvalue())])
     assert out["unstructured_document_count"] == 1
     assert "scissors" in (out["documents"][0].content or "").lower()
     assert out["documents"][0].meta.get("mime_type") == MIME_DOCX
@@ -158,8 +152,6 @@ def test_service_csv_has_structured_docs() -> None:
 
 
 def test_empty_sources_convert_zero() -> None:
-    out = SourceDocumentConverter().run(
-        structured_sources=[], unstructured_sources=[]
-    )
+    out = SourceDocumentConverter().run(structured_sources=[], unstructured_sources=[])
     assert out["document_count"] == 0
     assert out["documents"] == []

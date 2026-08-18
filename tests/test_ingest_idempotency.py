@@ -65,9 +65,7 @@ def test_same_idempotency_key_returns_same_ingest_id(client: TestClient) -> None
     assert set(b2.keys()) <= LEAN_KEYS
 
 
-def test_same_key_does_not_re_run_ingest_service(
-    client: TestClient, monkeypatch: object
-) -> None:
+def test_same_key_does_not_re_run_ingest_service(client: TestClient, monkeypatch: object) -> None:
     calls = {"n": 0}
     original = IndexingIngestService.ingest_from_project_spec
 
@@ -181,8 +179,7 @@ def test_success_keeps_fr_ix_023_fields_with_key(client: TestClient) -> None:
         json={
             "user_id": "user_fr",
             "project_text": (
-                "Need scissors lifts. Budget SGD 15000. "
-                "From 2026-09-01 to 2026-09-14."
+                "Need scissors lifts. Budget SGD 15000. From 2026-09-01 to 2026-09-14."
             ),
         },
         headers={"Idempotency-Key": "fr-ix-023"},
@@ -213,9 +210,7 @@ def test_blank_idempotency_key_treated_as_missing(client: TestClient) -> None:
     assert normalize_idempotency_key(None) is None
 
 
-def test_concurrent_same_key_single_flight(
-    client: TestClient, monkeypatch: object
-) -> None:
+def test_concurrent_same_key_single_flight(client: TestClient, monkeypatch: object) -> None:
     """Concurrent POSTs with the same scoped key run the producer once."""
     calls = {"n": 0}
     original = IndexingIngestService.ingest_from_project_spec

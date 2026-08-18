@@ -90,9 +90,7 @@ def test_build_document_store_pgvector_mocked() -> None:
             settings=Settings(
                 indexing_document_store="pgvector",
                 indexing_embedding_dim=384,
-                database_url_override=(
-                    "postgresql+psycopg://user:pass@host:5432/heavy_rental"
-                ),
+                database_url_override=("postgresql+psycopg://user:pass@host:5432/heavy_rental"),
             ),
         )
 
@@ -141,12 +139,13 @@ def test_build_document_store_pgvector_import_error() -> None:
 
 
 def test_build_document_store_pgvector_empty_connection() -> None:
-    with patch(
-        "app.pipelines.indexing.document_store._connection_string_for_pgvector",
-        side_effect=ValueError(
-            "pgvector DocumentStore requires a non-empty connection string"
+    with (
+        patch(
+            "app.pipelines.indexing.document_store._connection_string_for_pgvector",
+            side_effect=ValueError("pgvector DocumentStore requires a non-empty connection string"),
         ),
-    ), pytest.raises(ValueError, match="connection string"):
+        pytest.raises(ValueError, match="connection string"),
+    ):
         build_document_store(
             mode="pgvector",
             connection_string="",
@@ -200,16 +199,15 @@ def test_build_document_store_pgvector_rejects_column_dim_mismatch() -> None:
         patch(
             "app.pipelines.indexing.document_store.existing_pgvector_embedding_dim",
             return_value=384,
-        ),pytest.raises(ValueError, match="vector\\(384\\)")
+        ),
+        pytest.raises(ValueError, match="vector\\(384\\)"),
     ):
         build_document_store(
             mode="pgvector",
             settings=Settings(
                 indexing_document_store="pgvector",
                 indexing_embedding_dim=768,
-                database_url_override=(
-                    "postgresql+psycopg://user:pass@host:5432/heavy_rental"
-                ),
+                database_url_override=("postgresql+psycopg://user:pass@host:5432/heavy_rental"),
             ),
         )
     fake_cls.assert_not_called()
@@ -229,9 +227,7 @@ def test_build_document_store_pgvector_uses_stable_table() -> None:
             settings=Settings(
                 indexing_document_store="pgvector",
                 indexing_embedding_dim=384,
-                database_url_override=(
-                    "postgresql+psycopg://user:pass@host:5432/heavy_rental"
-                ),
+                database_url_override=("postgresql+psycopg://user:pass@host:5432/heavy_rental"),
             ),
         )
     assert fake_cls.call_args.kwargs["table_name"] == PGVECTOR_TABLE_NAME

@@ -328,9 +328,7 @@ def test_recommendation_service_sql_does_not_fall_back_to_seed(
     get_settings.cache_clear()
     monkeypatch.setattr(
         "app.services.recommendations.load_live_fleet",
-        lambda db=None, resolution=None: (_ for _ in ()).throw(
-            RuntimeError("db down")
-        ),
+        lambda db=None, resolution=None: (_ for _ in ()).throw(RuntimeError("db down")),
     )
     service = RecommendationService(
         decomposer=MagicMock(

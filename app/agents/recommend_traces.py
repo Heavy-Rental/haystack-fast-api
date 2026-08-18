@@ -12,9 +12,7 @@ from typing import Any
 
 from app.agents.recommend_state import RecommendAgentState
 
-TERMINAL_TRACE_STATUSES: frozenset[str] = frozenset(
-    {"ok", "completed", "error", "refused"}
-)
+TERMINAL_TRACE_STATUSES: frozenset[str] = frozenset({"ok", "completed", "error", "refused"})
 
 
 def now() -> float:

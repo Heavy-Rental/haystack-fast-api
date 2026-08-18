@@ -177,20 +177,24 @@ def compute_period_utilization(
     if total == 0:
         return float(pt.CATEGORY_UTILIZATION.get(category, 0.0))
 
-    booked_rows = session.execute(
-        select(BookingItem.asset_id)
-        .join(Booking, BookingItem.booking_id == Booking.id)
-        .where(
-            BookingItem.asset_id.in_(band_asset_ids),
-            Booking.status.in_(LIVE_HOLD_STATUSES),
-            Booking.start_date.is_not(None),
-            Booking.end_date.is_not(None),
-            Booking.start_date <= end_date,
-            Booking.end_date >= start_date,
+    booked_rows = (
+        session.execute(
+            select(BookingItem.asset_id)
+            .join(Booking, BookingItem.booking_id == Booking.id)
+            .where(
+                BookingItem.asset_id.in_(band_asset_ids),
+                Booking.status.in_(LIVE_HOLD_STATUSES),
+                Booking.start_date.is_not(None),
+                Booking.end_date.is_not(None),
+                Booking.start_date <= end_date,
+                Booking.end_date >= start_date,
+            )
+            .distinct(),
+            execution_options=resolution.execution_options,
         )
-        .distinct(),
-        execution_options=resolution.execution_options,
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     booked = len({asset_id for asset_id in booked_rows if asset_id is not None})
     return booked / total

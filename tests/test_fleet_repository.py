@@ -235,9 +235,7 @@ def test_get_asset_by_numeric_id() -> None:
 
 def test_get_asset_by_name() -> None:
     """Quote hydration: non-digits look up assets.name."""
-    session = _session_first(
-        (3, "AST-FL-002", "Fork Lift", "EXCELLENT", 3500, None, 100.0, 240.0)
-    )
+    session = _session_first((3, "AST-FL-002", "Fork Lift", "EXCELLENT", 3500, None, 100.0, 240.0))
     row = FleetRepository().get_asset(session, "AST-FL-002", resolution=PRIMARY)
     assert row is not None
     assert row["id"] == 3

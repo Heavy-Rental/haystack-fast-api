@@ -79,23 +79,16 @@ class RecommendationService:
     ) -> None:
         self._db = db
         self._decomposer: NeedDecomposer = decomposer or create_need_decomposer()
-        self._pipeline = pipeline or build_intake_front_pipeline(
-            decomposer=self._decomposer
-        )
+        self._pipeline = pipeline or build_intake_front_pipeline(decomposer=self._decomposer)
         live_assets, live_bookings = _maybe_live_fleet(db, settings)
         if live_assets is not None:
-            self._asset_filter = asset_filter or AssetCandidateFilter(
-                assets=live_assets
-            )
-            self._availability_filter = (
-                availability_filter
-                or BookingAvailabilityFilter(bookings=live_bookings or [])
+            self._asset_filter = asset_filter or AssetCandidateFilter(assets=live_assets)
+            self._availability_filter = availability_filter or BookingAvailabilityFilter(
+                bookings=live_bookings or []
             )
         else:
             self._asset_filter = asset_filter or AssetCandidateFilter()
-            self._availability_filter = (
-                availability_filter or BookingAvailabilityFilter()
-            )
+            self._availability_filter = availability_filter or BookingAvailabilityFilter()
         self._price_adapter = price_adapter or PredictPriceAdapter(
             default_distance_km=default_distance_km
         )

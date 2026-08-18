@@ -60,11 +60,7 @@ class BookingAvailabilityFilter:
             if _ranges_overlap(start, end, b_start, b_end):
                 busy.add(asset_id)
 
-        available = [
-            dict(c)
-            for c in pool
-            if str(c.get("asset_id") or "") not in busy
-        ]
+        available = [dict(c) for c in pool if str(c.get("asset_id") or "") not in busy]
         for c in available:
             c["availability"] = "available"
         return {"available_candidates": available}

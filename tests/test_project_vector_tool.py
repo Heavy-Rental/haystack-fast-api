@@ -18,9 +18,7 @@ def test_run_vector_search_returns_chunk() -> None:
     embedder = build_document_embedder(mode="mock", dimension=8)
     docs = embedder.run(
         documents=[
-            Document(
-                content="Site requires a 20-ton excavator on soft clay within 8 weeks."
-            )
+            Document(content="Site requires a 20-ton excavator on soft clay within 8 weeks.")
         ]
     )["documents"]
     store.write_documents(docs)
@@ -56,9 +54,7 @@ def test_vector_tool_wrapper() -> None:
         ingest_id="ing",
         document_store=store,
     )
-    tool = build_project_vector_search_tool(
-        session, settings=settings, default_top_k=2
-    )
+    tool = build_project_vector_search_tool(session, settings=settings, default_top_k=2)
     assert tool.name == TOOL_PROJECT_VECTOR_SEARCH
     assert "DocumentStore" in tool.description or "document" in tool.description.lower()
     hits = tool("boom lift")

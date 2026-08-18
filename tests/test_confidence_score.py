@@ -69,10 +69,6 @@ def test_confidence_recomputed_from_quote_items() -> None:
         days=14,
         confidenceScore=0.99,
     )
-    recomputed = recompute_confidence_from_quote(
-        quote, need_count=2, has_dates=True
-    )
+    recomputed = recompute_confidence_from_quote(quote, need_count=2, has_dates=True)
     assert recomputed == 0.99
-    assert recomputed == compute_confidence_score(
-        items=items, need_count=2, has_dates=True
-    )
+    assert recomputed == compute_confidence_score(items=items, need_count=2, has_dates=True)

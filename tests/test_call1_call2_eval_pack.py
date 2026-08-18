@@ -241,9 +241,7 @@ def _score_case(case: dict[str, Any]) -> dict[str, Any]:
     prf = need_set_prf(pred_hints, c1_exp.get("equipment_types") or [])
 
     start_ok = date_exact_match(
-        ingest.tentative_start_date.isoformat()
-        if ingest.tentative_start_date
-        else None,
+        ingest.tentative_start_date.isoformat() if ingest.tentative_start_date else None,
         c1_exp.get("start_date"),
     )
     end_ok = date_exact_match(
@@ -251,9 +249,7 @@ def _score_case(case: dict[str, Any]) -> dict[str, Any]:
         c1_exp.get("end_date"),
     )
     pred_budget = (
-        float(ingest.expected_budget.amount)
-        if ingest.expected_budget is not None
-        else None
+        float(ingest.expected_budget.amount) if ingest.expected_budget is not None else None
     )
     bstat = budget_match(pred_budget, c1_exp.get("budget_amount"))
 
@@ -306,20 +302,16 @@ def _score_case(case: dict[str, Any]) -> dict[str, Any]:
 
     hit_rate = sum(1 for h in hit_flags if h) / max(1, len(hit_flags))
     ndcg_mean = sum(ndcgs) / max(1, len(ndcgs))
-    price_mape_mean = (
-        sum(price_mapes) / len(price_mapes) if price_mapes else None
-    )
+    price_mape_mean = sum(price_mapes) / len(price_mapes) if price_mapes else None
     cov = coverage(len(items), need_count)
     # Match map_recommend_to_quote: need_count from session needs_summary when present
     session = get_project_knowledge_registry().get(user_id, ingest_id)
     meta = session.meta or {}
-    needs_meta = (
-        meta.get("needs_summary") if isinstance(meta.get("needs_summary"), list) else []
-    )
+    needs_meta = meta.get("needs_summary") if isinstance(meta.get("needs_summary"), list) else []
     conf_need_count = len(needs_meta) if needs_meta else len(golds) or need_count
-    conf_has_dates = bool(
-        meta.get("tentative_start_date") and meta.get("tentative_end_date")
-    ) or (quote.days is not None)
+    conf_has_dates = bool(meta.get("tentative_start_date") and meta.get("tentative_end_date")) or (
+        quote.days is not None
+    )
     recomputed = recompute_confidence_from_quote(
         quote, need_count=max(1, conf_need_count), has_dates=conf_has_dates
     )
@@ -327,9 +319,7 @@ def _score_case(case: dict[str, Any]) -> dict[str, Any]:
     if actual_conf is None and recomputed is None:
         conf_consistent = 1.0
     elif actual_conf is not None and recomputed is not None:
-        conf_consistent = (
-            1.0 if abs(float(actual_conf) - float(recomputed)) < 1e-9 else 0.0
-        )
+        conf_consistent = 1.0 if abs(float(actual_conf) - float(recomputed)) < 1e-9 else 0.0
     else:
         conf_consistent = 0.0
 

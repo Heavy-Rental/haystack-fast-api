@@ -51,10 +51,7 @@ from app.services.project_knowledge_session import get_project_knowledge_registr
 
 ENDPOINT = "/internal/v1/recommendations/submitprojectspecification"
 
-PROJECT_TEXT = (
-    "Requires a 20-ton excavator on soft clay. Timeline is 8 weeks. "
-    "Budget SGD 25000."
-)
+PROJECT_TEXT = "Requires a 20-ton excavator on soft clay. Timeline is 8 weeks. Budget SGD 25000."
 
 LEAN_KEYS = {
     "ingest_id",
@@ -128,9 +125,7 @@ def test_tool_parity_with_indexing_ingest_service(
     assert "excavator" in tool_body["user_requirement_summary"].lower()
 
     # Session registered for Call 2 / Stage-1 tools
-    session = get_project_knowledge_registry().get(
-        "user_parity_tool", tool_result.ingest_id
-    )
+    session = get_project_knowledge_registry().get("user_parity_tool", tool_result.ingest_id)
     assert session.document_store is not None
     assert session.user_id == "user_parity_tool"
 
@@ -139,9 +134,7 @@ def test_tool_parity_with_indexing_ingest_service(
     assert type(service_result.needs_summary) is type(tool_result.needs_summary)
 
 
-def test_tool_accepts_injected_service(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_tool_accepts_injected_service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Tool DI: injected IndexingIngestService is used (not a free-form path)."""
     monkeypatch.setenv("KG_ARTIFACT_DIR", str(tmp_path / "kg"))
     monkeypatch.setenv("INDEXING_EMBEDDER", "mock")
@@ -157,9 +150,7 @@ def test_tool_accepts_injected_service(
         calls.append(kwargs.get("user_id") or "")
         return original(self, **kwargs)
 
-    monkeypatch.setattr(
-        IndexingIngestService, "ingest_from_project_spec", _counting
-    )
+    monkeypatch.setattr(IndexingIngestService, "ingest_from_project_spec", _counting)
     svc = IndexingIngestService()
     result = run_indexing_from_request(
         user_id="user_di",
@@ -200,9 +191,7 @@ def test_flag_off_http_unchanged(api_client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_flag_on_uses_forced_non_llm_gate(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_flag_on_uses_forced_non_llm_gate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Given flag true, HTTP uses START→index_gate→END; same lean DTO."""
     monkeypatch.setenv("KG_ARTIFACT_DIR", str(tmp_path / "kg"))
     monkeypatch.setenv("INDEXING_EMBEDDER", "mock")
@@ -231,9 +220,7 @@ def test_flag_on_uses_forced_non_llm_gate(
     assert "excavator" in body["user_requirement_summary"].lower()
 
     # Session still registered via service under the gate
-    session = get_project_knowledge_registry().get(
-        "user_flag_on", body["ingest_id"]
-    )
+    session = get_project_knowledge_registry().get("user_flag_on", body["ingest_id"])
     assert session is not None
 
 
@@ -291,9 +278,7 @@ def test_build_indexing_gate_graph_is_forced_non_llm(
 # ---------------------------------------------------------------------------
 
 
-def test_tool_mime_hard_fail_parity(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_tool_mime_hard_fail_parity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Unsupported MIME raises BadRequestError on tool path (parity with service)."""
     monkeypatch.setenv("KG_ARTIFACT_DIR", str(tmp_path / "kg"))
     monkeypatch.setenv("INDEXING_EMBEDDER", "mock")
@@ -350,9 +335,7 @@ def test_gate_mime_fail_sets_indexing_ok_false(
     assert any(t.get("indexing_ok") is False for t in traces)
 
 
-def test_flag_on_http_mime_400(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_flag_on_http_mime_400(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Flag on: unsupported multipart still returns HTTP 400."""
     monkeypatch.setenv("KG_ARTIFACT_DIR", str(tmp_path / "kg"))
     monkeypatch.setenv("INDEXING_EMBEDDER", "mock")
