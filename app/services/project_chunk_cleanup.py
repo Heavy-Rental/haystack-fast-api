@@ -98,7 +98,7 @@ def discard_project_knowledge_session(
         if store is None:
             store = session.document_store
     except Exception:  # noqa: BLE001 — session may already be gone
-        session = None
+        pass
 
     deleted_n = 0
     if delete_chunks and store is not None:
