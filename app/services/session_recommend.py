@@ -171,6 +171,8 @@ def _is_aerial_asset(*parts: Any) -> bool:
                 if int(part.get("category_id")) in _AERIAL_CATEGORY_IDS:
                     return True
             except (TypeError, ValueError):
+                # category_id may be missing/non-numeric; fall back to text heuristics below.
+                # This preserves existing behavior without failing recommendation flow.
                 pass
             blob = " ".join(
                 str(part.get(k) or "")
