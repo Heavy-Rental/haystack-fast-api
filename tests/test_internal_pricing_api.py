@@ -67,10 +67,16 @@ def _request_body(**overrides) -> dict:
     return body
 
 
+def _override_get_db() -> MagicMock:
+    # Named zero-arg callable: FastAPI 0.141 inspects override signatures.
+    # Passing MagicMock itself is (*args, **kw) and becomes required query params.
+    return MagicMock()
+
+
 @pytest.fixture
 def api_client() -> TestClient:
     app = create_app()
-    app.dependency_overrides[get_db] = MagicMock
+    app.dependency_overrides[get_db] = _override_get_db
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()
