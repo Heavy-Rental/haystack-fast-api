@@ -10,7 +10,7 @@ import re
 from datetime import UTC, date, datetime
 
 _unused_ymd_sep = re.compile(r"\b(\d{4})[/.](\d{1,2})[/.](\d{1,2})\b")
-_DMY = re.compile(r"\b(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})\b")
+_unused_dmy = re.compile(r"\b(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})\b")
 
 _MONTH_ALT = (
     r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
