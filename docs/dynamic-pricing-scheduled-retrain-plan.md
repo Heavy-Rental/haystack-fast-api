@@ -56,11 +56,11 @@ retrain exists or should be added. Phase 3a foundations are now recorded in the 
       98 rows/76 realized rows in `primary_snapshot`; null/zero/negative rates
       were 0% for both fields and every ML category had positive realized signal.
       Phase 3b consumed this confirmed data source and is complete.
-- [ ] **`PRICING_RETRAIN_MIN_REAL_ROWS_PER_CATEGORY` (default 20) and
-      `PRICING_RETRAIN_REAL_SAMPLE_WEIGHT` (default 5.0) are starting points,
-      not derived values.** Same category of open decision as Phase 2d's
-      category-anchor refit — needs a product/pricing-owner sanity check
-      before the defaults are trusted, not just a code review.
+- [ ] **`PRICING_RETRAIN_MIN_REAL_ROWS_PER_CATEGORY` (default 125) and
+      `PRICING_RETRAIN_REAL_SAMPLE_WEIGHT` (default 10.0) are conservative
+      starting points, not held-out-real validated optima.** They keep the
+      current 15–24 rows/category blended and give real rows material weight;
+      a held-out real-booking backtest remains open.
 - [ ] **The realized-price status set (`{CONFIRMED, MOBILISED, COMPLETED}`)**
       used to decide which bookings count as real training signal is a
       reasonable-but-unconfirmed interpretation of "a price was actually
@@ -93,7 +93,7 @@ change's PR descriptions as each phase lands — not duplicated here.
 - Full regression: 439 passed, 5 optional tests skipped; Ruff and `git diff --check` passed.
 - Shared distance sampler: 1,000 seed-42 outputs matched the prior synthetic implementation exactly; the generator CLI smoke also passed.
 - Live read-only extraction: undegraded `primary_snapshot`, 76 rows — boom lift 21, excavator 15, forklift 16, scissor lift 24.
-- Planned defaults (`min_real_rows_per_category=20`, `real_sample_weight=5.0`) produced 2,606 blended rows; boom/scissor cut over, excavator/forklift remained blended. Training succeeded to `/tmp`; no production artifacts or DB rows changed.
+- The then-current defaults (`min_real_rows_per_category=20`, `real_sample_weight=5.0`) produced 2,606 blended rows; boom/scissor cut over, excavator/forklift remained blended. This historical result is preserved, but those defaults were superseded by 125/10 on 2026-08-19. Training succeeded to `/tmp`; no production artifacts or DB rows changed.
 
 ---
 
@@ -160,3 +160,4 @@ uv run python ml-experiments/real_training_data_check.py
 | 2026-08-19 | Phase 3b completed. Added Spring-owned price/booking ORM fields, `real_training.py` extraction with schema-resolution threading, a shared `training_sampling.py` distance sampler, per-category synthetic cutover and real-row weighting, and in-memory weighted training. Live `primary_snapshot` extraction returned 76 rows (21 boom lift, 15 excavator, 16 forklift, 24 scissor lift); the default threshold produced a 2,606-row blended smoke dataset and trained successfully without touching production artifacts. Full regression: 439 passed, 5 skipped; Ruff passed. |
 | 2026-08-19 | Phase 3c completed. Added the synchronous never-raise retrain job, candidate-only training paths, fresh current/candidate artifact validation, recurring minimum-fleet gate mode, atomic one-generation backup/swap, rollback and serving reload, plus dedicated atomic state persistence. Six new tests, 29 cross-phase focused tests, and the full 445-test regression passed; 5 optional tests skipped. |
 | 2026-08-19 | Phase 3d completed. Added APScheduler 3.x, five env-backed controls, restart-aware monthly scheduling, thread-offloaded retraining, default-disabled lifespan start/stop, runtime-artifact ignores, and scheduler coverage. Six new tests, 38 cross-phase focused tests, and the full 451-test regression passed with 5 optional skips; Ruff/diff hygiene and no-retrain-route inventory passed. Phase 3e remains the separate live-spec merge/archive step. |
+| 2026-08-19 (retrain controls adjusted) | Raised the default per-category cutover threshold from 20 to 125 and real sample weight from 5.0 to 10.0. With only 15–24 real rows/category, all categories now remain blended; 125×10 also keeps effective real loss mass near the roughly 1,250 synthetic rows/category at the cutover boundary. These are safer starting defaults, not a substitute for held-out real-booking validation. |

@@ -52,8 +52,8 @@ def isolated_artifacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[
 
 def _candidate_builder(paths: dict[str, Path]):
     def build(*, min_real_rows_per_category: int, real_sample_weight: float):
-        assert min_real_rows_per_category == 20
-        assert real_sample_weight == 5.0
+        assert min_real_rows_per_category == 125
+        assert real_sample_weight == 10.0
         paths["candidate_model"].write_bytes(b"candidate-model")
         paths["candidate_meta"].write_text(
             json.dumps(_metadata("2026-08-19T00:00:00+00:00"))

@@ -66,7 +66,7 @@ no serving artifact or database row changed.
 - [x] New `PRICING_RETRAIN_*` settings in `app/config.py`
       (`PRICING_RETRAIN_ENABLED` default `False`, `_INTERVAL_DAYS` default 30,
       `_MISFIRE_GRACE_SECONDS`, `_MIN_REAL_ROWS_PER_CATEGORY`,
-      `_REAL_SAMPLE_WEIGHT`)
+      `_REAL_SAMPLE_WEIGHT`; cutover/weight defaults adjusted to 125/10 on 2026-08-19)
 - [x] New `app/services/pricing/scheduler.py`
       (`compute_next_run_time()`, `build_scheduler()`, `AsyncIOScheduler`,
       job wrapped in `asyncio.to_thread(...)`)

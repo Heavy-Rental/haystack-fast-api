@@ -155,12 +155,12 @@ class Settings(BaseSettings):
         ge=1,
     )
     pricing_retrain_min_real_rows_per_category: int = Field(
-        default=20,
+        default=125,
         alias="PRICING_RETRAIN_MIN_REAL_ROWS_PER_CATEGORY",
         ge=1,
     )
     pricing_retrain_real_sample_weight: float = Field(
-        default=5.0,
+        default=10.0,
         alias="PRICING_RETRAIN_REAL_SAMPLE_WEIGHT",
         ge=0,
     )
