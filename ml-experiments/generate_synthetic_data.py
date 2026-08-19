@@ -51,6 +51,8 @@ import pricing_tables as pt
 import seaborn as sns
 from faker import Faker
 
+from app.services.pricing.training_sampling import sample_distance_km
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 
@@ -189,15 +191,6 @@ def sample_duration_days(rng: np.random.Generator, n: int) -> np.ndarray:
     """Right-skewed: many short jobs, few long ones. Mean ~9 days."""
     raw = rng.gamma(shape=1.6, scale=5, size=n) + 1
     return np.clip(np.round(raw), 1, 120).astype(int)
-
-
-def sample_distance_km(rng: np.random.Generator, n: int) -> np.ndarray:
-    """Delivery distance from the equipment yard (Tuas, postal 629462) to the
-    job site. Right-skewed, same sampling approach as duration_days -- NOT
-    derived from real postal codes or coordinates (see pricing_tables.py and
-    docs/dynamic-pricing-masterplan.md; real geocoding is a later phase)."""
-    raw = rng.gamma(shape=pt.DISTANCE_KM_GAMMA_SHAPE, scale=pt.DISTANCE_KM_GAMMA_SCALE, size=n) + 1
-    return np.clip(np.round(raw), pt.DISTANCE_KM_MIN, pt.DISTANCE_KM_MAX).astype(int)
 
 
 def sample_booking_month(rng: np.random.Generator, n: int) -> np.ndarray:
