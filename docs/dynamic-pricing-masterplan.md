@@ -5,7 +5,7 @@
 > `openspec/specs/dynamic-pricing/` and `openspec/specs/domain-seed-data/` —
 > per this project's SDD conventions in `openspec/specs/project-setup/spec.md`.
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
 > **Note for any agent reading this file (including Claude Code):** this document
 > lives outside `openspec/` on purpose and is not a spec. If anything here
@@ -27,7 +27,7 @@ Last updated: 2026-08-18
 6. **Phase 2a** ✅ done (2026-08-11) — productionized into `app/services/pricing/` (relocated, didn't rebuild, Phase 1e's repository logic); fixed the category-name mismatch found the same day (see change log). **Phase 2c** ✅ done (2026-08-11) — internal service-to-service `POST /internal/v1/pricing/quote` endpoint for Spring Boot's checkout flow, built ahead of Phase 2b per the resequencing decision below. **Phase 2b** ✅ done (2026-08-11) — `pricing_client.py` swapped to call `app.services.pricing.model.predict_price(...)`, `min_daily_rate`/`max_daily_rate` threaded through `predict_price_adapter.py` from each candidate; lean pipeline-wiring scope, per "Phase 2b/2c sequencing and lean 2b scope" below. Only subtask 5 (demo prep) remains.
 7. **Phase 2d** ✅ complete (new 2026-08-11, completed 2026-08-13) — guardrail/duration-discount scale calibration, found during Phase 2a's live verification. `minDailyRate`/`maxDailyRate` are duration-agnostic bounds. 2d-i measured the real bounds, 2d-ii built versioned candidate artifacts without touching production, and 2d-iii validated the candidate read-only over all 27 live assets plus a common v2 holdout. See "Phase 2d — retrain approach" below.
 8. **Phase 2e** ✅ done (2026-08-17) — promoted the validated candidate to production after preserving byte-exact v1 rollback artifacts. The 27-asset `predict_price()` serving smoke reproduced the Phase 2d-iii candidate results exactly.
-9. **Phase 3** — real-data blend/cutover + scheduled retrain. **Phase 3a foundations completed 2026-08-18**; Phase 3b–3d remain pending and are tracked in `docs/dynamic-pricing-scheduled-retrain-plan.md`. Distinct from completed Phase 2e model promotion.
+9. **Phase 3** — real-data blend/cutover + scheduled retrain. **Phase 3a foundations completed 2026-08-18; Phase 3b real-data blend completed 2026-08-19**; Phase 3c–3d remain pending and are tracked in `docs/dynamic-pricing-scheduled-retrain-plan.md`. Distinct from completed Phase 2e model promotion.
 
 > Day-by-day tasks, Jira subtasks, and branch mapping for the current build: see
 > `dynamic-pricing-execution-plan.md`. This file only records decisions and
@@ -202,15 +202,18 @@ Pulled forward from its nominal `feature/ml-5-demo-prep` slot (same "get ahead w
 
 ### Phase 3 — real-data blend & scheduled retrain
 
-**Status (2026-08-18): Phase 3a complete; Phase 3b–3d pending.** Execution is tracked in [`dynamic-pricing-scheduled-retrain-plan.md`](./dynamic-pricing-scheduled-retrain-plan.md).
+**Status (2026-08-19): Phase 3a–3b complete; Phase 3c–3d pending.** Execution is tracked in [`dynamic-pricing-scheduled-retrain-plan.md`](./dynamic-pricing-scheduled-retrain-plan.md).
 
 - **Foundations (3a, implemented):** the Phase 2d validation functions now live in reusable `app/services/pricing/promotion_gate.py`. One-time validation retains exact 27-asset completeness; recurring jobs use a configurable minimum-asset floor. The historical script imports the shared implementation, preserving its SHA-pinned data provenance and chart behavior.
 - **Real-data readiness (3a, passed live):** `ml-experiments/real_training_data_check.py` performs a read-only `booking_items → bookings → assets → asset_categories` query and reports `daily_rate`/`subtotal` null, zero, and negative rates by status and category. The 2026-08-18 `primary_snapshot` run measured 98 rows/76 realized rows, found no invalid price values, and confirmed positive realized signal in all four ML categories.
-- **Blend/cutover (3b, pending):** keep grounded synthetic rows during bootstrap; weight real rows higher; drop synthetic rows independently per category once that category clears its real-sample threshold.
+- **Real-row extraction (3b, implemented):** `app/services/pricing/real_training.py`, re-exported through `repository.py`, reads positive `daily_rate` rows for `{CONFIRMED, MOBILISED, COMPLETED}`, applies the existing schema resolution to every query, maps DB category names to ML names, and derives duration, historical utilization, lead time, and target price.
+- **Distance stopgap (3b, implemented):** `sample_distance_km()` moved to the lightweight shared `training_sampling.py`; both the synthetic generator and real-row extraction use the same seed-42 distribution. This preserves training parity but does not resolve the real-geocoding open item.
+- **Blend/cutover (3b, implemented):** `build_training_dataset()` retains synthetic rows below the per-category threshold and removes them at or above it, while assigning real rows their configured weight. `train()` accepts optional in-memory data and aligned sample weights; default path-based callers remain unchanged.
+- **3b verification:** live `primary_snapshot` extraction returned 76 rows (boom lift 21, excavator 15, forklift 16, scissor lift 24). With threshold 20 and real weight 5.0, boom/scissor cut over and excavator/forklift stayed blended; the resulting 2,606-row dataset trained to `/tmp` only. Production artifacts and database rows were untouched; 439 tests passed, 5 optional tests skipped, and Ruff passed.
 - **Validated promotion (3c, pending):** train a candidate, compare current/candidate through the shared gate, and promote only on pass with rollback protection.
 - **Trigger (3d, pending):** monthly, default-disabled APScheduler integration is the sole runtime retrain trigger. The never-built manual HTTP retrain endpoint is scrapped; no retrain route should be added.
 
-Phase 3a establishes validation and data readiness only; no blend, candidate promotion orchestration, scheduler, or app-lifespan wiring is implemented yet.
+Phase 3a–3b establish validation, data readiness, extraction, and blend/cutover only. Candidate promotion/rollback, retrain state, scheduler configuration, and app-lifespan wiring remain Phase 3c–3d work.
 
 ---
 
@@ -271,3 +274,4 @@ Phase 3a establishes validation and data readiness only; no blend, candidate pro
 | 2026-08-13 (Phase 2d-iii gap audit) | **Found and closed a Phase 2d-ii reproducibility omission while auditing 2d-iii.** The tracked scratch pricing table still held pre-calibration anchors/ratios/duration curve even though the candidate CSV and artifacts had been built with the approved recalibrated values. Restored those constants and proved a fresh seed-42 generation byte-matches the ignored candidate CSV (`sha256=3b2b79d28f42fe62e2971f48b055af0cabecadc3b5fb0b7463a58929766e2d05`). Hardened 2d-iii by locking current/candidate artifact identities and candidate-data path, removing all formal-gate overrides including distance, asset count, and output path, validating CSV hash/row counts/candidate metrics, exposing fixed non-asset inputs, improving missing-data guidance, and expanding tests 5→8. Gate results remain unchanged; production artifacts remain untouched. |
 | 2026-08-17 (Phase 2e implemented) | **Promoted the validated calibrated model on `HR-177-ml-promote-calibrated-model-to-production`.** Preserved byte-exact v1 rollback artifacts, retained the reviewed v2 pair, copied v2 onto the literal serving filenames, and reloaded `prod-2026-08-13`. The 27-asset undegraded `primary_snapshot` smoke through `predict_price()` reproduced the Phase 2d-iii candidate clamp rates exactly, including the excavator watch case. Artifact identities, focused tests, scoped Ruff, diff hygiene, and the default suite (420 passed, 5 skipped) all passed. |
 | 2026-08-18 (Phase 3a implemented) | Extracted the reusable promotion gate while preserving the Phase 2d script’s exact 27-asset mode; added the read-only four-table real-price quality probe. Live `primary_snapshot` gate passed with 98 total/76 realized rows, no null/zero/negative `daily_rate` or `subtotal`, and positive realized signal in every category. Phase 3b–3d remain pending; the monthly scheduler is not runtime-wired yet. |
+| 2026-08-19 (Phase 3b implemented) | Added `real_training.py` booking-price extraction, deterministic `distance_km` imputation through shared `training_sampling.py`, per-category blend/cutover with real-row weighting, and weighted in-memory training. Read-only `primary_snapshot` smoke extracted 76 rows; with the planned 20-row threshold, boom/scissor cut over while excavator/forklift remained blended. A `/tmp` candidate trained successfully; 439 tests passed, 5 skipped, and Ruff passed. Phase 3c–3d remain pending. |

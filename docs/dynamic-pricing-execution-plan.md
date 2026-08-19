@@ -4,7 +4,7 @@
 > `dynamic-pricing-masterplan.md` — don't duplicate reasoning here; link back to
 > the relevant masterplan section instead.
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
 Timeline: 5 days total. Day 1–3 = Phase 1 (offline experimentation). Day 4–5 = Phase 2 (productionize).
 
@@ -132,10 +132,20 @@ PR/review notes:
 
 ---
 
+## Phase 3 handoff status
+
+Phase 3 execution is owned by `dynamic-pricing-scheduled-retrain-plan.md`; this original Phase 1–2 plan records only the handoff:
+
+- **Phase 3a complete (2026-08-18):** reusable promotion gate and live real-price quality probe.
+- **Phase 3b complete (2026-08-19):** real-row extraction, shared deterministic distance imputation, per-category blend/cutover, and weighted in-memory training. The live smoke extracted 76 rows and trained a 2,606-row blended dataset to temporary artifacts only.
+- **Next:** Phase 3c owns candidate gating, promotion/rollback, and retrain state; Phase 3d owns scheduling and app wiring.
+
+---
+
 ## Open items carried from masterplan
 
 - [x] ~~Real retrain interval (monthly vs. quarterly)~~ — **resolved by the Phase 3 plan: monthly (30-day default)**; runtime scheduler wiring remains Phase 3d. See `dynamic-pricing-scheduled-retrain-plan.md`.
-- [x] ~~Full APScheduler scheduled retrain / manual endpoint stand-in~~ — **moved to the dedicated Phase 3 plan**. Phase 3a foundations completed 2026-08-18; Phase 3d will add the scheduler. The never-built manual endpoint is scrapped, not a stand-in.
+- [x] ~~Full APScheduler scheduled retrain / manual endpoint stand-in~~ — **moved to the dedicated Phase 3 plan**. Phase 3a–3b completed by 2026-08-19; Phase 3c–3d remain for job orchestration and scheduler wiring. The never-built manual endpoint is scrapped, not a stand-in.
 - [x] ~~**New (2026-08-11):** category-name mismatch fix — folded into Phase 2a (`feature/ml-3-pricing-service`), not a separate subtask.~~ — **done (2026-08-11, same day)**: `category_mapping.py` added, applied in `repository.py`. See spec/design change control 2.5.0.
 - [x] ~~**New (2026-08-11):** richer Spring Boot seed data (`openspec/specs/domain-seed-data/spec.md`) — external dependency, tracked here for coordination but not a Haystack branch/subtask.~~ — **done (2026-08-11, same day)**: Spring Boot executed the reseed (8→27 assets, 20→90 bookings); Haystack independently verified against `heavy_rental`. See `openspec/specs/domain-seed-data/spec.md` "State after reseed". Category-name mismatch fix (still open, above) is the only remaining item before `period_utilization` reflects this data through the real code path.
 - [x] ~~`booking_month`/seasonality as a feature — Phase 1b found a mild, not-fully-clean per-month error pattern (January worst); lean is against adding it, but not locked. Decide during Phase 2, before finalizing the productionized `feature_schema.py`.~~ — **resolved in Phase 1d: not added** (`period_utilization` already captures realized seasonality). See masterplan.
@@ -186,3 +196,4 @@ PR/review notes:
 | 2026-08-13 (Phase 2d-iii gap audit) | **Closed reproducibility and gate-integrity gaps.** The Phase 2d-ii recalibrated constants documented as shipped were missing from tracked `ml-experiments/pricing_tables.py`; restored anchors `80/220`, `230/985`, `85/205`, `120/500`, guardrail ratios `0.74–0.88`/`1.12–1.33`, and duration floor/rate `0.84/0.18`. A seed-42 regeneration now byte-matches the candidate CSV (`sha256=3b2b79d28f42fe62e2971f48b055af0cabecadc3b5fb0b7463a58929766e2d05`). Locked current/candidate artifact identities and candidate-data path, and removed all formal-gate CLI overrides, including output path, for the fixed 20 km/27-asset comparison; added CSV hash/row-count/candidate-metric provenance checks and actionable missing-data guidance, made fixed utilization/lead-time assumptions visible, and expanded the focused test pack from 5 to 8. Live results and the Phase 2e PASS decision are unchanged. |
 | 2026-08-17 (Phase 2e implemented) | **Subtask 8 completed on `HR-177-ml-promote-calibrated-model-to-production`.** Added v1 rollback artifacts, promoted v2 byte-for-byte to serving, hot-reloaded the production model, added artifact-identity and production-path checks, and live-verified all 27 assets. Clamp rates matched 7c exactly; 420 tests passed and 5 skipped, with Phase 2e scoped Ruff and diff hygiene passing. |
 | 2026-08-18 (Phase 3a documentation sync) | The original Phase 1–2 plan now points to `dynamic-pricing-scheduled-retrain-plan.md` for Phase 3. Recorded Phase 3a completion: reusable promotion gate extracted, four-table real-price probe added, and live `primary_snapshot` data gate passed (98 total/76 realized booking-item rows; no null/zero/negative price values). Monthly scheduling remains Phase 3d, not yet runtime-wired. |
+| 2026-08-19 (Phase 3b sync) | The dedicated Phase 3 plan now records real-row extraction, shared distance imputation, per-category blend/cutover, and weighted in-memory training as complete. Live `primary_snapshot` extraction returned 76 rows; a weighted 2,606-row blended dataset trained successfully to temporary artifacts without changing the production model. Phase 3c job orchestration and Phase 3d scheduler wiring remain pending. |

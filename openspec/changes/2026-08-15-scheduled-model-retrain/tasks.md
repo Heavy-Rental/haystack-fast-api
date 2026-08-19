@@ -32,17 +32,17 @@ Focused Ruff passed; focused pytest passed 15/15, including the original
 
 ## Phase 3b — real-data extraction + blend/cutover
 
-- [ ] Add `daily_rate`/`subtotal` to `app/models/booking_item.py`
-- [ ] Add `created_at`/`total_amount` to `app/models/booking.py`
-- [ ] `repository.py::fetch_real_training_rows(db, resolution, *, statuses=REALIZED_PRICE_STATUSES) -> pd.DataFrame`
-- [ ] TDD: `tests/test_pricing_real_training_rows.py` (status filter, null/zero
+- [x] Add `daily_rate`/`subtotal` to `app/models/booking_item.py`
+- [x] Add `created_at`/`total_amount` to `app/models/booking.py`
+- [x] `repository.py::fetch_real_training_rows(db, resolution, *, statuses=REALIZED_PRICE_STATUSES) -> pd.DataFrame`
+- [x] TDD: `tests/test_pricing_real_training_rows.py` (status filter, null/zero
       `daily_rate` dropped, category mapping, `lead_time_days` incl.
       `created_at is null` fallback, real DB-shaped compiled-SQL assertion)
-- [ ] New `app/services/pricing/blend.py::build_training_dataset()`
+- [x] New `app/services/pricing/blend.py::build_training_dataset()`
       (per-category cutover + sample weighting)
-- [ ] TDD: `tests/test_pricing_blend.py` (cutover, blend, weight array, empty
+- [x] TDD: `tests/test_pricing_blend.py` (cutover, blend, weight array, empty
       real-rows degrades to pure-synthetic)
-- [ ] Extend `train.py::train()` with optional `data`/`sample_weight` params
+- [x] Extend `train.py::train()` with optional `data`/`sample_weight` params
       (backward-compatible, existing callers unaffected)
 
 ## Phase 3c — retrain job orchestration

@@ -1,18 +1,12 @@
-"""Retrain the production pricing model -- Phase 2a.
+"""Train the production pricing model (Phase 2a + Phase 3b).
 
-Ported from ``ml-experiments/train.py`` (Phase 1b), adapted to this
-package's ``feature_schema``/artifact paths and to expose an in-process
-``retrain()`` for the manual "retrain now" endpoint (Phase 2b) -- the CLI
-entrypoint below stays for dev/ops use exactly like the ml-experiments
-original.
-
-Training data still lives at ``ml-experiments/data/synthetic_pricing_data.csv``
-(gitignored, regenerated via ``ml-experiments/generate_synthetic_data.py``) --
-Phase 3's real-data blend replaces this, not Phase 2a. This module reads that
-file by path rather than duplicating a ~650KB, regenerable CSV into this
-package; the manual retrain endpoint is an ops/demo tool, not required for
-``predict_price()`` itself, which only needs the already-committed
-``artifacts/model.pkl``/``current.json``.
+Ported from ``ml-experiments/train.py`` and adapted to this package’s feature
+schema and artifact paths. The default CLI/legacy ``retrain()`` helper still
+reads ``ml-experiments/data/synthetic_pricing_data.csv``; no HTTP retrain route
+exists. Phase 3b additionally lets scheduled-job callers pass an in-memory
+real/synthetic dataset and aligned sample weights without changing existing
+callers. Serving only needs the committed ``artifacts/model.pkl`` and
+``current.json``.
 """
 
 from __future__ import annotations
@@ -24,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import joblib
+import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
@@ -50,6 +45,8 @@ XGB_PARAMS = {
 
 def train(
     *,
+    data: pd.DataFrame | None = None,
+    sample_weight: np.ndarray | None = None,
     data_path: Path = DEFAULT_DATA_PATH,
     seed: int = 42,
     test_size: float = 0.2,
@@ -57,16 +54,36 @@ def train(
     meta_out: Path = DEFAULT_META_PATH,
 ) -> dict[str, Any]:
     """Train, evaluate, and persist the model + metadata. Returns the metrics dict."""
-    df = pd.read_csv(data_path)
+    df = data.copy(deep=True) if data is not None else pd.read_csv(data_path)
     X = fs.build_features(df)
     y = fs.get_target(df)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=seed
-    )
+    training_weight: np.ndarray | None = None
+    if sample_weight is None:
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=test_size, random_state=seed
+        )
+    else:
+        weights = np.asarray(sample_weight, dtype=float)
+        if weights.ndim != 1 or len(weights) != len(df):
+            raise ValueError(
+                f"sample_weight length must match data rows ({len(df)}); got shape {weights.shape}"
+            )
+        if not np.isfinite(weights).all() or (weights < 0).any():
+            raise ValueError("sample_weight values must be finite and non-negative")
+        X_train, X_test, y_train, y_test, training_weight, _ = train_test_split(
+            X,
+            y,
+            weights,
+            test_size=test_size,
+            random_state=seed,
+        )
 
     model = XGBRegressor(random_state=seed, **XGB_PARAMS)
-    model.fit(X_train, y_train)
+    if training_weight is None:
+        model.fit(X_train, y_train)
+    else:
+        model.fit(X_train, y_train, sample_weight=training_weight)
 
     predictions = model.predict(X_test)
     metrics = {
@@ -87,7 +104,7 @@ def train(
         "hyperparameters": {**XGB_PARAMS, "random_state": seed},
         "metrics": metrics,
         "row_counts": {"train": len(X_train), "test": len(X_test), "total": len(df)},
-        "data_source": str(data_path),
+        "data_source": "in-memory" if data is not None else str(data_path),
     }
     meta_out.parent.mkdir(parents=True, exist_ok=True)
     meta_out.write_text(json.dumps(meta, indent=2) + "\n")
@@ -96,9 +113,10 @@ def train(
 
 
 def retrain() -> dict[str, Any]:
-    """In-process retrain against the default artifact paths, then hot-swaps
-    the currently-loaded model -- the manual "retrain now" path (Phase 2b)
-    calls this directly, no subprocess/CLI involved.
+    """Legacy in-process dev helper for default-path retraining.
+
+    No HTTP retrain route exists; scheduled retraining uses ``train()`` with
+    explicit candidate paths in Phase 3c.
     """
     metrics = train()
     from app.services.pricing.model import reload_model
