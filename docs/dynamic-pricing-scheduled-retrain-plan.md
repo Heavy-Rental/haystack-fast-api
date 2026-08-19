@@ -6,14 +6,15 @@
 > duplicate reasoning here; link back to that instead.
 >
 > **Runs in parallel with the existing `dynamic-pricing-execution-plan.md`**
-> (Phase 2e promotion completed 2026-08-17; its artifact swap remains separate from this Phase 3 plan). This file and that one touch a disjoint set of files: this feature
-> only adds new modules plus additive changes to `app/config.py`/
-> `app/main.py`/`pyproject.toml`/`.gitignore`. No merge risk between the two
-> efforts. `openspec/specs/dynamic-pricing/{spec.md,design.md}` (the live,
-> authoritative specs) are touched only once, at the very end (Phase 3e,
-> below), not mid-flight.
+> (Phase 2e promotion completed 2026-08-17; its artifact swap remains separate
+> from this Phase 3 plan). Phase 3a added the reusable gate/probe modules and
+> refactored the historical candidate-validation script to import the shared
+> implementation; Phase 3d will make additive scheduler/config changes. Per the
+> 2026-08-18 documentation sync, Phase 3a's completed requirements are recorded in
+> `openspec/specs/dynamic-pricing/{spec.md,design.md}`. Phase 3e still owns
+> the final merge of completed Phase 3b–3d behavior and retirement of US-2.
 
-Last updated: 2026-08-17
+Last updated: 2026-08-18
 
 Naming: this feature claims the "**Phase 3**" name `openspec/specs/dynamic-pricing/spec.md`'s
 own Status field already reserves for "real-data blend + scheduled retrain" —
@@ -34,7 +35,7 @@ by hand.
 
 **Decision: scrap the manual endpoint entirely.** The scheduler built here is
 the sole retrain trigger, monthly. No HTTP route for on-demand retrain exists
-or should be added — see the `spec.md`/`design.md` update planned for Phase 3e.
+or should be added. Phase 3a foundations are now recorded in the live spec/design; Phase 3e will retire US-2 after the scheduler itself lands.
 
 ---
 
@@ -47,13 +48,11 @@ or should be added — see the `spec.md`/`design.md` update planned for Phase 3e
       `distance_km` via `ml-experiments/generate_synthetic_data.py::sample_distance_km()`,
       the same distribution synthetic rows already use. Stopgap, not a fix —
       revisit once real geocoding lands.
-- [ ] **Data quality of the seeded bookings' `booking_items.daily_rate`/`subtotal`
-      is unverified.** No existing spec or check (including
-      `domain-seed-data/spec.md`'s own verification queries) confirms these
-      columns are populated or realistic. Phase 3a's data-quality probe is a
-      live check, not an assumption — if it finds the data unusable, Phase
-      3b's real-data blending is blocked pending a Spring Boot seed-data fix,
-      same escalation path Phase 2d-ii used for the `id=10` seed anomaly.
+- [x] ~~**Data quality of seeded `booking_items.daily_rate`/`subtotal` was unverified.**~~
+      **Resolved by Phase 3a (2026-08-18):** the read-only live probe measured
+      98 rows/76 realized rows in `primary_snapshot`; null/zero/negative rates
+      were 0% for both fields and every ML category had positive realized signal.
+      Phase 3b is unblocked on data quality.
 - [ ] **`PRICING_RETRAIN_MIN_REAL_ROWS_PER_CATEGORY` (default 20) and
       `PRICING_RETRAIN_REAL_SAMPLE_WEIGHT` (default 5.0) are starting points,
       not derived values.** Same category of open decision as Phase 2d's
@@ -70,11 +69,11 @@ or should be added — see the `spec.md`/`design.md` update planned for Phase 3e
 
 | # | Status | Jira subtask | Branch | Covers | Depends on |
 |---|---|---|---|---|---|
-| 3a | ☐ | Phase 3a — foundations: validation gate + real-data quality probe | `feature/ml-3a-foundations` | New `app/services/pricing/promotion_gate.py`, extracted from `ml-experiments/candidate_validation_check.py`'s pure functions (that script refactored to import from it; `assess_gate` generalized with `expected_asset_count`/`min_asset_count`) — pure refactor, zero behavior change, `tests/test_candidate_validation_check.py` passes unmodified. Plus new read-only `ml-experiments/real_training_data_check.py`: live-query `booking_items`/`bookings`/`assets`/`asset_categories`, report null/zero-rate of `daily_rate`/`subtotal` per status/category — gates Phase 3b. | — |
+| 3a | ☑ | Phase 3a — foundations: validation gate + real-data quality probe | `feature/ml-3a-foundations` | New `app/services/pricing/promotion_gate.py`, extracted from `ml-experiments/candidate_validation_check.py`'s pure functions (that script refactored to import from it; `assess_gate` generalized with `expected_asset_count`/`min_asset_count`) — pure refactor, zero behavior change, `tests/test_candidate_validation_check.py` passes unmodified. Plus new read-only `ml-experiments/real_training_data_check.py`: live-query `booking_items`/`bookings`/`assets`/`asset_categories`, report null/zero/negative rates of `daily_rate`/`subtotal` per status/category — gates Phase 3b. | — |
 | 3b | ☐ | Phase 3b — real-data extraction + blend/cutover | `feature/ml-3b-real-data-blend` | `daily_rate`/`subtotal` added to `app/models/booking_item.py`; `created_at`/`total_amount` added to `app/models/booking.py`; new `repository.py::fetch_real_training_rows()`; new `app/services/pricing/blend.py` (`build_training_dataset()` — per-category cutover + sample weighting); `train.py::train()` extended with `data`/`sample_weight` params. New `tests/test_pricing_real_training_rows.py`, `tests/test_pricing_blend.py`. | 3a (data confirmed usable by the probe) |
 | 3c | ☐ | Phase 3c — retrain job orchestration | `feature/ml-3c-retrain-job` | New `app/services/pricing/retrain_job.py` (`run_scheduled_retrain()`: build blended dataset → train candidate → gate via `promotion_gate` → promote/rollback; `retrain_state.json` persistence). New `tests/test_pricing_retrain_job.py`. | 3a (gate), 3b (blend) |
 | 3d | ☐ | Phase 3d — scheduler, app wiring, docs & regression | `feature/ml-3d-scheduler-and-docs` | `apscheduler` dependency; new `PRICING_RETRAIN_*` config fields (`app/config.py`); new `app/services/pricing/scheduler.py`; additive `lifespan` block in `app/main.py`; `.gitignore` additions; new `tests/test_pricing_scheduler.py`. Plus finalizing this doc and the OpenSpec proposal/tasks, and full-suite regression + Ruff across all of 3a–3d. | 3c |
-| 3e | ☐ *(separate, later, not part of this plan's PR count)* | Phase 3e — merge into live spec | TBD | Fold the finished requirement into `openspec/specs/dynamic-pricing/{spec.md,design.md}`; retire "Manual retrain path (US-2)". Deliberately deferred past this plan's own close, same as Phase 2e is deferred past Phase 2d on the other execution plan today. | 3d, archival decision |
+| 3e | ☐ *(separate, later, outside the four plan PRs)* | Phase 3e — merge completed runtime requirement into live spec | TBD | Fold finished Phase 3b–3d behavior into `openspec/specs/dynamic-pricing/{spec.md,design.md}` and retire "Manual retrain path (US-2)". Phase 3a foundations were synchronized early on 2026-08-18; they are not repeated here. | 3d, archival decision |
 
 Four PRs (3a–3d) ship the feature; the chain is strictly sequential since each
 PR wires directly into the next. Full architecture detail (function
@@ -91,7 +90,8 @@ change's PR descriptions as each phase lands — not duplicated here.
 cd haystack-fast-api
 
 # Focused suite
-uv run pytest tests/test_pricing_promotion_gate.py tests/test_pricing_real_training_rows.py \
+uv run pytest tests/test_pricing_promotion_gate.py tests/test_real_training_data_check.py \
+  tests/test_pricing_real_training_rows.py \
   tests/test_pricing_blend.py tests/test_pricing_retrain_job.py tests/test_pricing_scheduler.py \
   tests/test_candidate_validation_check.py -v
 
@@ -116,3 +116,5 @@ uv run python ml-experiments/real_training_data_check.py
 | Date | Note |
 |------|------|
 | 2026-08-15 | Initial plan split out as a new, parallel-track file (per explicit decision — Phase 2e is still open on `dynamic-pricing-execution-plan.md`). Consolidated from an initial 7-sub-phase draft to 4 PRs (3a–3d) per explicit preference for fewer, larger review units. |
+| 2026-08-18 | Phase 3a completed. Extracted the reusable promotion gate with recurring-job asset-floor mode while preserving the Phase 2d script’s exact 27-asset behavior; added and tested the four-table read-only real-price probe. Live `primary_snapshot` gate passed: 98 total/76 realized booking-item rows, no null/zero/negative `daily_rate` or `subtotal`, positive realized signal in every ML category. |
+| 2026-08-18 (documentation convergence) | Synchronized Phase 3a as-built behavior into the live `spec.md`/`design.md`, resolved the data-quality open item, and kept Phase 3b–3d plus final US-2 retirement explicitly pending. |

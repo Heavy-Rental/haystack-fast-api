@@ -51,6 +51,7 @@ Also: [`../postman/README.md`](../postman/README.md) · [`../QUICKSTART.md`](../
 |-----|-------------|
 | [`dynamic-pricing-masterplan.md`](./dynamic-pricing-masterplan.md) | Pricing product plan |
 | [`dynamic-pricing-execution-plan.md`](./dynamic-pricing-execution-plan.md) | Execution plan |
+| [`dynamic-pricing-scheduled-retrain-plan.md`](./dynamic-pricing-scheduled-retrain-plan.md) | Phase 3 scheduled-retrain plan; Phase 3a foundations complete |
 
 ## Spec entry points
 

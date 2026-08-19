@@ -2,8 +2,9 @@
 
 ## R — Requirements
 
-See [`spec.md`](./spec.md) Purpose, Outcomes, US-1..3, and Requirements.  
-Productionize Phase 1 XGBoost model into `app/services/pricing/` for in-process `predict_price(...)`.
+See [`spec.md`](./spec.md) Purpose, Outcomes, Requirements, and Phase 3a scenarios.
+
+Productionize the Phase 1 XGBoost model and provide reusable validate-before-promote and real-data-readiness foundations for Phase 3.
 
 ## E — Entities
 
@@ -15,6 +16,8 @@ Productionize Phase 1 XGBoost model into `app/services/pricing/` for in-process 
 | Model artifacts | `model.pkl` + `current.json` |
 | Price prediction | Guardrail-clamped `price_per_day` |
 | Spec-band | Bucket by capacity (excavator/forklift) or platform_height (scissor/boom) |
+| Promotion gate decision | Current/candidate checks plus pass/fail details; exact-count or minimum-count completeness mode |
+| Real-price quality row | Read-only booking item status/category with `daily_rate` and `subtotal` |
 
 ## A — Approach
 
@@ -30,13 +33,14 @@ app/services/pricing/
 ├── model.py             # load model.pkl + current.json once, expose predict_price(...)
 │                         # + reload_model() hot-swap; real per-asset guardrail clamping
 ├── train.py              # retrain entrypoint (ports ml-experiments/train.py's logic)
-│                         # + retrain() for the in-process manual-retrain path (Phase 2b)
+│                         # + retrain() remains a direct development helper; no HTTP route
 ├── feature_schema.py     # ports ml-experiments/feature_schema.py near-verbatim
 ├── pricing_tables.py     # ports ml-experiments/pricing_tables.py near-verbatim
 ├── category_mapping.py   # NEW 2026-08-11: DB_NAME_TO_FEATURE_NAME / to_db_name() / to_feature_name()
 ├── repository.py         # relocated from app/repositories/pricing_repository.py (Phase 1e);
 │                         # category-name mapping fix applied here (see below)
 ├── read_resilience.py    # relocated from app/repositories/pricing_read_resilience.py (Phase 1e)
+├── promotion_gate.py      # Phase 3a: reusable validation rows/model evaluation/gate decision
 └── artifacts/
     ├── model.pkl          # promoted from ml-experiments/artifacts/ (already-trained Phase 1 model)
     └── current.json
@@ -164,7 +168,7 @@ Read per-asset at prediction time (admin-editable via asset admin-portal tag) �
 
 ### Internal quote API (added 2026-08-11, implemented 2026-08-11)
 
-`POST /internal/v1/pricing/quote` — synchronous, service-to-service only (Spring Boot → Haystack), authoritative per-asset quote at checkout. Reuses this package's `predict_price(...)` — no second prediction path. Registered as its own router (`app/api/internal_pricing.py`), included directly on the app in `app/main.py` (**not** via `app.api.api_router`, so it's outside the public `/api/v1` prefix); restrict at network/ops level, same interim posture as the manual retrain path (see Security notes) until real auth exists.
+`POST /internal/v1/pricing/quote` — synchronous, service-to-service only (Spring Boot → Haystack), authoritative per-asset quote at checkout. Reuses this package's `predict_price(...)` — no second prediction path. Registered as its own router (`app/api/internal_pricing.py`), included directly on the app in `app/main.py` (**not** via `app.api.api_router`, so it's outside the public `/api/v1` prefix); restrict at network/ops level, restricted at network/ops level until real auth exists until real auth exists.
 
 **Dependency (satisfied 2026-08-11)**: required this capability's real per-asset guardrail clamping (`Asset.minDailyRate`/`maxDailyRate`) and the category-name mapping fix above to already be in place — building this against `ml-experiments/predict_price.py`'s static per-category stand-in would have handed Spring Boot the wrong `min_daily_rate`/`max_daily_rate` shape it was already told to expect. Built after `feature/ml-3-pricing-service` landed. **Resequenced ahead of Phase 2b** (lean pipeline wiring) the same day — this endpoint never touches `pricing_client.py`/`predict_price_adapter.py`/`recommendations.py`, so it had no dependency on that work; see `docs/dynamic-pricing-masterplan.md` "Phase 2b/2c sequencing and lean 2b scope" (see Implementation branches).
 
@@ -276,17 +280,29 @@ Slightly higher MAE than Phase 1b baseline (9.95) — expected: two new real var
 
 ### Security notes
 
-No auth stack yet (project-setup). Manual retrain path MUST **not** be a public renter route until real auth SDD exists — restrict at network/ops level interim.
+No auth stack yet (project-setup). No manual retrain HTTP route exists or should be added. The future default-disabled scheduler is an in-process lifespan component, not an HTTP surface.
 
-### Phase 3 — cold-start bootstrap, blend, per-category cutover (design decision)
+### Phase 3a — validated-promotion and data-readiness foundations (as-built 2026-08-18)
 
-A fresh deployment has no real transaction history. `period_utilization`/`lead_time_days` are always live-computable even with few bookings, but the model's learned price-response needs grounded synthetic data until real history exists. Resolution rides on Phase 3 scheduled retrain already scoped in masterplan/execution plan — **not a new mechanism**:
+`app/services/pricing/promotion_gate.py` owns the reusable functions extracted from the historical Phase 2d validation script: live-asset loading, validation-row construction, model evaluation, clamp summaries, common-holdout scoring, artifact/model schema checks, and `assess_gate()`. It performs no artifact writes, promotion, or model reload.
 
-- **Bootstrap (now)**: 100% grounded synthetic data. Guardrail clamping bounds worst-case error.
-- **Blend**: extend Phase 3 retrain `train.py` with sample weighting by data source/recency (`model.fit(X, y, sample_weight=...)`) — real data weighted higher as volume grows. **Design decision only — no code until real data exists**.
-- **Cutover**: per category, not all at once. Each category drops synthetic rows independently once it clears its own minimum real-sample threshold (exact threshold TBD). Categories graduate at different rates.
+Two completeness modes deliberately share every other gate check:
 
-Full reasoning: `docs/dynamic-pricing-masterplan.md` Phase 3.
+- **Historical exact mode:** `candidate_validation_check.py` passes `expected_asset_count=27`, preserving its frozen one-time comparison and tests. SHA-pinned candidate-data provenance, chart rendering, printing, and before/after artifact hashes remain script-specific.
+- **Recurring-job floor mode:** future Phase 3c calls with `expected_asset_count=None` and `min_asset_count=1`, so normal fleet growth does not invalidate the job while an empty fleet still fails.
+
+`ml-experiments/real_training_data_check.py` defines minimal SQLAlchemy Core table shapes for `booking_items`, `bookings`, `assets`, and `asset_categories`; it uses `resolve_pricing_schema()`/`schema_translate_map`, normalizes DB category names, and loads no ORM writes. Pandas summaries report null/zero/negative counts and percentages by status and by category. The readiness decision considers `{CONFIRMED, MOBILISED, COMPLETED}` realized and fails when realized rows are absent, a realized value is negative, or any model category lacks positive `daily_rate`/`subtotal` signal.
+
+Live result on 2026-08-18: undegraded `primary_snapshot`, 98 total rows, 76 realized rows, zero invalid values, and all four categories positive — Phase 3b data quality is unblocked.
+
+### Phase 3b–3d — cold-start blend, promotion orchestration, and scheduler (pending)
+
+- **Bootstrap:** continue with grounded synthetic data until real rows are extracted and blended.
+- **Blend/cutover (3b):** weight real rows higher and drop synthetic rows independently per category after its threshold.
+- **Validated promotion (3c):** train a candidate and reuse `promotion_gate`; promote only on pass with rollback.
+- **Monthly trigger (3d):** default-disabled APScheduler in app lifespan. It is the sole planned runtime trigger; the manual HTTP endpoint is scrapped.
+
+No 3b–3d runtime behavior is implemented by Phase 3a. Full reasoning and sequencing: `docs/dynamic-pricing-scheduled-retrain-plan.md`.
 
 ## S — Structure
 
@@ -300,7 +316,7 @@ ml-experiments/                 # Phase 1 scratch (outside SDD)
 
 app/services/pricing/           # Phase 2a — implemented 2026-08-11 (this capability)
   model.py, train.py, feature_schema.py, pricing_tables.py, category_mapping.py,
-  repository.py, read_resilience.py, artifacts/model.pkl, artifacts/current.json
+  repository.py, read_resilience.py, promotion_gate.py, artifacts/model.pkl, artifacts/current.json
 
 app/api/internal_pricing.py     # Phase 2c -- implemented 2026-08-11: POST /internal/v1/pricing/quote
                                  # (service-to-service, registered directly on the app in
@@ -336,8 +352,11 @@ uv run python ml-experiments/shap_review.py
 # Phase 2a (implemented 2026-08-11):
 uv run pytest tests/test_pricing_feature_schema.py tests/test_pricing_model.py \
   tests/test_pricing_repository.py -v
-# manual retrain: python -c "from app.services.pricing.train import retrain; retrain()"
-#   → check artifacts/current.json's trained_at updated, model.py's _model_version changed
+
+# Phase 3a (implemented 2026-08-18):
+uv run pytest tests/test_candidate_validation_check.py \
+  tests/test_pricing_promotion_gate.py tests/test_real_training_data_check.py -q
+uv run python ml-experiments/real_training_data_check.py
 
 # Phase 2b (implemented 2026-08-11):
 uv run pytest tests/test_pricing_client_phase1e.py tests/test_pricing_phase2b_wiring.py \
@@ -409,11 +428,12 @@ uv run python ml-experiments/phase2e_serving_smoke.py
 | `HR-87-ml-2-d-production-db-wiring-for-period-utilization` | **Done (2026-08-10)** — Phase 1e: read-only models, `pricing_repository.py`, `pricing_read_resilience.py` tiered fallback; 20 new unit tests |
 | `feature/ml-3-pricing-service` | **Done (2026-08-11)** — scaffolded package, ported schema, built `model.py`/`train.py`, real per-asset guardrail clamping, relocated Phase 1e's read models/repositories in as `repository.py`/`read_resilience.py`, fixed the category-name mismatch (`category_mapping.py`); 24 new unit tests, 144 total passing, live-verified against all 27 real assets |
 | `feature/ml-6-internal-pricing-api` | **Done (2026-08-11)** — `POST /internal/v1/pricing/quote` (`app/api/internal_pricing.py`, `app/schemas/pricing.py`, `repository.py::get_asset_for_pricing()`); 5 new unit tests, 149 total passing. Resequenced ahead of `feature/ml-4-integration-tests` (lean Phase 2b) — see "Internal quote API" above |
-| `feature/ml-4-integration-tests` | **Done (2026-08-11)** — pipeline wired (`pricing_client.py` swapped to `app.services.pricing.model.predict_price(...)`, `min_daily_rate`/`max_daily_rate` threaded through `predict_price_adapter.py`); pipeline-integration tests only (guardrail/feature-schema tests already covered) — `tests/test_pricing_client_phase1e.py` rewritten, `tests/test_pricing_phase2b_wiring.py` added (2 new tests); 154 total passing. Manual retrain endpoint stays moved to demo-prep subtask |
+| `feature/ml-4-integration-tests` | **Done (2026-08-11)** — pipeline wired (`pricing_client.py` swapped to `app.services.pricing.model.predict_price(...)`, `min_daily_rate`/`max_daily_rate` threaded through `predict_price_adapter.py`); pipeline-integration tests only (guardrail/feature-schema tests already covered) — `tests/test_pricing_client_phase1e.py` rewritten, `tests/test_pricing_phase2b_wiring.py` added (2 new tests); 154 total passing. Historical note: the manual endpoint was later scrapped by the Phase 3 decision |
 | `HR-118-ml-real-bound-measurement` | **Done (2026-08-12)** — Phase 2d-i read-only real-bound measurement; 27 assets loaded undegraded from `primary_snapshot`, two calibration knobs compared, ignored chart generated; no production data/artifact changes; 188 tests passing |
 | `HR-141-ml-recalibration-candidate-build` | **Done (2026-08-13)** — Phase 2d-ii joint recalibration and versioned candidate build; strict 5,000-row generation checks passed, candidate MAE 16.64/R² 0.9866; serving artifacts untouched |
 | `HR-146-ml-candidate-validation` | **Done (2026-08-13)** — Phase 2d-iii direct-artifact comparison, 8 focused tests, ignored chart, 27-asset multi-duration run, common-v2-holdout accuracy and SHA/metadata provenance comparison; every Phase 2e gate passed; serving artifacts unchanged |
 | `HR-177-ml-promote-calibrated-model-to-production` | **Done (2026-08-17)** — v1 rollback preservation, v2 serving promotion, artifact identity tests, hot reload, 27-asset production-path smoke, and 420-pass default-suite convergence |
+| `feature/ml-3a-foundations` | **Done (2026-08-18)** — reusable `promotion_gate.py`, historical-script refactor with exact-27 compatibility, generalized minimum-asset mode, read-only real-price probe, 15 focused tests, live data gate PASS, 427-pass default-suite convergence |
 
 ## N — Norms
 
@@ -421,6 +441,8 @@ uv run python ml-experiments/phase2e_serving_smoke.py
 - Guardrails from per-asset rate bounds, not env tables.
 - Port feature schema from ml-experiments — do not re-derive.
 - Spring owns schema; Python maps only.
+- Phase 3a quality probing is read-only and reuses the pricing schema resolver; no reflected writes or ORM expansion before Phase 3b.
+- Promotion evaluation is canonical in `promotion_gate.py`; historical provenance/chart code remains in the historical script.
 - Full decision rationale lives in masterplan; this design restates contract only.
 
 ## S — Safeguards
@@ -430,7 +452,7 @@ uv run python ml-experiments/phase2e_serving_smoke.py
 - Do not invent `weekly_rate = daily × 7` on recommend surfaces.
 - Do not "fix" low period_utilization early-booking prices.
 - Do not add booking_month, fuel price, or purchaseYear without a new decision + this capability update.
-- Do not register public retrain without auth SDD.
+- Do not add any manual retrain HTTP route. The Phase 3d scheduler is the sole planned runtime trigger and remains default-disabled.
 - Do not compare `AssetCategory.name` against `feature_schema.CATEGORIES` (or vice versa) without going through `DB_NAME_TO_FEATURE_NAME` — a silent zero-row match degrades to the static fallback with no error, the exact bug found 2026-08-11.
 - Do not "fix" the category mismatch by renaming `asset_categories.name` values in the DB — see "Category name mapping" above for why the mapping lives in Haystack code, not seed data.
 - Do not write a test for category-name-dependent code paths using a fully mocked `session.execute()` only — it can't catch a filter-clause mismatch; assert against real DB-shaped names too.
@@ -450,7 +472,7 @@ See [`spec.md`](./spec.md) Key decisions / non-goals table (mirrored here for RE
 | NaN platform_height | Structurally N/A for non-aerial |
 | No Alembic / no new tables | Spring owns schema |
 | Sync SQLAlchemy + psycopg | Project default |
-| Manual retrain now | Demo safety net; APScheduler Phase 3 |
+| Monthly scheduler only; no manual HTTP retrain | Manual endpoint never shipped and is scrapped; Phase 3a provides only gate/data foundations, Phase 3d wires runtime scheduling |
 | Spec-band + period_utilization | Correct scarcity signal |
 | booking_month / fuel not added | Superseded / rejected |
 | Category-name mapping fixed in code, not DB data | `AssetCategory.name` is Spring-Boot canonical; `feature_schema.CATEGORIES` is the derived ML slug baked into trained artifacts |
@@ -460,3 +482,7 @@ See [`spec.md`](./spec.md) Key decisions / non-goals table (mirrored here for RE
 | `deposit_rate` fixed constant, response-only | Single source of truth; not asset/category-dependent today |
 | No `/internal/v1/pricing/estimate` | Flat base price pre-checkout; live pricing only at quote time |
 | Quote audit: `model_version`/`was_clamped` persisted, `raw_price` excluded | Redundant when unclamped; a calibration signal, not a per-transaction fact, when clamped |
+
+## Design change note
+
+- **2026-08-18 / Phase 3a:** recorded reusable promotion-gate ownership, exact-vs-minimum asset modes, read-only real-price probe topology and readiness rules, live PASS evidence, verification commands, and explicit Phase 3b–3d pending boundaries.

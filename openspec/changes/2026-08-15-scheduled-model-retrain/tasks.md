@@ -5,23 +5,30 @@ the full Jira subtask table and branch names.
 
 ## Phase 3a — foundations: validation gate + real-data quality probe
 
-- [ ] Extract `app/services/pricing/promotion_gate.py` from
+- [x] Extract `app/services/pricing/promotion_gate.py` from
       `ml-experiments/candidate_validation_check.py`'s pure functions
       (`build_validation_rows`, `evaluate_model`, `summarize_predictions`,
       `evaluate_common_holdout`, `assess_gate`, `validate_artifact_contract`,
       `validate_model_features`, `load_live_assets`)
-- [ ] Refactor `candidate_validation_check.py` to import from
+- [x] Refactor `candidate_validation_check.py` to import from
       `promotion_gate.py`; keep only script-specific pieces
       (`EXPECTED_CANDIDATE_DATA_SHA256`/`validate_candidate_data_provenance`,
       `render_chart`, `_print_results`, `main()`)
-- [ ] Generalize `assess_gate` with `expected_asset_count: int | None = None`
+- [x] Generalize `assess_gate` with `expected_asset_count: int | None = None`
       / `min_asset_count: int = 1`; preserve `candidate_validation_check.py`'s
       exact-match behavior via `expected_asset_count=EXPECTED_ASSET_COUNT`
-- [ ] Regression: `tests/test_candidate_validation_check.py` passes unmodified
-- [ ] New `ml-experiments/real_training_data_check.py`: live-query
+- [x] Regression: `tests/test_candidate_validation_check.py` passes unmodified
+- [x] New `ml-experiments/real_training_data_check.py`: live-query
       `booking_items`/`bookings`/`assets`/`asset_categories`, report
       null/zero-rate of `daily_rate`/`subtotal` per status and per category
-- [ ] Run the probe against the live seeded DB; record the result (gates 3b)
+- [x] Run the probe against the live seeded DB; record the result (gates 3b)
+
+Evidence (2026-08-18): `primary_snapshot` PASS — 98 booking-item rows measured,
+76 realized-status rows, zero null/zero/negative `daily_rate` or `subtotal`
+values across all rows, and positive realized signal in all four ML categories.
+Focused Ruff passed; focused pytest passed 15/15, including the original
+`test_candidate_validation_check.py` unchanged. Full pytest regression passed
+427 tests with 5 optional tests skipped.
 
 ## Phase 3b — real-data extraction + blend/cutover
 
