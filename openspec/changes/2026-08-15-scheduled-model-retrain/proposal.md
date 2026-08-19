@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Proposed |
+| **Status** | Implemented (Phase 3a–3d complete 2026-08-19; Phase 3e archive pending) |
 | **Date** | 2026-08-15 |
 | **Capability** | `dynamic-pricing` |
 | **Phase** | 3a–3d (reserved "Phase 3" name — see `spec.md` Status field) |
@@ -283,16 +283,18 @@ already used for `indexing_via_agent_gate`/`recommend_via_agent_graph`:
 pricing_retrain_enabled: bool = Field(default=False, alias="PRICING_RETRAIN_ENABLED")
 pricing_retrain_interval_days: int = Field(default=30, alias="PRICING_RETRAIN_INTERVAL_DAYS", ge=1)
 pricing_retrain_misfire_grace_seconds: int = Field(
-    default=6 * 3600, alias="PRICING_RETRAIN_MISFIRE_GRACE_SECONDS", ge=0
+    default=6 * 3600, alias="PRICING_RETRAIN_MISFIRE_GRACE_SECONDS", ge=1
 )
 pricing_retrain_min_real_rows_per_category: int = Field(
-    default=20, alias="PRICING_RETRAIN_MIN_REAL_ROWS_PER_CATEGORY", ge=1
+    default=125, alias="PRICING_RETRAIN_MIN_REAL_ROWS_PER_CATEGORY", ge=1
 )
 pricing_retrain_real_sample_weight: float = Field(
-    default=5.0, alias="PRICING_RETRAIN_REAL_SAMPLE_WEIGHT", ge=0
+    default=10.0, alias="PRICING_RETRAIN_REAL_SAMPLE_WEIGHT", ge=0
 )
 ```
 
+APScheduler 3 requires `misfire_grace_time` to be a positive integer, so the
+matching setting rejects zero rather than failing later during app startup.
 `pricing_retrain_enabled` **must default to `False`**: several existing tests
 (`tests/conftest.py` and others) do `with TestClient(app) as client`, which
 invokes `lifespan` — if the scheduler defaulted on, every test run would try
@@ -368,9 +370,11 @@ ignore rules for `retrain_state.json`, `model_candidate.pkl`,
   is unverified as of this proposal — `real_training_data_check.py` (Phase 3a)
   is the live check; if it fails, Phase 3b's blending is blocked pending a
   Spring Boot seed-data fix.
-- `PRICING_RETRAIN_MIN_REAL_ROWS_PER_CATEGORY` (default 20) and
-  `PRICING_RETRAIN_REAL_SAMPLE_WEIGHT` (default 5.0) are starting points, not
-  derived values — need a product/pricing-owner sanity check.
+- `PRICING_RETRAIN_MIN_REAL_ROWS_PER_CATEGORY` (default 125) and
+  `PRICING_RETRAIN_REAL_SAMPLE_WEIGHT` (default 10.0) are conservative
+  starting points, raised from 20/5 on 2026-08-19 so 15–24 real rows per
+  category remain blended and real loss mass becomes material without
+  dominating synthetic coverage. They still require held-out real-booking validation.
 - The realized-price status set (`{CONFIRMED, MOBILISED, COMPLETED}`) used to
   decide which bookings count as real training signal is a reasonable but
   unconfirmed interpretation — worth an explicit sign-off.

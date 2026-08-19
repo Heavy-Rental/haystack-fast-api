@@ -52,10 +52,25 @@ async def lifespan(_app: FastAPI):
             decomposer.warm_up()
             log.info("LLM need decomposer warmed (model=%s)", settings.llm_model)
 
-    yield
+    pricing_retrain_scheduler = None
+    if settings.pricing_retrain_enabled:
+        from app.services.pricing.scheduler import build_scheduler
 
-    if decomposer is not None and hasattr(decomposer, "close"):
-        decomposer.close()
+        pricing_retrain_scheduler = build_scheduler(settings)
+        pricing_retrain_scheduler.start()
+        log.info(
+            "Pricing retrain scheduler started (interval_days=%s)",
+            settings.pricing_retrain_interval_days,
+        )
+
+    try:
+        yield
+    finally:
+        if pricing_retrain_scheduler is not None:
+            pricing_retrain_scheduler.shutdown(wait=False)
+            log.info("Pricing retrain scheduler stopped")
+        if decomposer is not None and hasattr(decomposer, "close"):
+            decomposer.close()
 
 
 def create_app() -> FastAPI:

@@ -121,3 +121,4 @@ Treat these as **authoritative industry context** when present. Product behaviou
 | Version | Date | Notes |
 |---------|------|--------|
 | 1.0.0 | 2026-08-10 | Migrated from `specification/00-overview.md` + `SPEC-project.md` into OpenSpec project context |
+| 1.1.0 | 2026-08-19 | Dynamic-pricing Phase 3d added default-disabled in-process APScheduler 3.x monthly retraining with restart-aware timing and FastAPI lifespan ownership; no retrain HTTP route was added. |

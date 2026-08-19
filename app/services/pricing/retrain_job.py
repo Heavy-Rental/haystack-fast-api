@@ -40,8 +40,8 @@ PREVIOUS_MODEL_PATH = ARTIFACTS_DIR / "model_previous.pkl"
 PREVIOUS_META_PATH = ARTIFACTS_DIR / "current_previous.json"
 STATE_PATH = ARTIFACTS_DIR / "retrain_state.json"
 
-DEFAULT_MIN_REAL_ROWS_PER_CATEGORY = 20
-DEFAULT_REAL_SAMPLE_WEIGHT = 5.0
+DEFAULT_MIN_REAL_ROWS_PER_CATEGORY = 125
+DEFAULT_REAL_SAMPLE_WEIGHT = 10.0
 
 Status = Literal["promoted", "gate_failed", "error"]
 
