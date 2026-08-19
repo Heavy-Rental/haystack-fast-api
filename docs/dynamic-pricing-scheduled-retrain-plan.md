@@ -9,12 +9,14 @@
 > (Phase 2e promotion completed 2026-08-17; its artifact swap remains separate
 > from this Phase 3 plan). Phase 3a added the reusable gate/probe modules and
 > refactored the historical candidate-validation script to import the shared
-> implementation; Phase 3d will make additive scheduler/config changes. Per the
+> implementation. Phase 3b added real-data extraction, shared distance
+> imputation, per-category cutover, and weighted in-memory training. Phase 3d
+> will make additive scheduler/config changes. Per the
 > 2026-08-18 documentation sync, Phase 3a's completed requirements are recorded in
 > `openspec/specs/dynamic-pricing/{spec.md,design.md}`. Phase 3e still owns
 > the final merge of completed Phase 3b–3d behavior and retirement of US-2.
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
 Naming: this feature claims the "**Phase 3**" name `openspec/specs/dynamic-pricing/spec.md`'s
 own Status field already reserves for "real-data blend + scheduled retrain" —
@@ -42,17 +44,16 @@ or should be added. Phase 3a foundations are now recorded in the live spec/desig
 ## Open items carried into this plan
 
 - [ ] **`distance_km` has no real equivalent anywhere in the schema.**
-      `Booking.site_latitude`/`site_longitude` exist but real geocoding is a
-      separate, pre-existing open item (noted since Phase 2c on the other
-      execution plan). Workaround here: impute real training rows'
-      `distance_km` via `ml-experiments/generate_synthetic_data.py::sample_distance_km()`,
-      the same distribution synthetic rows already use. Stopgap, not a fix —
+      `distance_km` is now imputed through the shared
+      `app/services/pricing/training_sampling.py::sample_distance_km()` helper;
+      `ml-experiments/generate_synthetic_data.py` imports the same helper, so
+      real and synthetic rows retain one distribution. Stopgap, not a fix —
       revisit once real geocoding lands.
 - [x] ~~**Data quality of seeded `booking_items.daily_rate`/`subtotal` was unverified.**~~
       **Resolved by Phase 3a (2026-08-18):** the read-only live probe measured
       98 rows/76 realized rows in `primary_snapshot`; null/zero/negative rates
       were 0% for both fields and every ML category had positive realized signal.
-      Phase 3b is unblocked on data quality.
+      Phase 3b consumed this confirmed data source and is complete.
 - [ ] **`PRICING_RETRAIN_MIN_REAL_ROWS_PER_CATEGORY` (default 20) and
       `PRICING_RETRAIN_REAL_SAMPLE_WEIGHT` (default 5.0) are starting points,
       not derived values.** Same category of open decision as Phase 2d's
@@ -70,7 +71,7 @@ or should be added. Phase 3a foundations are now recorded in the live spec/desig
 | # | Status | Jira subtask | Branch | Covers | Depends on |
 |---|---|---|---|---|---|
 | 3a | ☑ | Phase 3a — foundations: validation gate + real-data quality probe | `feature/ml-3a-foundations` | New `app/services/pricing/promotion_gate.py`, extracted from `ml-experiments/candidate_validation_check.py`'s pure functions (that script refactored to import from it; `assess_gate` generalized with `expected_asset_count`/`min_asset_count`) — pure refactor, zero behavior change, `tests/test_candidate_validation_check.py` passes unmodified. Plus new read-only `ml-experiments/real_training_data_check.py`: live-query `booking_items`/`bookings`/`assets`/`asset_categories`, report null/zero/negative rates of `daily_rate`/`subtotal` per status/category — gates Phase 3b. | — |
-| 3b | ☐ | Phase 3b — real-data extraction + blend/cutover | `feature/ml-3b-real-data-blend` | `daily_rate`/`subtotal` added to `app/models/booking_item.py`; `created_at`/`total_amount` added to `app/models/booking.py`; new `repository.py::fetch_real_training_rows()`; new `app/services/pricing/blend.py` (`build_training_dataset()` — per-category cutover + sample weighting); `train.py::train()` extended with `data`/`sample_weight` params. New `tests/test_pricing_real_training_rows.py`, `tests/test_pricing_blend.py`. | 3a (data confirmed usable by the probe) |
+| 3b | ☑ | Phase 3b — real-data extraction + blend/cutover | `feature/ml-3b-real-data-blend` | Added `daily_rate`/`subtotal` and `created_at`/`total_amount` ORM fields; `real_training.py::fetch_real_training_rows()` is re-exported by `repository.py`; `training_sampling.py::sample_distance_km()` is shared with the synthetic generator; `blend.py::build_training_dataset()` performs per-category cutover and weighting; `train.py::train()` accepts optional `data`/`sample_weight`. Added `tests/test_pricing_real_training_rows.py` and `tests/test_pricing_blend.py`. | 3a (data confirmed usable by the probe) |
 | 3c | ☐ | Phase 3c — retrain job orchestration | `feature/ml-3c-retrain-job` | New `app/services/pricing/retrain_job.py` (`run_scheduled_retrain()`: build blended dataset → train candidate → gate via `promotion_gate` → promote/rollback; `retrain_state.json` persistence). New `tests/test_pricing_retrain_job.py`. | 3a (gate), 3b (blend) |
 | 3d | ☐ | Phase 3d — scheduler, app wiring, docs & regression | `feature/ml-3d-scheduler-and-docs` | `apscheduler` dependency; new `PRICING_RETRAIN_*` config fields (`app/config.py`); new `app/services/pricing/scheduler.py`; additive `lifespan` block in `app/main.py`; `.gitignore` additions; new `tests/test_pricing_scheduler.py`. Plus finalizing this doc and the OpenSpec proposal/tasks, and full-suite regression + Ruff across all of 3a–3d. | 3c |
 | 3e | ☐ *(separate, later, outside the four plan PRs)* | Phase 3e — merge completed runtime requirement into live spec | TBD | Fold finished Phase 3b–3d behavior into `openspec/specs/dynamic-pricing/{spec.md,design.md}` and retire "Manual retrain path (US-2)". Phase 3a foundations were synchronized early on 2026-08-18; they are not repeated here. | 3d, archival decision |
@@ -84,7 +85,17 @@ change's PR descriptions as each phase lands — not duplicated here.
 
 ---
 
-## Verification (full feature, once all four phases land)
+## Phase 3b verification (completed 2026-08-19)
+
+- Focused Phase 3b tests: 11 passed.
+- Full regression: 439 passed, 5 optional tests skipped; Ruff and `git diff --check` passed.
+- Shared distance sampler: 1,000 seed-42 outputs matched the prior synthetic implementation exactly; the generator CLI smoke also passed.
+- Live read-only extraction: undegraded `primary_snapshot`, 76 rows — boom lift 21, excavator 15, forklift 16, scissor lift 24.
+- Planned defaults (`min_real_rows_per_category=20`, `real_sample_weight=5.0`) produced 2,606 blended rows; boom/scissor cut over, excavator/forklift remained blended. Training succeeded to `/tmp`; no production artifacts or DB rows changed.
+
+---
+
+## Remaining full-feature verification (after Phase 3c–3d)
 
 ```bash
 cd haystack-fast-api
@@ -118,3 +129,4 @@ uv run python ml-experiments/real_training_data_check.py
 | 2026-08-15 | Initial plan split out as a new, parallel-track file (per explicit decision — Phase 2e is still open on `dynamic-pricing-execution-plan.md`). Consolidated from an initial 7-sub-phase draft to 4 PRs (3a–3d) per explicit preference for fewer, larger review units. |
 | 2026-08-18 | Phase 3a completed. Extracted the reusable promotion gate with recurring-job asset-floor mode while preserving the Phase 2d script’s exact 27-asset behavior; added and tested the four-table read-only real-price probe. Live `primary_snapshot` gate passed: 98 total/76 realized booking-item rows, no null/zero/negative `daily_rate` or `subtotal`, positive realized signal in every ML category. |
 | 2026-08-18 (documentation convergence) | Synchronized Phase 3a as-built behavior into the live `spec.md`/`design.md`, resolved the data-quality open item, and kept Phase 3b–3d plus final US-2 retirement explicitly pending. |
+| 2026-08-19 | Phase 3b completed. Added Spring-owned price/booking ORM fields, `real_training.py` extraction with schema-resolution threading, a shared `training_sampling.py` distance sampler, per-category synthetic cutover and real-row weighting, and in-memory weighted training. Live `primary_snapshot` extraction returned 76 rows (21 boom lift, 15 excavator, 16 forklift, 24 scissor lift); the default threshold produced a 2,606-row blended smoke dataset and trained successfully without touching production artifacts. Full regression: 439 passed, 5 skipped; Ruff passed. |
