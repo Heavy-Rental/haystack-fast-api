@@ -138,7 +138,7 @@ Phase 3 execution is owned by `dynamic-pricing-scheduled-retrain-plan.md`; this 
 
 - **Phase 3a complete (2026-08-18):** reusable promotion gate and live real-price quality probe.
 - **Phase 3b complete (2026-08-19):** real-row extraction, shared deterministic distance imputation, per-category blend/cutover, and weighted in-memory training. The live smoke extracted 76 rows and trained a 2,606-row blended dataset to temporary artifacts only.
-- **Phase 3c complete (2026-08-19):** synchronous candidate build/gating, recoverable one-generation promotion, serving-model reload, and atomic retrain-state persistence. Phase 3d owns scheduling and app wiring.
+- **Phase 3c complete (2026-08-19):** synchronous never-raise candidate build/gating; recoverable one-generation backup, atomic two-file promotion and serving-model reload; rollback on promotion failure; and dedicated atomic state persistence with `promoted`/`gate_failed`/`error` outcomes. Six new tests and the 445-test full regression passed. Phase 3d owns scheduling and app wiring.
 
 ---
 

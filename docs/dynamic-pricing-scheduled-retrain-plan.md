@@ -33,12 +33,13 @@ sitting there unclaimed for exactly this.
 (US-2)" spec'd a "retrain now" HTTP endpoint as a demo safety net. It was
 descoped repeatedly (moved out of Phase 2b, then to subtask 5 / demo prep) and
 **never actually built** — `app/services/pricing/train.py`'s `train()`/
-`retrain()` exist and work in-process, but nothing has ever called them except
-by hand.
+`retrain()` existed and worked in-process, but nothing called training except
+by hand before Phase 3c. Phase 3c now calls `train()` only for candidate
+artifacts; no runtime trigger exists until Phase 3d wires the scheduler.
 
-**Decision: scrap the manual endpoint entirely.** The scheduler built here is
-the sole retrain trigger, monthly. No HTTP route for on-demand retrain exists
-or should be added. Phase 3a foundations are now recorded in the live spec/design; Phase 3e will retire US-2 after the scheduler itself lands.
+**Decision: scrap the manual endpoint entirely.** The scheduler completed in
+Phase 3d will be the sole retrain trigger, monthly. No HTTP route for on-demand
+retrain exists or should be added. Phase 3a foundations are now recorded in the live spec/design; Phase 3e will retire US-2 after the scheduler itself lands.
 
 ---
 
