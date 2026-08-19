@@ -47,12 +47,18 @@ Focused Ruff passed; focused pytest passed 15/15, including the original
 
 ## Phase 3c — retrain job orchestration
 
-- [ ] New `app/services/pricing/retrain_job.py::run_scheduled_retrain()`:
+- [x] New `app/services/pricing/retrain_job.py::run_scheduled_retrain()`:
       blend → train candidate → gate via `promotion_gate` → promote/rollback
-- [ ] `retrain_state.json` persistence (`load_state()`/`save_state()`)
-- [ ] TDD: `tests/test_pricing_retrain_job.py` (gate-pass promotion, gate-fail
+- [x] `retrain_state.json` persistence (`load_state()`/`save_state()`)
+- [x] TDD: `tests/test_pricing_retrain_job.py` (gate-pass promotion, gate-fail
       no-op, `train()`/blend exception handled, live-read failure handled,
       promotion-failure rollback, state round-trip)
+
+Evidence (2026-08-19): 6 new Phase 3c tests passed; the cross-phase 3a–3c
+focused suite passed 29/29. Full pytest regression passed 445 tests with 5
+optional tests skipped; focused Ruff and `git diff --check` passed. All tests
+redirected runtime candidate/backup/state paths to temporary directories, so
+no serving artifact or database row changed.
 
 ## Phase 3d — scheduler, app wiring, docs & regression
 

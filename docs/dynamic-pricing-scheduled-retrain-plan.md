@@ -10,8 +10,9 @@
 > from this Phase 3 plan). Phase 3a added the reusable gate/probe modules and
 > refactored the historical candidate-validation script to import the shared
 > implementation. Phase 3b added real-data extraction, shared distance
-> imputation, per-category cutover, and weighted in-memory training. Phase 3d
-> will make additive scheduler/config changes. Per the
+> imputation, per-category cutover, and weighted in-memory training. Phase 3c
+> added candidate orchestration, gated promotion/rollback, and durable retrain
+> state. Phase 3d will make additive scheduler/config changes. Per the
 > 2026-08-18 documentation sync, Phase 3a's completed requirements are recorded in
 > `openspec/specs/dynamic-pricing/{spec.md,design.md}`. Phase 3e still owns
 > the final merge of completed Phase 3b–3d behavior and retirement of US-2.
@@ -32,12 +33,13 @@ sitting there unclaimed for exactly this.
 (US-2)" spec'd a "retrain now" HTTP endpoint as a demo safety net. It was
 descoped repeatedly (moved out of Phase 2b, then to subtask 5 / demo prep) and
 **never actually built** — `app/services/pricing/train.py`'s `train()`/
-`retrain()` exist and work in-process, but nothing has ever called them except
-by hand.
+`retrain()` existed and worked in-process, but nothing called training except
+by hand before Phase 3c. Phase 3c now calls `train()` only for candidate
+artifacts; no runtime trigger exists until Phase 3d wires the scheduler.
 
-**Decision: scrap the manual endpoint entirely.** The scheduler built here is
-the sole retrain trigger, monthly. No HTTP route for on-demand retrain exists
-or should be added. Phase 3a foundations are now recorded in the live spec/design; Phase 3e will retire US-2 after the scheduler itself lands.
+**Decision: scrap the manual endpoint entirely.** The scheduler completed in
+Phase 3d will be the sole retrain trigger, monthly. No HTTP route for on-demand
+retrain exists or should be added. Phase 3a foundations are now recorded in the live spec/design; Phase 3e will retire US-2 after the scheduler itself lands.
 
 ---
 
@@ -72,7 +74,7 @@ or should be added. Phase 3a foundations are now recorded in the live spec/desig
 |---|---|---|---|---|---|
 | 3a | ☑ | Phase 3a — foundations: validation gate + real-data quality probe | `feature/ml-3a-foundations` | New `app/services/pricing/promotion_gate.py`, extracted from `ml-experiments/candidate_validation_check.py`'s pure functions (that script refactored to import from it; `assess_gate` generalized with `expected_asset_count`/`min_asset_count`) — pure refactor, zero behavior change, `tests/test_candidate_validation_check.py` passes unmodified. Plus new read-only `ml-experiments/real_training_data_check.py`: live-query `booking_items`/`bookings`/`assets`/`asset_categories`, report null/zero/negative rates of `daily_rate`/`subtotal` per status/category — gates Phase 3b. | — |
 | 3b | ☑ | Phase 3b — real-data extraction + blend/cutover | `feature/ml-3b-real-data-blend` | Added `daily_rate`/`subtotal` and `created_at`/`total_amount` ORM fields; `real_training.py::fetch_real_training_rows()` is re-exported by `repository.py`; `training_sampling.py::sample_distance_km()` is shared with the synthetic generator; `blend.py::build_training_dataset()` performs per-category cutover and weighting; `train.py::train()` accepts optional `data`/`sample_weight`. Added `tests/test_pricing_real_training_rows.py` and `tests/test_pricing_blend.py`. | 3a (data confirmed usable by the probe) |
-| 3c | ☐ | Phase 3c — retrain job orchestration | `feature/ml-3c-retrain-job` | New `app/services/pricing/retrain_job.py` (`run_scheduled_retrain()`: build blended dataset → train candidate → gate via `promotion_gate` → promote/rollback; `retrain_state.json` persistence). New `tests/test_pricing_retrain_job.py`. | 3a (gate), 3b (blend) |
+| 3c | ☑ | Phase 3c — retrain job orchestration | `feature/ml-3c-retrain-job` | Added `app/services/pricing/retrain_job.py`: blended training writes only candidate paths; current/candidate artifacts are freshly loaded and checked through `promotion_gate`; a pass takes a rolling backup, atomically swaps both serving files, and reloads the singleton; a promotion error rolls both files back. Every outcome is returned rather than raised and atomically persisted to dedicated `retrain_state.json`. Added `tests/test_pricing_retrain_job.py`. | 3a (gate), 3b (blend) |
 | 3d | ☐ | Phase 3d — scheduler, app wiring, docs & regression | `feature/ml-3d-scheduler-and-docs` | `apscheduler` dependency; new `PRICING_RETRAIN_*` config fields (`app/config.py`); new `app/services/pricing/scheduler.py`; additive `lifespan` block in `app/main.py`; `.gitignore` additions; new `tests/test_pricing_scheduler.py`. Plus finalizing this doc and the OpenSpec proposal/tasks, and full-suite regression + Ruff across all of 3a–3d. | 3c |
 | 3e | ☐ *(separate, later, outside the four plan PRs)* | Phase 3e — merge completed runtime requirement into live spec | TBD | Fold finished Phase 3b–3d behavior into `openspec/specs/dynamic-pricing/{spec.md,design.md}` and retire "Manual retrain path (US-2)". Phase 3a foundations were synchronized early on 2026-08-18; they are not repeated here. | 3d, archival decision |
 
@@ -95,7 +97,20 @@ change's PR descriptions as each phase lands — not duplicated here.
 
 ---
 
-## Remaining full-feature verification (after Phase 3c–3d)
+## Phase 3c verification (completed 2026-08-19)
+
+- New Phase 3c tests: 6 passed, covering gate-pass promotion/backup/reload,
+  gate-fail no-op, candidate-build failure, live-read failure, promotion-time
+  rollback, and state missing/round-trip behavior.
+- Cross-phase 3a–3c focused suite: 29 passed.
+- Full regression: 445 passed, 5 optional tests skipped; focused Ruff and
+  `git diff --check` passed.
+- Tests monkeypatched every runtime artifact path to a temporary directory;
+  no committed serving artifact or database row changed.
+
+---
+
+## Remaining full-feature verification (after Phase 3d)
 
 ```bash
 cd haystack-fast-api
@@ -130,3 +145,4 @@ uv run python ml-experiments/real_training_data_check.py
 | 2026-08-18 | Phase 3a completed. Extracted the reusable promotion gate with recurring-job asset-floor mode while preserving the Phase 2d script’s exact 27-asset behavior; added and tested the four-table read-only real-price probe. Live `primary_snapshot` gate passed: 98 total/76 realized booking-item rows, no null/zero/negative `daily_rate` or `subtotal`, positive realized signal in every ML category. |
 | 2026-08-18 (documentation convergence) | Synchronized Phase 3a as-built behavior into the live `spec.md`/`design.md`, resolved the data-quality open item, and kept Phase 3b–3d plus final US-2 retirement explicitly pending. |
 | 2026-08-19 | Phase 3b completed. Added Spring-owned price/booking ORM fields, `real_training.py` extraction with schema-resolution threading, a shared `training_sampling.py` distance sampler, per-category synthetic cutover and real-row weighting, and in-memory weighted training. Live `primary_snapshot` extraction returned 76 rows (21 boom lift, 15 excavator, 16 forklift, 24 scissor lift); the default threshold produced a 2,606-row blended smoke dataset and trained successfully without touching production artifacts. Full regression: 439 passed, 5 skipped; Ruff passed. |
+| 2026-08-19 | Phase 3c completed. Added the synchronous never-raise retrain job, candidate-only training paths, fresh current/candidate artifact validation, recurring minimum-fleet gate mode, atomic one-generation backup/swap, rollback and serving reload, plus dedicated atomic state persistence. Six new tests, 29 cross-phase focused tests, and the full 445-test regression passed; 5 optional tests skipped. |
