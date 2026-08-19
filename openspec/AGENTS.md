@@ -99,6 +99,7 @@ S8.1 T3 as-built (config): neo4j-populate SQL→Cypher MERGE; fleet labels isola
 S8.2 T4 as-built (config): post-sync POST + admin HTTP :8089; scoped delete; KG-1 preserved
 S8.3 as-built: live neo4j_cypher_read + trigger_neo4j_populate (NEO4J_BACKEND=bolt; default fake)
 KG-2 FR-KG-011 as-built: persist = pack T3/T4; load = app S8.3
+Dynamic pricing Phase 3a–3d as-built: real-data blend + gated promotion + default-disabled monthly APScheduler; no retrain HTTP route
 ```
 
 **Portal mapping (Spring handoff):** `Feasibility_Study_Spring/portal-to-haystack-mapping.md`  
@@ -117,7 +118,7 @@ KG-2 FR-KG-011 as-built: persist = pack T3/T4; load = app S8.3
 | **4** | [`specs/project-setup/spec.md`](./specs/project-setup/spec.md) | Stack, env, layering (behaviour); **default pytest isolation** |
 | **5** | [`specs/project-setup/design.md`](./specs/project-setup/design.md) | Layout, uv runbooks, `conftest` isolation table |
 
-**Pytest (as-built):** `uv run pytest` / `uv run pytest tests/ -q` is the full default suite — **no** optional markers or external prereqs. `tests/conftest.py` forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `INDEXING_DOCUMENT_STORE=memory`, `RECOMMEND_VIA_AGENT_GRAPH=false`, `FLEET_BACKEND=fake`, `NEED_DECOMPOSER=stub`, `PRICING_SCHEMA=primary_snapshot`, `PROJECT_AGENT_MODE=stub`, `NEO4J_BACKEND=fake`, and a temp `KG_ARTIFACT_DIR`. Query embedders for vector tools must match the session store dimension (see knowledge-graph + indexing specs).
+**Pytest (as-built):** `uv run pytest` / `uv run pytest tests/ -q` is the full default suite — **no** optional markers or external prereqs. `tests/conftest.py` forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `INDEXING_DOCUMENT_STORE=memory`, `RECOMMEND_VIA_AGENT_GRAPH=false`, `FLEET_BACKEND=fake`, `NEED_DECOMPOSER=stub`, `PRICING_SCHEMA=primary_snapshot`, `PRICING_RETRAIN_ENABLED=false`, `PROJECT_AGENT_MODE=stub`, `NEO4J_BACKEND=fake`, and a temp `KG_ARTIFACT_DIR`. Query embedders for vector tools must match the session store dimension (see knowledge-graph + indexing specs).
 
 ---
 

@@ -62,25 +62,31 @@ no serving artifact or database row changed.
 
 ## Phase 3d — scheduler, app wiring, docs & regression
 
-- [ ] Add `apscheduler>=3.10.4,<4` to `pyproject.toml`
-- [ ] New `PRICING_RETRAIN_*` settings in `app/config.py`
+- [x] Add `apscheduler>=3.10.4,<4` to `pyproject.toml`
+- [x] New `PRICING_RETRAIN_*` settings in `app/config.py`
       (`PRICING_RETRAIN_ENABLED` default `False`, `_INTERVAL_DAYS` default 30,
       `_MISFIRE_GRACE_SECONDS`, `_MIN_REAL_ROWS_PER_CATEGORY`,
       `_REAL_SAMPLE_WEIGHT`)
-- [ ] New `app/services/pricing/scheduler.py`
+- [x] New `app/services/pricing/scheduler.py`
       (`compute_next_run_time()`, `build_scheduler()`, `AsyncIOScheduler`,
       job wrapped in `asyncio.to_thread(...)`)
-- [ ] Additive `lifespan` block in `app/main.py` (start/stop scheduler when
+- [x] Additive `lifespan` block in `app/main.py` (start/stop scheduler when
       enabled, mirrors existing `decomposer` pattern)
-- [ ] `.gitignore` additions: `retrain_state.json`, `model_candidate.pkl`,
+- [x] `.gitignore` additions: `retrain_state.json`, `model_candidate.pkl`,
       `current_candidate.json`, `model_previous.pkl`, `current_previous.json`
-- [ ] TDD: `tests/test_pricing_scheduler.py` (`compute_next_run_time`'s three
+- [x] TDD: `tests/test_pricing_scheduler.py` (`compute_next_run_time`'s three
       branches, job registration, `PRICING_RETRAIN_ENABLED` unset leaves
       `lifespan` unaffected)
-- [ ] Full regression: `uv run pytest tests/` + `ruff check .`
-- [ ] Route-inventory check: confirm no HTTP route for retrain exists
+- [x] Full regression: `uv run pytest tests/` + `ruff check .`
+- [x] Route-inventory check: confirm no HTTP route for retrain exists
       anywhere (`app.openapi()["paths"]`)
-- [ ] This proposal/tasks pair finalized; `docs/dynamic-pricing-scheduled-retrain-plan.md` finalized
+- [x] This proposal/tasks pair finalized; `docs/dynamic-pricing-scheduled-retrain-plan.md` finalized
+
+Evidence (2026-08-19): 6 new scheduler tests passed; the Phase 3a–3d focused
+suite passed 38/38; the full suite passed 451 tests with 5 optional skips.
+Ruff and `git diff --check` passed. OpenAPI inventory found 5 application
+paths and zero retrain routes. Automated verification did not run a live
+retrain, so no serving artifact or database row changed.
 
 ## Explicit non-goals (this change)
 

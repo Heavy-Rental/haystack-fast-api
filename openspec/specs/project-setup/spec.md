@@ -60,7 +60,7 @@ When `DATABASE_URL` is set with a bare scheme (`postgresql://` or `postgres://`)
 - **AND** Docker Compose SHALL NOT be the primary Postgres provisioner for this workspace
 
 ### Requirement: Env-backed configuration
-Application settings SHALL come from environment variables (optional local `.env`; never commit production secrets). Baseline keys include `APP_NAME`, `APP_ENV`, `LOG_LEVEL`, `DATABASE_URL`, need-decomposer and LLM keys, `INDEXING_*`, `KG_*`, `FLEET_BACKEND`, `PRICING_SCHEMA`, and `NEO4J_*`. Full defaults: [`.env.example`](../../../.env.example).
+Application settings SHALL come from environment variables (optional local `.env`; never commit production secrets). Baseline keys include `APP_NAME`, `APP_ENV`, `LOG_LEVEL`, `DATABASE_URL`, need-decomposer and LLM keys, `INDEXING_*`, `KG_*`, `FLEET_BACKEND`, `PRICING_SCHEMA`, `PRICING_RETRAIN_*`, and `NEO4J_*`. Full defaults: [`.env.example`](../../../.env.example).
 
 Live (non-pytest) profile MAY set `FLEET_BACKEND=sql`, `NEED_DECOMPOSER=llm`, `PRICING_SCHEMA=public`, `NEO4J_BACKEND=bolt`, `NEO4J_URI=bolt://neo4j:7687`. Those values MUST NOT leak into the default pytest suite (see isolation table). `PRICING_SCHEMA` remaps fleet + pricing ORM reads only (`schema_translate_map`); it does not change KG-1 / pgvector.
 
@@ -98,7 +98,7 @@ No JWT/OAuth stack is required for current public health and live ingest routes 
 - **THEN** the request is accepted (public)
 
 ### Requirement: Technology stack baseline
-The normative stack SHALL include: FastAPI, Uvicorn, haystack-ai, langgraph, SQLAlchemy 2.x, psycopg, asyncpg (installed), pydantic-settings, **pgvector-haystack** (DocumentStore factory + optional I1 backend; default path is InMemory), XGBoost, joblib, scikit-learn, SHAP (+ numba/llvmlite pins for Py3.12/NumPy 2.x), NumPy, Pandas, Matplotlib, Seaborn; dev: pytest, httpx, ruff, faker.
+The normative stack SHALL include: FastAPI, Uvicorn, haystack-ai, langgraph, SQLAlchemy 2.x, psycopg, asyncpg (installed), pydantic-settings, **APScheduler 3.x** (default-disabled in-process dynamic-pricing retrain), **pgvector-haystack** (DocumentStore factory + optional I1 backend; default path is InMemory), XGBoost, joblib, scikit-learn, SHAP (+ numba/llvmlite pins for Py3.12/NumPy 2.x), NumPy, Pandas, Matplotlib, Seaborn; dev: pytest, httpx, ruff, faker.
 
 #### Scenario: Stack change requires update
 - **WHEN** a dependency or primary DB strategy changes intentionally
@@ -120,6 +120,7 @@ As-built isolation (autouse fixture):
 | `FLEET_BACKEND` | `fake` | Default suite never opens live fleet SQL |
 | `NEED_DECOMPOSER` | `stub` | Default suite never calls a live LLM decomposer |
 | `PRICING_SCHEMA` | `primary_snapshot` | Default suite never translates fleet/pricing to `public` |
+| `PRICING_RETRAIN_ENABLED` | `false` | Test lifespans never start a real model-training background job |
 | `NEO4J_BACKEND` | `fake` | Default suite never opens live Bolt |
 
 **As-built:** default suite needs no live Pgvector/Neo4j/LLM. `@pytest.mark.pgvector` skips unless `RUN_PGVECTOR_TESTS=1`. `@pytest.mark.neo4j` skips unless `RUN_NEO4J_TESTS=1`.  
@@ -166,3 +167,4 @@ As-built isolation (autouse fixture):
 | 2.5.0 | 2026-08-13 | **Docs:** conftest also forces `NEED_DECOMPOSER=stub` + `PRICING_SCHEMA=primary_snapshot`; live `PRICING_SCHEMA=public` is host-only |
 | 2.4.0 | 2026-08-13 | **S8.3:** conftest forces `NEO4J_BACKEND=fake`; optional `@pytest.mark.neo4j` (`RUN_NEO4J_TESTS=1`) |
 | 2.3.0 | 2026-08-12 | **S5-I1:** optional `@pytest.mark.pgvector` + `INDEXING_CHUNK_TTL_SECONDS`; default suite still no live Pgvector |
+| 2.6.0 | 2026-08-19 | **Dynamic-pricing Phase 3d:** APScheduler 3.x added to the runtime stack; `PRICING_RETRAIN_*` env controls documented; pytest forces the default-disabled scheduler off so host settings cannot start background training. |

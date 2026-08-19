@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Proposed |
+| **Status** | Implemented (Phase 3a–3d complete 2026-08-19; Phase 3e archive pending) |
 | **Date** | 2026-08-15 |
 | **Capability** | `dynamic-pricing` |
 | **Phase** | 3a–3d (reserved "Phase 3" name — see `spec.md` Status field) |
@@ -283,7 +283,7 @@ already used for `indexing_via_agent_gate`/`recommend_via_agent_graph`:
 pricing_retrain_enabled: bool = Field(default=False, alias="PRICING_RETRAIN_ENABLED")
 pricing_retrain_interval_days: int = Field(default=30, alias="PRICING_RETRAIN_INTERVAL_DAYS", ge=1)
 pricing_retrain_misfire_grace_seconds: int = Field(
-    default=6 * 3600, alias="PRICING_RETRAIN_MISFIRE_GRACE_SECONDS", ge=0
+    default=6 * 3600, alias="PRICING_RETRAIN_MISFIRE_GRACE_SECONDS", ge=1
 )
 pricing_retrain_min_real_rows_per_category: int = Field(
     default=20, alias="PRICING_RETRAIN_MIN_REAL_ROWS_PER_CATEGORY", ge=1
@@ -293,6 +293,8 @@ pricing_retrain_real_sample_weight: float = Field(
 )
 ```
 
+APScheduler 3 requires `misfire_grace_time` to be a positive integer, so the
+matching setting rejects zero rather than failing later during app startup.
 `pricing_retrain_enabled` **must default to `False`**: several existing tests
 (`tests/conftest.py` and others) do `with TestClient(app) as client`, which
 invokes `lifespan` — if the scheduler defaulted on, every test run would try

@@ -22,6 +22,7 @@ def _isolate_kg_artifact_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("RECOMMEND_VIA_AGENT_GRAPH", "false")
     monkeypatch.setenv("FLEET_BACKEND", "fake")
     monkeypatch.setenv("PRICING_SCHEMA", "primary_snapshot")
+    monkeypatch.setenv("PRICING_RETRAIN_ENABLED", "false")
     monkeypatch.setenv("NEO4J_BACKEND", "fake")
     monkeypatch.setenv("NEED_DECOMPOSER", "stub")
     get_settings.cache_clear()
