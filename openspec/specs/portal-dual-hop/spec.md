@@ -272,6 +272,19 @@ Rates SHALL come from `pricing_client` / `predict_price` (or agent tool `predict
 - **AND** a warning is included
 - **AND** seed `AST-*` ids are not emitted
 
+#### Scenario: Duplicate catalog equipment is one quote line
+
+- **GIVEN** two unit-needs of the same parent (`need_1__u1`, `need_1__u2`) that resolve to the same `equipment.id`
+- **WHEN** Call 2 assembles the quote
+- **THEN** `items[]` contains one line with `needId` `need_1` and `quantity` 2
+- **AND** internal `results_by_need` stays expanded (FR-P-013 / FR-P-005)
+
+#### Scenario: Three duplicates become quantity 3
+
+- **GIVEN** three unit-needs of the same parent (`need_1__u1`, `need_1__u2`, `need_1__u3`) that resolve to the same `equipment.id`
+- **WHEN** Call 2 assembles the quote
+- **THEN** `items[]` contains one line with `needId` `need_1` and `quantity` 3
+
 #### Scenario: Neo4j empty does not block quote
 
 - **GIVEN** `NEO4J_BACKEND=bolt` but the fleet graph is empty or unavailable

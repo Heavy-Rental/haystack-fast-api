@@ -43,7 +43,9 @@ Chatbot Q&A is **Call 3**: `POST .../project-knowledge/query`.
 | `estimatedTotal` | Sum of line totals when prices exist |
 | `specSummary` | From Call 1 session `user_requirement_summary` |
 | `rationale` | Joined per-item evidence reasons |
-| `items[]` | Ranked equipment (see identity + field tables) |
+| `items[]` | Ranked equipment (see identity + field tables). Unit-need siblings that share parent `{base}` and `equipment.id` are collapsed (FR-P-013) |
+| `items[].quantity` | `1` per unmerged line; after collapse, the number of grouped duplicates (3 copies → `quantity: 3`) |
+| `items[].needId` | Unit-need id (`{base}` or `{base}__u{i}`); parent `{base}` when siblings sharing `equipment.id` collapse |
 | `items[].matchScore` | 0..1: 0.50 category + 0.20 height cue + 0.15 available + 0.15 priced |
 | `items[].reason` | Factual sentence from those signals (not Stub merge) |
 | `items[].mlPredictedPrice` | Predicted **daily** rate from `pricing_client` / `predict_price` (required when item is returned) |
@@ -143,3 +145,4 @@ Live SQL with a missing `assets` row: **omit the item + warning**. Never emit a 
 - Do not return Q&A `answer` or `tool_traces` on this route (use Call 3 for Q&A; traces stay on graph state).  
 - `RECOMMEND_VIA_AGENT_GRAPH` default **false**; same body when true.  
 - `PRICING_SCHEMA` remaps fleet/pricing tables only (`primary_snapshot` default / CI; `public` live). It does not change KG-1 or pgvector.  
+- FR-P-013: collapse unit-need siblings that share parent need + `equipment.id`. Do not merge across parent needs or distinct equipment ids. Do not put `quantity` on `RecommendationItem`. `estimatedTotal` stays the pre-collapse sum of unit line totals.  

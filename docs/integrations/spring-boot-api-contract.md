@@ -197,8 +197,8 @@ Not on this response: ranked assets, ML daily rates, `results_by_need` — those
 | `items[].matchScore` | float \| null | Per-item match confidence |
 | `items[].reason` | string \| null | Why this item was picked |
 | `items[].lineTotal` | float \| null | Price for this line item |
-| `items[].quantity` | int | Default `1` |
-| `items[].needId` | string \| null | Correlates to a Call 1 `needs_summary[].need_id` |
+| `items[].quantity` | int | Default `1`. After FR-P-013, unit-need siblings that share `equipment.id` are collapsed and this equals the duplicate count (3 copies → `quantity: 3`) |
+| `items[].needId` | string \| null | Correlates to a Call 1 `needs_summary[].need_id`. Merged unit-need lines use the parent `{base}` (`need_1__u1` + `need_1__u2` → `need_1`) |
 | `items[].equipment.id` | string \| null | `asset_id` from catalog/fleet — tool-backed, never invented |
 | `items[].equipment.name` | string \| null | Display name or equipment_type |
 | `items[].equipment.category` | string \| null | |

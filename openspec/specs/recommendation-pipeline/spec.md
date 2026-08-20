@@ -9,7 +9,7 @@
 | **Parent** | [`../equipment-recommendation/spec.md`](../equipment-recommendation/spec.md) |
 | **Reading map** | [`../../AGENTS.md`](../../AGENTS.md) Path C (deferred recommend) |
 | **Related** | [`../indexing/spec.md`](../indexing/spec.md) (**live HTTP**); [`../knowledge-graph/spec.md`](../knowledge-graph/spec.md); [`../recommendation-intake/spec.md`](../recommendation-intake/spec.md); [`../dynamic-pricing/spec.md`](../dynamic-pricing/spec.md) |
-| **Tests** | `tests/test_pipeline_intake_front.py`, `tests/test_recommend_pipeline_mvp.py` (service e2e), `tests/test_llm_need_decomposer.py`; HTTP ingest: `tests/test_recommendations_intake.py` (indexing, not this graph) |
+| **Tests** | `tests/test_pipeline_intake_front.py`, `tests/test_recommend_pipeline_mvp.py` (service e2e), `tests/test_llm_need_decomposer.py`, `tests/test_quote_duplicate_collapse.py` (FR-P-013); HTTP ingest: `tests/test_recommendations_intake.py` (indexing, not this graph) |
 | **Testing guide** | [`../../../docs/testing/recommendation-pipeline-testing-guide.md`](../../../docs/testing/recommendation-pipeline-testing-guide.md) |
 | **Legacy source** | `specification/SPEC-recommendation-pipeline.md` (removed 2026-08-13; see [`../../TRACEABILITY.md`](../../TRACEABILITY.md)) |
 
@@ -325,6 +325,48 @@ Async HTTP handlers (`async def`) MUST NOT run the full sync service path on the
 - **WHEN** recommend is reattached on an async route
 - **THEN** `RecommendationService` is offloaded the same way
 
+### Requirement: Collapse duplicate Call 2 equipment quotes (FR-P-013)
+
+Call 2 quote `items[]` SHALL fold unit-need siblings that share parent need id
+and catalog `equipment.id` into one commercial line. Parent need id is the
+`{base}` of a `{base}__u{i}` unit-need id. Internal `results_by_need` and
+`RecommendationItem` MUST remain expanded and MUST NOT gain a `quantity` field.
+
+A merged line SHALL set `needId` to `{base}`, `quantity` to the number of
+grouped duplicates (sum of grouped line quantities; Call 2 emits `quantity=1`
+per unit-need, so 3 copies → `quantity: 3`), and `lineTotal` to the sum of
+non-null grouped totals; it SHALL keep the first item's `equipment` / daily
+rate / `matchScore` / `reason`; and it SHALL re-number `rankOrder` 1..n in
+first-seen group order. Lines MUST NOT merge when equipment ids differ, parent
+needs differ, the need id is not a unit-need, or `equipment.id` is missing.
+`estimatedTotal` SHALL remain the pre-collapse sum of per-unit totals.
+`confidenceScore` SHALL use the collapsed list.
+
+#### Scenario: Same parent and same equipment collapse
+- **GIVEN** quote lines `need_1__u1` and `need_1__u2` with the same `equipment.id`
+- **WHEN** Call 2 maps `results_by_need` to the quote envelope
+- **THEN** `items[]` contains one line with `needId` `need_1`, `quantity` 2, and summed `lineTotal`
+
+#### Scenario: Three duplicates collapse to quantity 3
+- **GIVEN** quote lines `need_1__u1`, `need_1__u2`, and `need_1__u3` with the same `equipment.id`
+- **WHEN** Call 2 maps `results_by_need` to the quote envelope
+- **THEN** `items[]` contains one line with `needId` `need_1`, `quantity` 3, and summed `lineTotal`
+
+#### Scenario: Distinct equipment under the same parent stay separate
+- **GIVEN** quote lines `need_1__u1` and `need_1__u2` with different `equipment.id`
+- **WHEN** Call 2 maps to the quote envelope
+- **THEN** both lines remain with `quantity` 1 and their original `needId`
+
+#### Scenario: Same equipment on different parent needs does not merge
+- **GIVEN** quote lines `need_access` and `need_earthwork` with the same `equipment.id`
+- **WHEN** Call 2 maps to the quote envelope
+- **THEN** both lines remain with `quantity` 1
+
+#### Scenario: Quantity-one need is unchanged
+- **GIVEN** a single quote line `need_1` with `quantity` 1
+- **WHEN** Call 2 maps to the quote envelope
+- **THEN** the line is unchanged except `rankOrder` re-numbering
+
 ---
 
 ## API behaviour (pipeline outcomes)
@@ -412,6 +454,7 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | Recommend LangGraph + stub synthesis (S7.3/S7.4) | Isolated DAG + tool-free [8] | Invoked from Call 2 when `RECOMMEND_VIA_AGENT_GRAPH` (S7.5) |
 | Call 2 multi-agent enrich (S7.5) | Same quote DTO; flag default off | Gate refuse → 400; traces stay off the body (S7.6) |
 | Call 2 predicted price | `items[].mlPredictedPrice` + `equipment.baseDailyRate` | Production `predict_price` daily rate; never invent |
+| Call 2 duplicate equipment (FR-P-013) | Collapse unit-need siblings that share `equipment.id` | Quote-layer only; keep FR-006 / FR-P-005 / FR-P-010 on `results_by_need` |
 
 ---
 
@@ -437,6 +480,7 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | **1.2.1** | 2026-08-07 | Sequential README; live path notes user_id + mandatory KG |
 | **2.0.0** | 2026-08-10 | Migrated to OpenSpec Requirement/Scenario + design REASONS under `openspec/specs/recommendation-pipeline/` |
 | **2.7.0** | 2026-08-13 | Call 2 quote: `equipment.id` = `assets.id` (live SQL); extra catalog fields; `PRICING_SCHEMA`; seed remains CI only |
+| **2.8.0** | 2026-08-20 | **FR-P-013:** collapse Call 2 unit-need siblings that share parent need + `equipment.id` into one quote line; merged `quantity` is the duplicate count (3 copies → `quantity: 3`) |
 | **2.6.0** | 2026-08-13 | Call 2 quote: `items[].mlPredictedPrice` as-built (same daily rate as `equipment.baseDailyRate`) |
 | **2.5.0** | 2026-08-13 | S4 app: live SQL fleet backend (`FLEET_BACKEND=sql`); DTO sql path unchanged |
 | **2.4.0** | 2026-08-13 | S7.2 as-built: Neo4j template tools + populate no-op; recommend not blocked when graph empty |
