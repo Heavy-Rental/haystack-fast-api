@@ -65,6 +65,7 @@ def test_collapse_same_equipment_unit_needs() -> None:
     assert item.equipment.id == "17"
     assert item.mlPredictedPrice == 185.0
     assert item.rankOrder == 1
+    assert item.equipment.available is False
 
 
 def test_collapse_keeps_distinct_equipment_under_same_parent() -> None:
@@ -95,6 +96,7 @@ def test_collapse_three_same_equipment_unit_needs() -> None:
     assert item.lineTotal == 300.0
     assert item.equipment.id == "17"
     assert item.rankOrder == 1
+    assert item.equipment.available is False
 
 
 def test_collapse_parent_id_does_not_split_on_underscore() -> None:
@@ -107,6 +109,7 @@ def test_collapse_parent_id_does_not_split_on_underscore() -> None:
     assert len(collapsed) == 1
     assert collapsed[0].needId == "need_soft_clay"
     assert collapsed[0].quantity == 2
+    assert collapsed[0].equipment.available is False
 
 
 def test_collapse_does_not_merge_same_equipment_across_needs() -> None:
@@ -142,6 +145,7 @@ def test_collapse_mixed_unit_needs_and_other_need() -> None:
     assert collapsed[0].quantity == 2
     assert collapsed[0].lineTotal == 200.0
     assert collapsed[0].rankOrder == 1
+    assert collapsed[0].equipment.available is False
     assert collapsed[1].needId == "need_2"
     assert collapsed[1].quantity == 1
     assert collapsed[1].rankOrder == 2
@@ -182,3 +186,7 @@ def test_map_recommend_collapses_same_fleet_id_unit_needs() -> None:
     assert quote.estimatedTotal == 3885.0
     assert item.mlPredictedPrice == 185.0
     assert item.rankOrder == 1
+    assert item.equipment.available is False
+    assert any(
+        "cannot fulfill quantity=3 of assets.id=17" in note for note in quote.warnings
+    )

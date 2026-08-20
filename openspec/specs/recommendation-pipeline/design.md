@@ -184,6 +184,8 @@ Optional LLM: `NEED_DECOMPOSER=llm` (+ provider env). Default CI stays on stub.
 - Do not put SQL/rank logic in routers.
 - Do not merge quote lines across different parent needs or distinct equipment ids.
 - Do not collapse on empty/missing `equipment.id`.
+- Do not mark quantity > 1 of one `assets.id` as available.
+- Quantity-1 availability uses `bookings` + `return_records.returned_at`.
 
 ## Key decisions
 

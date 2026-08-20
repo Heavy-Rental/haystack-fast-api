@@ -342,6 +342,12 @@ needs differ, the need id is not a unit-need, or `equipment.id` is missing.
 `estimatedTotal` SHALL remain the pre-collapse sum of per-unit totals.
 `confidenceScore` SHALL use the collapsed list.
 
+A merged line with `quantity > 1` SHALL set `equipment.available` to false:
+`equipment.id` is one physical `assets.id` and cannot fulfill N concurrent
+units. Quantity-1 availability SHALL use live-hold `bookings` (via
+`booking_items`) and `return_records.returned_at` to end the hold
+(`PRICING_SCHEMA=public` → `heavy_rental.public`).
+
 #### Scenario: Same parent and same equipment collapse
 - **GIVEN** quote lines `need_1__u1` and `need_1__u2` with the same `equipment.id`
 - **WHEN** Call 2 maps `results_by_need` to the quote envelope
@@ -351,6 +357,14 @@ needs differ, the need id is not a unit-need, or `equipment.id` is missing.
 - **GIVEN** quote lines `need_1__u1`, `need_1__u2`, and `need_1__u3` with the same `equipment.id`
 - **WHEN** Call 2 maps `results_by_need` to the quote envelope
 - **THEN** `items[]` contains one line with `needId` `need_1`, `quantity` 3, and summed `lineTotal`
+- **AND** `equipment.available` is false (one machine cannot fulfill 3 units)
+
+#### Scenario: Quantity-one availability uses bookings and return_records
+- **GIVEN** a quantity-1 quote line for `assets.id` 27
+- **AND** a live-hold booking overlaps the rental window
+- **AND** `return_records.returned_at` is on or before the window start
+- **WHEN** Call 2 hydrates availability
+- **THEN** `equipment.available` is true
 
 #### Scenario: Distinct equipment under the same parent stay separate
 - **GIVEN** quote lines `need_1__u1` and `need_1__u2` with different `equipment.id`
@@ -480,7 +494,7 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | **1.2.1** | 2026-08-07 | Sequential README; live path notes user_id + mandatory KG |
 | **2.0.0** | 2026-08-10 | Migrated to OpenSpec Requirement/Scenario + design REASONS under `openspec/specs/recommendation-pipeline/` |
 | **2.7.0** | 2026-08-13 | Call 2 quote: `equipment.id` = `assets.id` (live SQL); extra catalog fields; `PRICING_SCHEMA`; seed remains CI only |
-| **2.8.0** | 2026-08-20 | **FR-P-013:** collapse Call 2 unit-need siblings that share parent need + `equipment.id` into one quote line; merged `quantity` is the duplicate count (3 copies → `quantity: 3`) |
+| **2.8.0** | 2026-08-20 | **FR-P-013:** collapse Call 2 unit-need siblings that share parent need + `equipment.id` into one quote line; merged `quantity` is the duplicate count (3 copies → `quantity: 3`); `quantity > 1` → `available=false`; qty-1 availability from `bookings` + `return_records` |
 | **2.6.0** | 2026-08-13 | Call 2 quote: `items[].mlPredictedPrice` as-built (same daily rate as `equipment.baseDailyRate`) |
 | **2.5.0** | 2026-08-13 | S4 app: live SQL fleet backend (`FLEET_BACKEND=sql`); DTO sql path unchanged |
 | **2.4.0** | 2026-08-13 | S7.2 as-built: Neo4j template tools + populate no-op; recommend not blocked when graph empty |

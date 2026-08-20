@@ -8,3 +8,5 @@
 - [x] Record ADR (`adr.md`).
 - [x] Update Call 2 contract, TRACEABILITY, and quote field notes.
 - [x] Run focused pytest (`test_quote_duplicate_collapse` + Call 2 / hydration / confidence).
+- [x] Quantity > 1 of one `assets.id` sets `equipment.available` false.
+- [x] Quantity-1 availability reads `bookings` + `return_records` (`returned_at` ends the hold).

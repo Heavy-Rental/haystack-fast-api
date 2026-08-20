@@ -30,7 +30,9 @@ where `parent_need_id` is the `{base}` of a `{base}__u{i}` id.
 - Group size 1 → keep original `needId` and `quantity`.
 - Group size N > 1 → one line: parent `needId`, `quantity` = N (duplicate
   count; 3 copies → `quantity: 3`), summed `lineTotal`, first item's
-  equipment / daily rate / reason / matchScore.
+  equipment / daily rate / reason / matchScore, `equipment.available = false`.
+- Quantity-1 `available` is true only when no live-hold `bookings` overlap
+  remains after applying `return_records.returned_at` as the hold end.
 - Items that are not unit-needs, or have no `equipment.id`, never merge.
 - Same `equipment.id` on different parent needs never merge.
 - Re-number `rankOrder` 1..n in first-seen group order.
@@ -70,3 +72,5 @@ uv run pytest tests/test_quote_duplicate_collapse.py tests/test_quote_asset_hydr
 - Do not drop a distinct `equipment.id` under the same parent.
 - Do not change `estimatedTotal` arithmetic (still sum of unit line totals).
 - Do not collapse on empty/missing `equipment.id`.
+- Do not treat quantity > 1 of one `assets.id` as available.
+- Do not invent availability when `bookings` / `return_records` cannot be read.

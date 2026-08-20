@@ -18,6 +18,8 @@ A merged line SHALL:
   grouped totals are null)
 - keep the first item's `equipment`, `mlPredictedPrice`, `matchScore`, and
   `reason` (daily rate is not multiplied)
+- set `equipment.available` to false when `quantity > 1` (one physical
+  `assets.id` cannot fulfill N concurrent units)
 - re-number `rankOrder` 1..n in first-seen group order
 
 Lines MUST NOT merge when equipment ids differ, when parent needs differ, when
@@ -43,6 +45,15 @@ the need id is not a unit-need, or when `equipment.id` is missing/empty.
 - **AND** `needId` is `need_1`
 - **AND** `quantity` is 3
 - **AND** `lineTotal` is the sum of the three unit line totals
+- **AND** `equipment.available` is false
+
+#### Scenario: Quantity-one availability uses bookings and return_records
+
+- **GIVEN** a quantity-1 quote line for one `assets.id`
+- **AND** a live-hold `bookings` row overlaps the window
+- **AND** `return_records.returned_at` ends the hold before the window
+- **WHEN** Call 2 hydrates availability
+- **THEN** `equipment.available` is true
 
 #### Scenario: Distinct equipment under the same parent stay separate
 

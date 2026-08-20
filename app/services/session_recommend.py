@@ -134,6 +134,8 @@ def collapse_duplicate_equipment_quotes(
     (3 copies → ``quantity=3``), parent ``needId``, and summed ``lineTotal``.
     Distinct equipment under the same parent, and the same equipment on
     different parent needs, stay separate. Rank is re-numbered 1..n.
+    Merged ``quantity > 1`` sets ``equipment.available`` false: one physical
+    machine cannot fulfill N concurrent units.
     """
     grouped: dict[tuple[str, str] | int, list[RecommendQuoteItem]] = {}
     order: list[tuple[str, str] | int] = []
@@ -162,6 +164,7 @@ def collapse_duplicate_equipment_quotes(
         # Each grouped line is one duplicate (Call 2 emits quantity=1).
         # Three duplicates → quantity 3.
         quantity = sum(max(1, int(row.quantity or 1)) for row in group)
+        equipment = first.equipment.model_copy(update={"available": False})
         collapsed.append(
             first.model_copy(
                 update={
@@ -169,10 +172,26 @@ def collapse_duplicate_equipment_quotes(
                     "needId": parent_id,
                     "quantity": quantity,
                     "lineTotal": sum(totals) if totals else None,
+                    "equipment": equipment,
                 }
             )
         )
     return collapsed
+
+
+def _warn_unfulfillable_quantity(
+    items: list[RecommendQuoteItem],
+    warnings: list[str],
+) -> None:
+    """One physical ``assets.id`` cannot fulfill quantity > 1 in one window."""
+    for item in items:
+        if item.quantity <= 1:
+            continue
+        eq_id = item.equipment.id or "?"
+        warnings.append(
+            f"cannot fulfill quantity={item.quantity} of assets.id={eq_id}; "
+            "one physical machine"
+        )
 
 
 def project_text_from_session(session: ProjectKnowledgeSession) -> str:
@@ -287,7 +306,7 @@ def _hydrate_available(
     end: date | None,
     warnings: list[str],
 ) -> bool | None:
-    """Live-hold availability. Query failure leaves the field null."""
+    """Live-hold availability from bookings + return_records. Failure → null."""
     repo = FleetRepository()
     pk = row.get("id")
     try:
@@ -493,8 +512,7 @@ def map_recommend_to_quote(
         warnings.append("No equipment matched for this project-spec session")
 
     items = collapse_duplicate_equipment_quotes(items)
-
-    
+    _warn_unfulfillable_quantity(items, warnings)
 
     needs_meta = meta.get("needs_summary") if isinstance(meta.get("needs_summary"), list) else []
     need_count = len(needs_meta) if needs_meta else len(recommend.results_by_need)

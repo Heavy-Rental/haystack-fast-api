@@ -284,6 +284,7 @@ Rates SHALL come from `pricing_client` / `predict_price` (or agent tool `predict
 - **GIVEN** three unit-needs of the same parent (`need_1__u1`, `need_1__u2`, `need_1__u3`) that resolve to the same `equipment.id`
 - **WHEN** Call 2 assembles the quote
 - **THEN** `items[]` contains one line with `needId` `need_1` and `quantity` 3
+- **AND** `equipment.available` is false (one `assets.id` cannot fulfill 3 units)
 
 #### Scenario: Neo4j empty does not block quote
 
