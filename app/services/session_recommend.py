@@ -9,6 +9,7 @@ asset_id or rates. ``tool_traces`` stay on graph state (not the HTTP body).
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from collections.abc import Callable
 from datetime import date
@@ -41,6 +42,9 @@ from app.services.project_knowledge_session import (
 from app.services.recommendations import RecommendationService
 
 logger = logging.getLogger(__name__)
+
+# Quantity expansion ids: ``{base}__u{i}`` (see expand_needs_to_unit_dicts).
+_UNIT_NEED_RE = re.compile(r"^(.+)__u\d+$")
 
 
 def _parse_iso_date(value: object) -> date | None:
@@ -109,6 +113,66 @@ def compute_confidence_score(
         + (0.05 if has_dates else 0.0)
     )
     return round(min(0.99, max(0.0, total)), 2)
+
+
+def _parent_unit_need_id(need_id: str | None) -> str | None:
+    """Return ``{base}`` for ``{base}__u{i}`` unit-need ids; otherwise None."""
+    if not need_id:
+        return None
+    match = _UNIT_NEED_RE.fullmatch(need_id)
+    return match.group(1) if match else None
+
+
+def collapse_duplicate_equipment_quotes(
+    items: list[RecommendQuoteItem],
+) -> list[RecommendQuoteItem]:
+    """Merge unit-need quote lines that share parent need + equipment.id.
+
+    Quantity expansion emits ``need_1__u1`` / ``need_1__u2`` as separate items
+    with ``quantity=1``. When they resolve to the same catalog asset, collapse
+    to one line whose ``quantity`` is the number of grouped duplicates
+    (3 copies → ``quantity=3``), parent ``needId``, and summed ``lineTotal``.
+    Distinct equipment under the same parent, and the same equipment on
+    different parent needs, stay separate. Rank is re-numbered 1..n.
+    """
+    grouped: dict[tuple[str, str] | int, list[RecommendQuoteItem]] = {}
+    order: list[tuple[str, str] | int] = []
+    for idx, item in enumerate(items):
+        parent = _parent_unit_need_id(item.needId)
+        eq_id = str(item.equipment.id or "").strip()
+        key: tuple[str, str] | int
+        if parent and eq_id:
+            key = (parent, eq_id)
+        else:
+            key = idx
+        if key not in grouped:
+            grouped[key] = []
+            order.append(key)
+        grouped[key].append(item)
+
+    collapsed: list[RecommendQuoteItem] = []
+    for rank, key in enumerate(order, start=1):
+        group = grouped[key]
+        if len(group) == 1:
+            collapsed.append(group[0].model_copy(update={"rankOrder": rank}))
+            continue
+        first = group[0]
+        parent_id = key[0] if isinstance(key, tuple) else first.needId
+        totals = [row.lineTotal for row in group if row.lineTotal is not None]
+        # Each grouped line is one duplicate (Call 2 emits quantity=1).
+        # Three duplicates → quantity 3.
+        quantity = sum(max(1, int(row.quantity or 1)) for row in group)
+        collapsed.append(
+            first.model_copy(
+                update={
+                    "rankOrder": rank,
+                    "needId": parent_id,
+                    "quantity": quantity,
+                    "lineTotal": sum(totals) if totals else None,
+                }
+            )
+        )
+    return collapsed
 
 
 def project_text_from_session(session: ProjectKnowledgeSession) -> str:
@@ -427,6 +491,10 @@ def map_recommend_to_quote(
 
     if not items:
         warnings.append("No equipment matched for this project-spec session")
+
+    items = collapse_duplicate_equipment_quotes(items)
+
+    
 
     needs_meta = meta.get("needs_summary") if isinstance(meta.get("needs_summary"), list) else []
     need_count = len(needs_meta) if needs_meta else len(recommend.results_by_need)

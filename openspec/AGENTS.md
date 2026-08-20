@@ -70,6 +70,7 @@ Spring Boot (RestClient / WebClient saga)
          optional S7.5: RECOMMEND_VIA_AGENT_GRAPH=true
            → run_recommend_graph → same quote DTO (gate refuse → 400)
        → quote envelope: quoteRef, items[].equipment, rates, estimatedTotal
+       → FR-P-013: collapse unit-need siblings that share equipment.id (quantity summed)
        → Spring maps Call 2 body back to React as primary response
        → S2b as-built (Spring): HaystackRecommenderClient + Resilience4j + saga
          (no re-ingest on Call 2 fail)

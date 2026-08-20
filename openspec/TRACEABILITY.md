@@ -16,7 +16,7 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | `specification/SPEC-knowledge-graph.md` | `openspec/specs/knowledge-graph/spec.md` + `design.md` + `contracts/project-knowledge-query.md` | FR-KG-001…014 |
 | `specification/SPEC-knowledge-graph.md` §10 | `docs/testing/knowledge-graph-testing-guide.md` | Verification only |
 | `specification/SPEC-recommendation-intake.md` | `openspec/specs/recommendation-intake/spec.md` | FR-I-001…015 live/deferred |
-| `specification/SPEC-recommendation-pipeline.md` | `openspec/specs/recommendation-pipeline/spec.md` + `design.md` | FR-010.1–8 + FR-P-001…012 |
+| `specification/SPEC-recommendation-pipeline.md` | `openspec/specs/recommendation-pipeline/spec.md` + `design.md` | FR-010.1–8 + FR-P-001…013 |
 | `specification/SPEC-dynamic-pricing.md` | `openspec/specs/dynamic-pricing/spec.md` + `design.md` | US-1…3 + feature schema in design |
 | `specification/SPEC-agentic-equipment-recommendation-and-pricing.md` | `openspec/specs/equipment-recommendation/spec.md` + `design.md` | Parent FR-001…053 + design REASONS |
 | `specification/SPEC-recommendation-intake-and-pipeline-front.md` | `openspec/changes/archive/2026-08-07-hr-65-intake-front/` | Historical full capture |
@@ -44,6 +44,7 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | — (S7.8 new) | `openspec/changes/archive/2026-08-13-s7-8-worker5-kg1-live/` | Worker [5] live KG-1 vector + project KG query |
 | `app/agents/prompts.py` | `openspec/spdd/prompts/project-knowledge-agents.md` (index) | OpenSPDD first-class Stage-1 Q&A prompts |
 | `app/agents/recommend_prompts.py` | `openspec/spdd/prompts/recommend-agents.md` (index) | OpenSPDD first-class recommend A–L prompts (S7.7) |
+| — (HR-206 / FR-P-013) | `openspec/changes/2026-08-20-call2-quote-quantity-collapse/` | Call 2 quote: collapse unit-need siblings sharing `equipment.id` |
 
 ## FR / requirement ID map
 
@@ -66,6 +67,7 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | S5-I1 pipeline wire (as-built) | Same as FR-IX-028 | `changes/archive/2026-08-12-s5-i1-document-store-pipeline-wire/` |
 | Portal dual-hop (docs) | React project-spec → Call 1 → **Call 2 recommend quote** → React; Call 3 = chatbot Q&A | `AGENTS.md` · recommend + KG contracts · `portal-to-haystack-mapping.md` v2.1 · impl-plan §1.2.0 |
 | Call 2 quote hydration (as-built) | Quote `equipment.id` = `assets.id` (live SQL); DTO `asset_id` = `assets.name`; extra catalog fields; evidence scores; `PRICING_SCHEMA` | `specs/recommendation-pipeline/contracts/get-asset-recommendations.md` · `fleet-read-contract.md` · impl-plan **3.18.0** |
+| Call 2 quote quantity collapse (FR-P-013) | Fold unit-need siblings that share parent `{base}` + `equipment.id` into one quote line (`quantity` = duplicate count, e.g. 3 copies → 3; `lineTotal` summed; `needId` = parent) | `specs/recommendation-pipeline/spec.md` + contract; `app/services/session_recommend.py`; `tests/test_quote_duplicate_collapse.py`; change `changes/2026-08-20-call2-quote-quantity-collapse/` |
 | Call 1 extract expansions (as-built) | File-before-text + ignore caption; multi-need hint split; expanded date/budget patterns | `specs/indexing/spec.md` + ingest contract; impl-plan **3.18.0** |
 | S2a change archive | Idempotency + correlation tasks | `changes/archive/2026-08-12-s2a-ingest-idempotency-correlation/` |
 | S2b (as-built Spring) | Resilience C1 client + saga in heavy-rental-spring-rest-api | Spring plan v2.1.1; impl-plan **3.14.0**; archive `changes/archive/2026-08-13-s2b-spring-resilience-stamp/` |
@@ -78,7 +80,8 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | FR-KG-010 … FR-KG-014 | KG Part B (011 Stage 2) | same |
 | FR-I-001 … FR-I-015 | Intake | `specs/recommendation-intake/spec.md` |
 | FR-010.1 … FR-010.8 | Pipeline | `specs/recommendation-pipeline/spec.md` |
-| FR-P-001 … FR-P-012 | Pipeline | same |
+| FR-P-001 … FR-P-013 | Pipeline | same |
+| FR-P-013 (as-built) | Pipeline — Call 2 quote collapse of unit-need siblings sharing `equipment.id` | `specs/recommendation-pipeline/spec.md` + contract; `session_recommend.py`; `tests/test_quote_duplicate_collapse.py`; change `changes/2026-08-20-call2-quote-quantity-collapse/` |
 | US-1 … US-4 + pricing FRs | Dynamic pricing | `specs/dynamic-pricing/spec.md` |
 | US-5 / S6 (as-built) | Dynamic pricing — agent tool `predict_asset_price` → `pricing_client` | `specs/dynamic-pricing/spec.md` + design; `app/agents/tools.py`; `tests/test_predict_asset_price_tool.py`; impl-plan **Phase 6 / S6** · archive `changes/archive/2026-08-12-s6-predict-asset-price-tool/` |
 | S6 change archive | predict_asset_price tool tasks | `changes/archive/2026-08-12-s6-predict-asset-price-tool/` |
