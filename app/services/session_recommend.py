@@ -41,7 +41,6 @@ from app.services.project_knowledge_session import (
 )
 from app.services.recommendations import RecommendationService
 
-
 logger = logging.getLogger(__name__)
 
 # Quantity expansion ids: ``{base}__u{i}`` (see expand_needs_to_unit_dicts).
