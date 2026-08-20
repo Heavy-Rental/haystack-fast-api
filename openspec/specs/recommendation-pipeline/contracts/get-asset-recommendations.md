@@ -145,4 +145,4 @@ Live SQL with a missing `assets` row: **omit the item + warning**. Never emit a 
 - Do not return Q&A `answer` or `tool_traces` on this route (use Call 3 for Q&A; traces stay on graph state).  
 - `RECOMMEND_VIA_AGENT_GRAPH` default **false**; same body when true.  
 - `PRICING_SCHEMA` remaps fleet/pricing tables only (`primary_snapshot` default / CI; `public` live). It does not change KG-1 or pgvector.  
-- FR-P-013: collapse unit-need siblings that share parent need + `equipment.id`. Do not merge across parent needs or distinct equipment ids. Do not put `quantity` on `RecommendationItem`. `estimatedTotal` stays the pre-collapse sum of unit line totals.  
+- FR-P-013: collapse unit-need siblings that share parent need + `equipment.id`. Do not merge across parent needs or distinct equipment ids. Do not put `quantity` on `RecommendationItem`. `estimatedTotal` stays the pre-collapse sum of unit line totals. Collapsed `quantity > 1` sets `equipment.available` false. Quantity-1 availability uses `bookings` + `return_records`.  

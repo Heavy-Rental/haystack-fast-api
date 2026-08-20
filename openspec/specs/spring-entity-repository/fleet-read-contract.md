@@ -23,6 +23,7 @@ This is the **versioned D0 map** from Spring tables on **Postgres-Haystack** to 
 | `assets` | Fleet rows |
 | `bookings` | Rental window + status |
 | `booking_items` | Booking → asset link |
+| `return_records` | Proof of return; `returned_at` ends a live-hold |
 
 No free-form SQL. Queries are SQLAlchemy `select` only.
 
@@ -56,7 +57,7 @@ Internal DTO `asset_id` stays `assets.name`. The HTTP quote remaps so Spring can
 | `equipment.purchaseYear` | `assets.purchase_year` |
 | `equipment.location` | `assets.location` when the column exists |
 | `equipment.desc` | `assets.description` |
-| `equipment.available` | `false` when a live-hold booking overlaps the rental window |
+| `equipment.available` | `false` when a live-hold booking overlaps the rental window after applying `return_records.returned_at`; also `false` when collapsed quote `quantity > 1` (one PK cannot fulfill N units) |
 | `equipment.platformHeight` | `assets.platform_height` for Scissors Lift / Boom Lift only; omitted otherwise |
 | `equipment.img` | **Not emitted** — Haystack does not read `asset_images` |
 
@@ -73,7 +74,7 @@ Internal DTO `asset_id` stays `assets.name`. The HTTP quote remaps so Spring can
 
 Only **live-hold** statuses count as busy (same as pricing): `PENDING_DEPOSIT`, `PENDING_CONFIRMED`, `CONFIRMED`, `MOBILISED`. `CANCELLED` / `COMPLETED` ignored.
 
-Quote `equipment.available` is false when a live-hold row for that `assets.id` overlaps the rental window (today when dates are missing).
+Quote `equipment.available` is false when a live-hold `bookings` row for that `assets.id` overlaps the rental window (today when dates are missing), unless `return_records.returned_at` ends the hold on or before the overlap. Collapsed Call 2 lines with `quantity > 1` are always `available: false` — one physical machine cannot fulfill N concurrent units. Live reads use `PRICING_SCHEMA=public` → `heavy_rental.public`.
 
 ## Runtime flag
 

@@ -1,8 +1,10 @@
 """Allowlisted fleet reads against Postgres-Haystack (S4 app / Phase 4).
 
-Projects Spring ``assets`` / ``bookings`` / ``booking_items`` into the
-recommend fleet DTO. Never executes caller-supplied SQL strings.
-``asset_id`` is ``assets.name`` (UNIQUE) — never invented.
+Projects Spring ``assets`` / ``bookings`` / ``booking_items`` /
+``return_records`` into the recommend fleet DTO. Never executes
+caller-supplied SQL strings. ``asset_id`` is ``assets.name`` (UNIQUE) —
+never invented. Live ``PRICING_SCHEMA=public`` reads
+``heavy_rental.public`` via ``schema_translate_map``.
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ from app.models.asset import Asset
 from app.models.asset_category import AssetCategory
 from app.models.booking import Booking
 from app.models.booking_item import BookingItem
+from app.models.return_record import ReturnRecord
 from app.pipelines.catalog import is_approved_display_type
 from app.services.pricing.category_mapping import to_feature_name
 from app.services.pricing.read_resilience import (
@@ -31,6 +34,7 @@ FLEET_TABLE_ALLOWLIST: tuple[str, ...] = (
     "assets",
     "bookings",
     "booking_items",
+    "return_records",
 )
 
 
@@ -63,6 +67,22 @@ def _is_undefined_table(exc: BaseException) -> bool:
 
 def _ranges_overlap(a_start: date, a_end: date, b_start: date, b_end: date) -> bool:
     return a_start <= b_end and b_start <= a_end
+
+
+def _as_date(value: Any) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return None
+
+
+def _hold_end(booking_end: date | None, returned_at: Any) -> date | None:
+    """Hold lasts until the return day when ``return_records.returned_at`` is set."""
+    returned = _as_date(returned_at)
+    if returned is not None:
+        return returned
+    return booking_end
 
 
 def _asset_select(*, include_location: bool = True):
@@ -225,10 +245,13 @@ class FleetRepository:
         end_date: date | None = None,
         resolution: PricingSchemaResolution | None = None,
     ) -> bool | None:
-        """True when no live-hold booking overlaps the window.
+        """True when this physical machine is free for the window.
 
-        Missing dates use today..today (is it free now?). Query failure → None
-        (caller must not invent True).
+        Busy when a live-hold ``bookings`` row (via ``booking_items``) overlaps
+        the request, unless ``return_records.returned_at`` ends the hold on or
+        before the overlap. One ``assets.id`` cannot fulfill quantity > 1
+        (Call 2 collapse sets ``available=false``). Missing dates use
+        today..today. Query failure → None (caller must not invent True).
         """
         if asset_pk is None:
             return None
@@ -237,8 +260,9 @@ class FleetRepository:
         schema = resolution or resolve_pricing_schema(session)
         try:
             rows = session.execute(
-                select(Booking.start_date, Booking.end_date)
+                select(Booking.start_date, Booking.end_date, ReturnRecord.returned_at)
                 .join(BookingItem, BookingItem.booking_id == Booking.id)
+                .outerjoin(ReturnRecord, ReturnRecord.booking_id == Booking.id)
                 .where(
                     BookingItem.asset_id == int(asset_pk),
                     Booking.status.in_(LIVE_HOLD_STATUSES),
@@ -250,9 +274,12 @@ class FleetRepository:
                 session.rollback()
                 return None
             raise
-        for raw_start, raw_end in rows:
-            b_start = raw_start if isinstance(raw_start, date) else None
-            b_end = raw_end if isinstance(raw_end, date) else None
+        for row in rows:
+            raw_start = row[0] if len(row) > 0 else None
+            raw_end = row[1] if len(row) > 1 else None
+            raw_returned = row[2] if len(row) > 2 else None
+            b_start = _as_date(raw_start)
+            b_end = _hold_end(_as_date(raw_end), raw_returned)
             if b_start is None or b_end is None:
                 continue
             if _ranges_overlap(start, end, b_start, b_end):

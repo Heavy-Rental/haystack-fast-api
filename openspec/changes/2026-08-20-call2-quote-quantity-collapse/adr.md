@@ -36,9 +36,15 @@ Collapse **only on the Call 2 quote**, after `results_by_need` is mapped:
    (each Call 2 line is `quantity=1`, so 3 copies → `quantity: 3`),
    `lineTotal` = sum, `needId` = parent `{base}`, keep the first line's
    equipment and daily rate.
-4. Leave ungrouped lines unchanged (including qty-1 `need_1` and distinct
+4. If merged `quantity > 1`, set `equipment.available = false` — one
+   physical `assets.id` cannot fulfill N concurrent units. Do not count
+   other machines in the same category.
+5. Quantity-1 availability reads live-hold `bookings` (via `booking_items`)
+   and `return_records.returned_at` (`PRICING_SCHEMA=public` →
+   `heavy_rental.public`). A return ends the hold on that day.
+6. Leave ungrouped lines unchanged (including qty-1 `need_1` and distinct
    equipment under the same parent).
-5. Do not merge the same `equipment.id` across different parent needs.
+7. Do not merge the same `equipment.id` across different parent needs.
 
 Internal pipeline output (`results_by_need`) stays expanded.
 
@@ -53,8 +59,9 @@ Internal pipeline output (`results_by_need`) stays expanded.
 ### Negative / accepted
 
 - Quote `items[]` length can be smaller than `results_by_need` length.
-- If ranking selected the same physical asset N times, the quote still charges
-  `quantity: N` of that id (ranking uniqueness is out of scope).
+- If ranking selected the same physical asset N times, the quote still shows
+  `quantity: N` of that id but `available` is false (ranking uniqueness is
+  out of scope).
 - Distinct assets for the same parent need still appear as separate lines.
 
 ### Rejected alternatives
