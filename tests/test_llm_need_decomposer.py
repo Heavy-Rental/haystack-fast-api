@@ -99,6 +99,61 @@ def test_llm_decomposer_http_error_returns_empty() -> None:
         client=mock_client,
     )
     assert decomposer.decompose("anything") == []
+    mock_client.post.assert_called_once()
+
+
+def test_llm_decomposer_retries_once_on_read_timeout() -> None:
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps(
+                        [
+                            {
+                                "need_id": "need_1",
+                                "description": "Scissors lift indoor",
+                                "equipment_hints": ["scissor lift"],
+                                "quantity": 1,
+                            }
+                        ]
+                    )
+                }
+            }
+        ]
+    }
+    mock_client = MagicMock(spec=httpx.Client)
+    mock_client.post.side_effect = [
+        httpx.ReadTimeout("timed out"),
+        mock_response,
+    ]
+    decomposer = LlmNeedDecomposer(
+        base_url="https://inference.do-ai.run/v1",
+        api_key="test-key",
+        model="router:demo",
+        client=mock_client,
+    )
+    needs = decomposer.decompose("Need a scissors lift")
+    assert len(needs) == 1
+    assert needs[0].need_id == "need_1"
+    assert mock_client.post.call_count == 2
+
+
+def test_llm_decomposer_timeout_falls_back_to_keyword_split() -> None:
+    mock_client = MagicMock(spec=httpx.Client)
+    mock_client.post.side_effect = httpx.ReadTimeout("timed out")
+    decomposer = LlmNeedDecomposer(
+        base_url="https://inference.do-ai.run/v1",
+        api_key="test-key",
+        model="router:demo",
+        client=mock_client,
+    )
+    needs = decomposer.decompose("Need a scissors lift for indoor work")
+    assert len(needs) == 1
+    assert needs[0].need_id == "need_1"
+    assert any("scissor" in hint.lower() for hint in needs[0].equipment_hints)
+    assert mock_client.post.call_count == 2
 
 
 def test_factory_default_stub() -> None:

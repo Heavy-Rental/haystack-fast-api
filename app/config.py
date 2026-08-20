@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     llm_api_key: str | None = Field(default=None, alias="LLM_API_KEY")
     # Model id or Inference Router: router:<router-name>
     llm_model: str = Field(default="router:default", alias="LLM_MODEL")
-    llm_timeout_seconds: float = Field(default=60.0, alias="LLM_TIMEOUT_SECONDS")
+    llm_timeout_seconds: float = Field(default=120.0, alias="LLM_TIMEOUT_SECONDS")
     llm_temperature: float = Field(default=0.0, alias="LLM_TEMPERATURE")
 
     # Indexing pipeline: Packt Ch.4 dual-branch → embed → write

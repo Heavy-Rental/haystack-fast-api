@@ -515,6 +515,7 @@ MUST NOT treat summary as ranked fleet recommendations or ML rent (`results_by_n
 ### Requirement: Needs summary on ingest response (as-built S1c)
 After successful index + mandatory KG, the live success body MUST include **`needs_summary`** (array), produced by the configured need decomposer (`NEED_DECOMPOSER=stub|llm`) on **extracted file text first**, then `project_text`. The placeholder caption `"Optional caption alongside file"` MUST be ignored.  
 Stub / LLM-empty fallback MUST split **one need per approved type** when distinct types appear, using `equipment_hints` (not a shared description) so a forklift need cannot pick a scissor lift.  
+LLM connect/read timeout MUST retry once, then use that same keyword fallback (**FR-P-014**); ingest MUST NOT fail on timeout.  
 Empty list + warning is allowed when no needs can be inferred; MUST NOT invent fleet inventory or rates.  
 (Trace: partial FR-IX-023 / S1c)  
 **Status:** **as-built (S1c)**.

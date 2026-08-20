@@ -2,7 +2,7 @@
 
 ## R — Requirements
 
-See [`spec.md`](./spec.md) Purpose, Outcomes, FR-010.1–8, and FR-P-001..013.  
+See [`spec.md`](./spec.md) Purpose, Outcomes, FR-010.1–8, and FR-P-001..014.  
 Service-level recommend graph; not default HTTP (live path is indexing).
 Call 2 quote collapse of unit-need siblings that share `equipment.id` is
 **FR-P-013** (quote envelope only). Merged `quantity` is the duplicate count
@@ -162,6 +162,8 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 Optional LLM: `NEED_DECOMPOSER=llm` (+ provider env). Default CI stays on stub.
+LLM timeouts: connect 10s, read `LLM_TIMEOUT_SECONDS` (default 120); one retry
+then keyword fallback (**FR-P-014**).
 
 ## N — Norms
 
