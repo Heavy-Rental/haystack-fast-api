@@ -82,7 +82,7 @@ Ports `ml-experiments/feature_schema.py` directly — same `CATEGORIES`, `CONDIT
 |---|---|---|
 | `category` | one-hot, fixed `CATEGORIES` order | via `AssetCategory.name`; never encode the raw FK |
 | `condition` | ordinal, `NEEDS_REPAIR=0…EXCELLENT=3`; **falls back to `"GOOD"` when null** | `Asset.condition`; nullable in the real schema — `encode_condition()`'s ordinal cast can't take NaN anyway |
-| `duration_days` | numeric passthrough | `Booking.endDate − Booking.startDate` |
+| `duration_days` | numeric passthrough | `Booking.endDate − Booking.startDate + 1` (inclusive, min 1) |
 | `capacity` | numeric passthrough; **falls back to `pricing_tables.CATEGORY_CAPACITY_KG` per-category midpoint when null** (not NaN — a data gap, not a structural absence like `platform_height`) | `Asset.capacity`; nullable in the real schema, currently unset for non-forklift seed rows |
 | `distance_km` | numeric passthrough | Phase 1/2: still a sampled proxy, not geocoded |
 | `platform_height` | numeric, **NaN for forklift/excavator** | `Asset.platform_height`; native missing for XGBoost, not imputed |
