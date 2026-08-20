@@ -495,7 +495,7 @@ def map_recommend_to_quote(
 
     items = collapse_duplicate_equipment_quotes(items)
 
-    print(items)
+    
 
     needs_meta = meta.get("needs_summary") if isinstance(meta.get("needs_summary"), list) else []
     need_count = len(needs_meta) if needs_meta else len(recommend.results_by_need)
