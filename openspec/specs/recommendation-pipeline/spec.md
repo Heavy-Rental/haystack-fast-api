@@ -158,6 +158,11 @@ Decompose → internal needs (+ quantity). As-built: `NeedDecomposerComponent` +
 - **WHEN** stub decomposer runs on non-empty source
 - **THEN** one internal need is emitted with quantity ≥ 1
 
+#### Scenario: LLM timeout is recoverable
+- **GIVEN** `NEED_DECOMPOSER=llm` and `/chat/completions` times out twice
+- **WHEN** decompose runs
+- **THEN** keyword-split needs are returned (no exception); see **FR-P-014**
+
 ### Requirement: FR-010 step 3 — Expand quantity
 
 Expand quantity → unit-needs (`base` / `base__u{i}`). As-built: `ExpandQuantityComponent`. Aligns with parent **FR-006**.
@@ -381,6 +386,30 @@ units. Quantity-1 availability SHALL use live-hold `bookings` (via
 - **WHEN** Call 2 maps to the quote envelope
 - **THEN** the line is unchanged except `rankOrder` re-numbering
 
+### Requirement: LLM need-decompose timeouts are recoverable (FR-P-014)
+
+When `NEED_DECOMPOSER=llm`, `LlmNeedDecomposer` SHALL call `/chat/completions`
+with connect timeout 10s and read timeout `LLM_TIMEOUT_SECONDS` (default 120).
+On connect or read timeout it SHALL retry once. After two timeouts, or on any
+other HTTP error, it SHALL return `split_needs_from_text` and MUST NOT raise.
+Timeouts SHALL be logged at warning without a traceback. CI MUST keep
+`NEED_DECOMPOSER=stub`.
+
+#### Scenario: Read timeout then success
+- **GIVEN** the first `/chat/completions` read times out
+- **WHEN** the decomposer runs
+- **THEN** it retries once and parses a successful second response
+
+#### Scenario: Persistent timeout falls back to keyword split
+- **GIVEN** both attempts time out and the text names an approved type
+- **WHEN** the decomposer runs
+- **THEN** keyword-split needs are returned and ingest can still succeed
+
+#### Scenario: Non-timeout HTTP error does not retry
+- **GIVEN** `/chat/completions` raises a connect error
+- **WHEN** the decomposer runs
+- **THEN** it does not retry and returns the keyword fallback
+
 ---
 
 ## API behaviour (pipeline outcomes)
@@ -469,6 +498,7 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | Call 2 multi-agent enrich (S7.5) | Same quote DTO; flag default off | Gate refuse → 400; traces stay off the body (S7.6) |
 | Call 2 predicted price | `items[].mlPredictedPrice` + `equipment.baseDailyRate` | Production `predict_price` daily rate; never invent |
 | Call 2 duplicate equipment (FR-P-013) | Collapse unit-need siblings that share `equipment.id` | Quote-layer only; keep FR-006 / FR-P-005 / FR-P-010 on `results_by_need` |
+| LLM decompose timeout (FR-P-014) | Retry once; then keyword fallback; default read 120s | Call 1 `needs_summary` and FR-010.2 stay available |
 
 ---
 
@@ -495,6 +525,7 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | **2.0.0** | 2026-08-10 | Migrated to OpenSpec Requirement/Scenario + design REASONS under `openspec/specs/recommendation-pipeline/` |
 | **2.7.0** | 2026-08-13 | Call 2 quote: `equipment.id` = `assets.id` (live SQL); extra catalog fields; `PRICING_SCHEMA`; seed remains CI only |
 | **2.8.0** | 2026-08-20 | **FR-P-013:** collapse Call 2 unit-need siblings that share parent need + `equipment.id` into one quote line; merged `quantity` is the duplicate count (3 copies → `quantity: 3`); `quantity > 1` → `available=false`; qty-1 availability from `bookings` + `return_records` |
+| **2.9.0** | 2026-08-20 | **FR-P-014:** LLM need-decompose retries once on read/connect timeout then keyword-fallback; default `LLM_TIMEOUT_SECONDS` 120 |
 | **2.6.0** | 2026-08-13 | Call 2 quote: `items[].mlPredictedPrice` as-built (same daily rate as `equipment.baseDailyRate`) |
 | **2.5.0** | 2026-08-13 | S4 app: live SQL fleet backend (`FLEET_BACKEND=sql`); DTO sql path unchanged |
 | **2.4.0** | 2026-08-13 | S7.2 as-built: Neo4j template tools + populate no-op; recommend not blocked when graph empty |
