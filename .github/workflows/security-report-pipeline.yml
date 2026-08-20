@@ -1,0 +1,187 @@
+# =============================================================================
+# Heavy Rental haystack-fast-api — Security Report Pipeline (reusable)
+# =============================================================================
+# Purpose: summarize this repo's EXISTING Code Scanning alerts (Semgrep, Trivy,
+# CodeQL — whatever already uploads SARIF here) into a human-readable report.
+# This does not run any scanners itself; it only reads results they already
+# produced, via the REST API (actions/github-script, ships with every runner).
+#
+# Outputs:
+#   1. Job Summary          — shown inline on the Actions run page
+#   2. security-report.md   — downloadable artifact, 30-day retention
+#
+# No new secrets. Uses only contents: read + security-events: read.
+#
+# How haystack-fast-api uses this
+# -------------------------------
+# Install both files into the application repository:
+#
+#   .github/workflows/security-report-pipeline.yml         ← this file (reusable only)
+#   .github/workflows/haystack-security-report-caller.yml  ← sole allowed entry point
+#
+# This file exposes only workflow_call (no push / PR / schedule / workflow_dispatch).
+# A gate job rejects any caller other than haystack-security-report-caller.yml.
+#
+# This family does not provision infrastructure, deploy, or operate production.
+# =============================================================================
+
+name: Haystack Security Report Pipeline
+
+on:
+  workflow_call:
+
+concurrency:
+  group: haystack-security-report-${{ github.workflow }}-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: read
+
+jobs:
+  assert-caller:
+    name: Assert caller
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Allow only haystack-security-report-caller.yml
+        env:
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+        run: |
+          set -euo pipefail
+          echo "github.workflow_ref=${WORKFLOW_REF}"
+          echo "github.event_name=${EVENT_NAME}"
+          echo "github.workflow=${WORKFLOW_NAME}"
+          if [ "${ACT:-}" = "true" ] && [ -z "${WORKFLOW_REF}" ]; then
+            echo "act local run: caller gate skipped (github.workflow_ref unset)"
+            {
+              echo "### Caller gate"
+              echo ""
+              echo "nektos/act — \`github.workflow_ref\` is empty; filename gate skipped."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          case "${WORKFLOW_REF}" in
+            */.github/workflows/haystack-security-report-caller.yml@*)
+              echo "Allowed caller: haystack-security-report-caller.yml"
+              {
+                echo "### Caller gate"
+                echo ""
+                echo "Invoked by \`haystack-security-report-caller.yml\` — OK."
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo "::error::security-report-pipeline.yml may only be invoked by .github/workflows/haystack-security-report-caller.yml (got: ${WORKFLOW_REF})"
+              exit 1
+              ;;
+          esac
+
+  report:
+    name: Generate security report
+    runs-on: ubuntu-latest
+    needs: [assert-caller]
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: read
+    steps:
+      - name: Build report from existing Code Scanning alerts
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('fs');
+            const { owner, repo } = context.repo;
+
+            let alerts = [];
+            try {
+              alerts = await github.paginate(github.rest.codeScanning.listAlertsForRepo, {
+                owner,
+                repo,
+                state: 'open',
+                per_page: 100,
+              });
+            } catch (err) {
+              core.warning(`Could not list Code Scanning alerts: ${err.message}`);
+            }
+
+            const bySeverity = {};
+            const byTool = {};
+            for (const alert of alerts) {
+              const severity = alert.rule?.security_severity_level || alert.rule?.severity || 'unknown';
+              const tool = alert.tool?.name || 'unknown';
+              bySeverity[severity] = (bySeverity[severity] || 0) + 1;
+              byTool[tool] = (byTool[tool] || 0) + 1;
+            }
+
+            const severityOrder = ['critical', 'high', 'medium', 'low', 'warning', 'note', 'error', 'unknown'];
+            const lines = [];
+            lines.push(`# Security Report — ${owner}/${repo}`);
+            lines.push('');
+            lines.push(`Generated: ${new Date().toISOString()}`);
+            lines.push(`Run: [${context.runId}](${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}) (\`${context.eventName}\`)`);
+            lines.push('');
+            lines.push('## Summary');
+            lines.push('');
+            lines.push(`Open Code Scanning alerts: **${alerts.length}**`);
+            lines.push('');
+            lines.push('### By severity');
+            lines.push('');
+            lines.push('| Severity | Count |');
+            lines.push('| --- | --- |');
+            for (const sev of severityOrder) {
+              if (bySeverity[sev]) lines.push(`| ${sev} | ${bySeverity[sev]} |`);
+            }
+            for (const sev of Object.keys(bySeverity)) {
+              if (!severityOrder.includes(sev)) lines.push(`| ${sev} | ${bySeverity[sev]} |`);
+            }
+            if (alerts.length === 0) {
+              lines.push('| _(none)_ | 0 |');
+            }
+            lines.push('');
+            lines.push('### By tool');
+            lines.push('');
+            lines.push('| Tool | Count |');
+            lines.push('| --- | --- |');
+            for (const [tool, count] of Object.entries(byTool).sort((a, b) => b[1] - a[1])) {
+              lines.push(`| ${tool} | ${count} |`);
+            }
+            if (alerts.length === 0) {
+              lines.push('| _(none)_ | 0 |');
+            }
+            lines.push('');
+
+            const MAX_ROWS = 200;
+            if (alerts.length > 0) {
+              lines.push('### Open alerts');
+              lines.push('');
+              lines.push('| # | Tool | Severity | Rule | File | Opened |');
+              lines.push('| --- | --- | --- | --- | --- | --- |');
+              for (const alert of alerts.slice(0, MAX_ROWS)) {
+                const tool = alert.tool?.name || 'unknown';
+                const severity = alert.rule?.security_severity_level || alert.rule?.severity || 'unknown';
+                const ruleId = alert.rule?.id || 'unknown';
+                const location = alert.most_recent_instance?.location?.path || 'unknown';
+                const opened = alert.created_at ? alert.created_at.slice(0, 10) : 'unknown';
+                lines.push(`| [${alert.number}](${alert.html_url}) | ${tool} | ${severity} | ${ruleId} | \`${location}\` | ${opened} |`);
+              }
+              if (alerts.length > MAX_ROWS) {
+                lines.push('');
+                lines.push(`_...and ${alerts.length - MAX_ROWS} more alert(s) not shown (see the Security tab for the full list)._`);
+              }
+              lines.push('');
+            }
+
+            const markdown = lines.join('\n') + '\n';
+            fs.writeFileSync('security-report.md', markdown);
+            await core.summary.addRaw(markdown).write();
+            core.info(`Wrote security-report.md with ${alerts.length} open alert(s).`);
+
+      - name: Upload security report artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: security-report
+          path: security-report.md
+          retention-days: 30
+          if-no-files-found: error
