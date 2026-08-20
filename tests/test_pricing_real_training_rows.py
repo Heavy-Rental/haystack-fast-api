@@ -71,7 +71,7 @@ def test_fetch_real_training_rows_maps_features_and_historical_values(
 
     assert list(actual.columns) == repository.REAL_TRAINING_COLUMNS
     assert actual["category"].tolist() == ["forklift", "scissor lift"]
-    assert actual["duration_days"].tolist() == [7, 14]
+    assert actual["duration_days"].tolist() == [8, 15]
     assert actual["lead_time_days"].tolist() == [9, 0]
     assert actual["price_per_day"].tolist() == [125.5, 210.0]
     assert actual["period_utilization"].tolist() == [0.25, 0.75]
@@ -87,6 +87,30 @@ def test_fetch_real_training_rows_maps_features_and_historical_values(
         date(2026, 10, 1),
     ]
     assert session.execute.call_args.kwargs["execution_options"] == DEGRADED.execution_options
+
+
+def test_fetch_real_training_rows_floors_same_day_duration_at_one(monkeypatch) -> None:
+    rows = [
+        {
+            "booking_item_id": 21,
+            "db_category": "Fork Lift",
+            "condition": "GOOD",
+            "capacity": 2500,
+            "platform_height": None,
+            "start_date": date(2026, 9, 10),
+            "end_date": date(2026, 9, 10),
+            "created_at": datetime(2026, 9, 1, 12, 30, tzinfo=UTC),
+            "daily_rate": Decimal("125.50"),
+        },
+    ]
+    session = _session_with_rows(rows)
+    monkeypatch.setattr(
+        repository, "compute_period_utilization", lambda *args, **kwargs: 0.25
+    )
+
+    actual = repository.fetch_real_training_rows(session, DEGRADED)
+
+    assert actual["duration_days"].tolist() == [1]
 
 
 def test_fetch_real_training_rows_empty_result_has_stable_schema(monkeypatch) -> None:

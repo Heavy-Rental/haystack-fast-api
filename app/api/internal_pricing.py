@@ -84,7 +84,7 @@ def _quote_one_item(
     prediction = predict_price(
         category=asset.category,
         condition=asset.condition,
-        duration_days=(body.end_date - body.start_date).days,
+        duration_days=max(1, (body.end_date - body.start_date).days + 1),
         capacity=asset.capacity,
         distance_km=body.distance_km,
         platform_height=asset.platform_height,

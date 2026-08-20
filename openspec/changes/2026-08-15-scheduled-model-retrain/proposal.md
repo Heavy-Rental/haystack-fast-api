@@ -152,7 +152,7 @@ parent `Booking.status` is in `statuses` (excludes `PENDING_DEPOSIT`/
 | `condition` | `Asset.condition` |
 | `capacity` | `Asset.capacity` |
 | `platform_height` | `Asset.platform_height` |
-| `duration_days` | `Booking.end_date − Booking.start_date` |
+| `duration_days` | `Booking.end_date − Booking.start_date + 1` (inclusive, min 1) |
 | `distance_km` | **imputed** via `ml-experiments/generate_synthetic_data.py::sample_distance_km(rng, n)` — no real equivalent exists in the schema (open item) |
 | `period_utilization` | `compute_period_utilization()` called **as-is**, with that booking's own `start_date`/`end_date` — the function already takes a window parameter rather than assuming "now", so it works unmodified as a point-in-time historical estimate |
 | `lead_time_days` | `start_date − created_at.date()`, falling back to `0` when `created_at` is null |

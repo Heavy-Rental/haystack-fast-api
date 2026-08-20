@@ -158,6 +158,10 @@ def test_per_item_guardrail_bounds_from_real_asset_row(
     assert "category" not in _request_body()["items"][0]
     assert captured_kwargs[0]["category"] == "excavator"
     assert captured_kwargs[1]["category"] == "forklift"
+    # start_date=2026-09-01, end_date=2026-09-08 is an inclusive 8-day rental
+    # (both boundary dates count), not the 7-day exclusive difference.
+    assert captured_kwargs[0]["duration_days"] == 8
+    assert captured_kwargs[1]["duration_days"] == 8
 
 
 def test_per_item_degraded_independence(

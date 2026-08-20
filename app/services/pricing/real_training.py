@@ -114,7 +114,7 @@ def fetch_real_training_rows(
                 "condition": source["condition"],
                 "capacity": capacity,
                 "platform_height": platform_height,
-                "duration_days": (end_date - start_date).days,
+                "duration_days": max(1, (end_date - start_date).days + 1),
                 "distance_km": int(distance_km),
                 "period_utilization": float(period_utilization),
                 "lead_time_days": lead_time_days,
