@@ -81,7 +81,8 @@ jobs:
       aws_environment: AWS_ACTUAL
       image_ref: ${{ inputs.image_ref }}
       image_http_url: ${{ inputs.image_http_url }}
-    secrets: inherit
+    secrets:
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
     permissions:
       contents: read
       id-token: write

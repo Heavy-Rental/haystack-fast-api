@@ -36,6 +36,19 @@ on:
         required: false
         type: string
         default: ""
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        description: Vocareum/academy access key fallback (forbidden on AWS_ACTUAL)
+        required: false
+      AWS_SECRET_ACCESS_KEY:
+        description: Vocareum/academy secret access key fallback (forbidden on AWS_ACTUAL)
+        required: false
+      AWS_SESSION_TOKEN:
+        description: Vocareum/academy session token fallback (forbidden on AWS_ACTUAL)
+        required: false
+      LLM_API_KEY:
+        description: Optional haystack .env overlay (empty = keep Secrets Manager value)
+        required: false
 
 permissions:
   contents: read
