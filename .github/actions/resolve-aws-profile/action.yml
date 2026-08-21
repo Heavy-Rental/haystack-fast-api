@@ -1,0 +1,114 @@
+name: Resolve AWS profile
+description: Academy Vocareum keys or paid GitHub OIDC. Fail if the wrong secret style is present.
+
+inputs:
+  profile:
+    description: academy or AWS_ACTUAL
+    required: true
+  aws_region:
+    description: AWS region
+    required: false
+    default: us-east-1
+  aws_access_key_id:
+    description: Environment academy AWS_ACCESS_KEY_ID fallback (forbidden on paid)
+    required: false
+    default: ""
+  aws_secret_access_key:
+    description: Environment academy secret fallback
+    required: false
+    default: ""
+  aws_session_token:
+    description: Environment academy session token fallback
+    required: false
+    default: ""
+  aws_role_to_assume:
+    description: AWS_ACTUAL OIDC role ARN (Environment AWS_ACTUAL AWS_ROLE_TO_ASSUME)
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Assert profile
+      shell: bash
+      env:
+        PROFILE: ${{ inputs.profile }}
+      run: |
+        set -euo pipefail
+        if [ "${PROFILE}" != "academy" ] && [ "${PROFILE}" != "AWS_ACTUAL" ]; then
+          echo "::error::aws_environment must be academy (Vocareum) or AWS_ACTUAL (public AWS). Got '${PROFILE}'."
+          exit 1
+        fi
+
+    - name: Refuse Vocareum keys on AWS_ACTUAL
+      if: inputs.profile == 'AWS_ACTUAL'
+      shell: bash
+      env:
+        ENV_KEY: ${{ inputs.aws_access_key_id }}
+        ROLE: ${{ inputs.aws_role_to_assume }}
+      run: |
+        set +x
+        FORM_KEY="$(jq -r '.inputs.aws_access_key_id // empty' "$GITHUB_EVENT_PATH")"
+        FORM_SECRET="$(jq -r '.inputs.aws_secret_access_key // empty' "$GITHUB_EVENT_PATH")"
+        FORM_TOKEN="$(jq -r '.inputs.aws_session_token // empty' "$GITHUB_EVENT_PATH")"
+        if [ -n "${FORM_KEY}" ] || [ -n "${FORM_SECRET}" ] || [ -n "${FORM_TOKEN}" ]; then
+          echo "::error::Environment AWS_ACTUAL forbids Vocareum form keys. Leave aws_access_key_* empty. Use OIDC (AWS_ROLE_TO_ASSUME)."
+          exit 1
+        fi
+        if [ -n "${ENV_KEY}" ]; then
+          echo "::error::Environment AWS_ACTUAL must not contain AWS_ACCESS_KEY_ID. AWS_ACTUAL uses GitHub OIDC only."
+          exit 1
+        fi
+        if [ -z "${ROLE}" ]; then
+          echo "::error::Set Environment AWS_ACTUAL variable AWS_ROLE_TO_ASSUME (IAM role ARN for GitHub OIDC)."
+          exit 1
+        fi
+
+    - name: Configure AWS_ACTUAL via OIDC
+      if: inputs.profile == 'AWS_ACTUAL'
+      uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+      with:
+        role-to-assume: ${{ inputs.aws_role_to_assume }}
+        aws-region: ${{ inputs.aws_region }}
+
+    - name: Resolve Vocareum credentials
+      if: inputs.profile == 'academy'
+      shell: bash
+      env:
+        ENV_KEY: ${{ inputs.aws_access_key_id }}
+        ENV_SECRET: ${{ inputs.aws_secret_access_key }}
+        ENV_TOKEN: ${{ inputs.aws_session_token }}
+      run: |
+        set +x
+        KEY="$(jq -r '.inputs.aws_access_key_id // empty' "$GITHUB_EVENT_PATH")"
+        SECRET="$(jq -r '.inputs.aws_secret_access_key // empty' "$GITHUB_EVENT_PATH")"
+        TOKEN="$(jq -r '.inputs.aws_session_token // empty' "$GITHUB_EVENT_PATH")"
+        [ -n "${KEY}" ] && echo "::add-mask::${KEY}"
+        [ -n "${SECRET}" ] && echo "::add-mask::${SECRET}"
+        [ -n "${TOKEN}" ] && echo "::add-mask::${TOKEN}"
+        if [ -z "${KEY}" ] || [ -z "${SECRET}" ] || [ -z "${TOKEN}" ]; then
+          KEY="${ENV_KEY}"
+          SECRET="${ENV_SECRET}"
+          TOKEN="${ENV_TOKEN}"
+        fi
+        if [ -z "${KEY}" ] || [ -z "${SECRET}" ] || [ -z "${TOKEN}" ]; then
+          echo "::error::Start Lab. Paste AWS Details on the form or set Environment academy secrets."
+          exit 1
+        fi
+        echo "::add-mask::${KEY}"
+        echo "::add-mask::${SECRET}"
+        echo "::add-mask::${TOKEN}"
+        {
+          echo "AWS_ACCESS_KEY_ID=${KEY}"
+          echo "AWS_SECRET_ACCESS_KEY=${SECRET}"
+          echo "AWS_SESSION_TOKEN=${TOKEN}"
+        } >> "$GITHUB_ENV"
+
+    - name: Configure academy AWS
+      if: inputs.profile == 'academy'
+      uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+      with:
+        aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
+        aws-region: ${{ inputs.aws_region }}

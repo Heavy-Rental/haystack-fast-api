@@ -63,11 +63,33 @@ concurrency:
 
 permissions:
   contents: read
+  # Required to call haystack-cd-academy.yml (shared with paid OIDC).
+  # Academy still authenticates with Vocareum keys, not GitHub OIDC.
+  id-token: write
 
 jobs:
+  refuse-non-academy:
+    name: Assert Environment academy
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Refuse non-academy
+        env:
+          ENV_NAME: ${{ inputs.aws_environment }}
+        run: |
+          set -euo pipefail
+          if [ "${ENV_NAME}" != "academy" ]; then
+            echo "::error::This Action is AWS Academy / Vocareum only (got '${ENV_NAME}'). Use Haystack CD (paid) with Environment AWS_ACTUAL."
+            exit 1
+          fi
+
   haystack-cd:
     name: Haystack CD pipeline
+    needs: [refuse-non-academy]
     uses: ./.github/workflows/haystack-cd-academy.yml
+    permissions:
+      contents: read
+      id-token: write
     with:
       action: ${{ inputs.action }}
       aws_environment: ${{ inputs.aws_environment }}
