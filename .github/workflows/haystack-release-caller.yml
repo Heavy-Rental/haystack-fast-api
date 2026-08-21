@@ -2,9 +2,8 @@
 # Install into: haystack-fast-api
 # Path:         .github/workflows/haystack-release-caller.yml
 # =============================================================================
-# Release caller — runs only when:
-#   1. A GitHub Release is published, or
-#   2. A pull request is opened/updated from develop → master
+# Release caller — manual dispatch only (Actions → Release → Run workflow).
+# Checks out master, QC, image, DAST, then public GHCR + GitHub Release.
 #
 # Feature-branch PR validation remains CI (haystack-ci-caller.yml).
 #
@@ -46,19 +45,14 @@
 name: Haystack Release Pipeline Invoke
 
 on:
-  release:
-    types: [published]
-  pull_request:
-    branches: [master]
-    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 
 concurrency:
-  group: haystack-release-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: haystack-release-${{ github.workflow }}-${{ github.repository }}
   cancel-in-progress: false
 
 permissions:
-  contents: read
-  pull-requests: read
+  contents: write
   security-events: write
   actions: read
   packages: write
@@ -66,11 +60,4 @@ permissions:
 jobs:
   release-pipeline:
     name: Release pipeline
-    if: >
-      github.event_name == 'release' ||
-      (github.event_name == 'pull_request' &&
-       github.head_ref == 'develop' &&
-       github.base_ref == 'master')
     uses: ./.github/workflows/release-pipeline.yml
-    # No inputs: checks out this haystack repo at github.sha
-    # GITHUB_TOKEN is implicit for GHCR login on non-PR runs
