@@ -1,0 +1,87 @@
+# =============================================================================
+# Install into: haystack-fast-api
+# Path:         .github/workflows/haystack-cd-paid-caller.yml
+# =============================================================================
+# Also copy haystack-cd-academy.yml, resolve-aws-profile, deploy-pipeline/ansible/.
+# Haystack app CD (paid / AWS_ACTUAL). OIDC only. No Vocareum keys. No neo4j. No Terraform.
+# =============================================================================
+
+name: Haystack CD (paid)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: deploy a CI image, refresh .env, or health only
+        required: true
+        type: choice
+        default: verify
+        options:
+          - deploy
+          - configure-only
+          - verify
+      aws_environment:
+        description: Must be AWS_ACTUAL (billed account, GitHub OIDC)
+        required: true
+        type: environment
+        default: AWS_ACTUAL
+      image_ref:
+        description: Public GHCR or ECR tag (required for deploy unless HAYSTACK_IMAGE is set)
+        required: false
+        type: string
+        default: ""
+      image_http_url:
+        description: HTTPS or s3:// CI image tar.gz (empty = vars.IMAGE_HTTP_URL)
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: haystack-cd-paid-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  refuse-non-paid:
+    name: Assert Environment AWS_ACTUAL
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.aws_environment }}
+    timeout-minutes: 2
+    steps:
+      - name: Refuse Vocareum and unknown Environments
+        env:
+          ENV_NAME: ${{ inputs.aws_environment }}
+          ENV_KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          ROLE: ${{ vars.AWS_ROLE_TO_ASSUME }}
+        run: |
+          set +x
+          set -euo pipefail
+          if [ "${ENV_NAME}" != "AWS_ACTUAL" ]; then
+            echo "::error::This Action is billed AWS / OIDC only (got '${ENV_NAME}'). Use Haystack CD (Academy)."
+            exit 1
+          fi
+          if [ -n "${ENV_KEY}" ]; then
+            echo "::error::Environment AWS_ACTUAL must not contain AWS_ACCESS_KEY_ID. Paid uses GitHub OIDC only."
+            exit 1
+          fi
+          if [ -z "${ROLE}" ]; then
+            echo "::error::Set Environment AWS_ACTUAL variable AWS_ROLE_TO_ASSUME."
+            exit 1
+          fi
+
+  haystack-cd:
+    name: Haystack CD pipeline
+    needs: [refuse-non-paid]
+    uses: ./.github/workflows/haystack-cd-academy.yml
+    with:
+      action: ${{ inputs.action }}
+      aws_environment: AWS_ACTUAL
+      image_ref: ${{ inputs.image_ref }}
+      image_http_url: ${{ inputs.image_http_url }}
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write

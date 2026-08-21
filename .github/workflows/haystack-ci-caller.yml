@@ -75,6 +75,7 @@ permissions:
   pull-requests: read
   security-events: write
   actions: read
+  checks: write
 
 jobs:
   integration-pipeline:

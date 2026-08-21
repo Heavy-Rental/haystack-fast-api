@@ -14,6 +14,8 @@
 #   - Semgrep → semgrep.sarif
 #   - Trivy FS → trivy-fs.sarif
 #   - CodeQL → GitHub Code Scanning (native SARIF via analyze)
+# DAST (Release): ZAP JSON/HTML, Dastardly XML, Nuclei JSONL, plus
+#   combined-dast-report.pdf (artifact dast-combined-report-pdf).
 #
 # GitHub Flow
 # --------------------------------------------------------------------------
@@ -100,6 +102,9 @@ env:
   DEFAULT_APP_REF: master
   IMAGE_NAME: haystack_recommender
   PYTHON_BASE_IMAGE: python:3.12-slim-bookworm
+  # Stable artifact names so DAST/Publish do not depend on packaging job outputs.
+  IMAGE_ARCHIVE: haystack_recommender-image.tar.gz
+  IMAGE_META: image-meta.env
   NEED_DECOMPOSER: stub
   INDEXING_EMBEDDER: mock
   INDEXING_DOCUMENT_STORE: memory
@@ -795,7 +800,8 @@ jobs:
           docker images "${IMAGE_NAME_LC}" --format 'table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}'
           docker images "ghcr.io/${OWNER_LC}/${IMAGE_NAME_LC}" --format 'table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}' || true
 
-          TAR_PATH="${GITHUB_WORKSPACE}/${IMAGE_TAR}"
+          # Use the stable IMAGE_ARCHIVE name so DAST/Publish can find it without job outputs.
+          TAR_PATH="${GITHUB_WORKSPACE}/${IMAGE_ARCHIVE}"
           docker save \
             "${IMAGE_LOCAL}" \
             "${IMAGE_LOCAL_LATEST}" \
@@ -807,6 +813,16 @@ jobs:
             echo "::error::Docker image tar is missing or empty: ${TAR_PATH}"
             exit 1
           fi
+
+          {
+            echo "IMAGE_LOCAL=${IMAGE_LOCAL}"
+            echo "IMAGE_LOCAL_LATEST=${IMAGE_LOCAL_LATEST}"
+            echo "IMAGE_REMOTE=${IMAGE_REMOTE}"
+            echo "IMAGE_REMOTE_LATEST=${IMAGE_REMOTE_LATEST}"
+            echo "IMAGE_TAG=${IMAGE_LOCAL##*:}"
+          } > "${GITHUB_WORKSPACE}/${IMAGE_META}"
+          echo "==> ${IMAGE_META}"
+          cat "${GITHUB_WORKSPACE}/${IMAGE_META}"
 
           {
             echo "image_id=$(docker image inspect -f '{{.Id}}' "${IMAGE_LOCAL}")"
@@ -1042,7 +1058,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: haystack-fast-api-release-docker-image
-          path: ${{ github.workspace }}/${{ steps.package.outputs.image_tar }}
+          path: |
+            ${{ github.workspace }}/${{ env.IMAGE_ARCHIVE }}
+            ${{ github.workspace }}/${{ env.IMAGE_META }}
           retention-days: 14
           if-no-files-found: error
 
@@ -1060,7 +1078,7 @@ jobs:
             echo "### Deploy options"
             echo ""
             echo "1. **Wheel / sdist** — download \`haystack-fast-api-release-packages\`."
-            echo "2. **Image archive** — \`docker load < ${IMAGE_TAR}\` then \`docker run -p 8000:8000 -e … ${IMAGE_LOCAL}\` (id \`${IMAGE_ID}\`)."
+            echo "2. **Image archive** — \`gzip -dc ${IMAGE_ARCHIVE} | docker load\` then \`docker run -p 8000:8000 -e … ${IMAGE_LOCAL}\` (id \`${IMAGE_ID}\`)."
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "${EVENT_NAME}" != "pull_request" ]; then
             echo "3. **GHCR** — \`docker pull ${IMAGE_REMOTE}\` or \`docker pull ${IMAGE_REMOTE_LATEST}\`." >> "$GITHUB_STEP_SUMMARY"
@@ -1081,15 +1099,44 @@ jobs:
           path: ${{ github.workspace }}
 
       - name: Load image and start target
-        env:
-          IMAGE_LOCAL: ${{ needs.packaging.outputs.image_local }}
-          IMAGE_TAR: ${{ needs.packaging.outputs.image_tar }}
+        id: start-dast
         run: |
           set -euo pipefail
+          # Stable IMAGE_ARCHIVE/IMAGE_META so DAST/Publish do not depend on job outputs.
+          META="${GITHUB_WORKSPACE}/${IMAGE_META}"
+          ARCHIVE="${GITHUB_WORKSPACE}/${IMAGE_ARCHIVE}"
+          if [ -f "${META}" ]; then
+            set -a
+            # shellcheck disable=SC1090
+            . "${META}"
+            set +a
+          fi
+          if [ ! -f "${ARCHIVE}" ]; then
+            ARCHIVE="$(find "${GITHUB_WORKSPACE}" -maxdepth 2 -type f -name '*.tar.gz' | head -n 1 || true)"
+          fi
+          if [ -z "${ARCHIVE}" ] || [ ! -f "${ARCHIVE}" ]; then
+            echo "::error::Docker image archive not found after downloading haystack-fast-api-release-docker-image."
+            echo "Expected ${GITHUB_WORKSPACE}/${IMAGE_ARCHIVE} (and ${IMAGE_META})."
+            ls -la "${GITHUB_WORKSPACE}" || true
+            find "${GITHUB_WORKSPACE}" -maxdepth 2 -type f | head -n 50 || true
+            exit 1
+          fi
+          echo "Loading ${ARCHIVE} ($(wc -c < "${ARCHIVE}") bytes)"
+          gzip -dc "${ARCHIVE}" | docker load
+          docker images
+          if [ -z "${IMAGE_LOCAL:-}" ]; then
+            IMAGE_LOCAL="$(docker images --format '{{.Repository}}:{{.Tag}}' "${IMAGE_NAME}" \
+              | grep -vE ':(latest|<none>)$' | head -n 1 || true)"
+          fi
+          if [ -z "${IMAGE_LOCAL:-}" ]; then
+            echo "::error::Could not determine IMAGE_LOCAL after docker load. ${IMAGE_META} missing?"
+            exit 1
+          fi
           IMAGE_LOCAL="${IMAGE_LOCAL,,}"
-          TAR="${GITHUB_WORKSPACE}/${IMAGE_TAR}"
-          gzip -dc "${TAR}" | docker load
-          docker network create dastnet
+          echo "Using IMAGE_LOCAL=${IMAGE_LOCAL}"
+
+          docker network inspect dastnet >/dev/null 2>&1 || docker network create dastnet
+          docker rm -f dast-app >/dev/null 2>&1 || true
           docker run -d --name dast-app --network dastnet --network-alias dast-app \
             -p 8000:8000 \
             -e SOURCE_HOST=sor.example.test \
@@ -1134,7 +1181,7 @@ jobs:
           chmod 777 "${GITHUB_WORKSPACE}/dast-reports"
 
       - name: OWASP ZAP baseline
-        if: always()
+        if: ${{ always() && steps.start-dast.outcome == 'success' }}
         run: |
           set -euo pipefail
           REPORTS="${GITHUB_WORKSPACE}/dast-reports"
@@ -1160,7 +1207,7 @@ jobs:
           fi
 
       - name: Dastardly
-        if: always()
+        if: ${{ always() && steps.start-dast.outcome == 'success' }}
         run: |
           set -euo pipefail
           REPORTS="${GITHUB_WORKSPACE}/dast-reports"
@@ -1185,7 +1232,7 @@ jobs:
           fi
 
       - name: Nuclei (report-only)
-        if: always()
+        if: ${{ always() && steps.start-dast.outcome == 'success' }}
         continue-on-error: true
         run: |
           set -euo pipefail
@@ -1199,6 +1246,593 @@ jobs:
           if [ ! -f "${REPORTS}/nuclei.jsonl" ]; then
             touch "${REPORTS}/nuclei.jsonl"
           fi
+
+      # Combined human-readable DAST PDF. Keep in sync with
+      # heavy-rental-project-pipeline-development/scripts/combine-dast-report.py
+      # Download: Summary → Artifacts (`dast-combined-report-pdf`), job summary link,
+      # or the GitHub Release asset.
+      - name: Install reportlab (combined DAST PDF)
+        if: always()
+        run: pip install --quiet reportlab
+
+      - name: Combine DAST reports into PDF
+        if: always()
+        env:
+          COMBINED_PDF_TITLE: Heavy Rental Haystack FastAPI — Combined DAST report
+        run: |
+          set -euo pipefail
+          REPORT_DIR="${GITHUB_WORKSPACE}/dast-reports"
+          mkdir -p "${REPORT_DIR}"
+          cat > "${REPORT_DIR}/combine-dast-report.py" << 'COMBINE_DAST_REPORT_PY'
+          #!/usr/bin/env python3
+          """Combine Release DAST tool outputs into one PDF.
+          
+          Keep this file in sync with the heredoc in each Release CI
+          ``release-pipeline.yml`` DAST job.
+          
+          Supported inputs (all optional):
+            - zap.json (OWASP ZAP baseline)
+            - dastardly-report.xml (Dastardly JUnit XML)
+            - nuclei.jsonl (Nuclei)
+            - mobsf-report.json (MobSF)
+          
+          Request bodies, ZAP evidence, and SARIF-style snippets are never copied
+          into the PDF (scanner hits can echo credentials).
+          """
+          
+          from __future__ import annotations
+          
+          import argparse
+          import json
+          import re
+          import sys
+          from collections import Counter
+          from dataclasses import dataclass, field
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from xml.etree import ElementTree
+          from xml.sax.saxutils import escape as xml_escape
+          
+          from reportlab.lib import colors
+          from reportlab.lib.pagesizes import letter
+          from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+          from reportlab.lib.units import inch
+          from reportlab.platypus import (
+              PageBreak,
+              Paragraph,
+              SimpleDocTemplate,
+              Spacer,
+              Table,
+              TableStyle,
+          )
+          
+          MAX_MESSAGE = 400
+          MAX_FINDINGS_PER_TOOL = 200
+          SKIP_NAMES = {
+              "combined-dast-report.pdf",
+              "combine-dast-report.py",
+              "INDEX.md",
+              "zap.html",
+              "zap.md",
+              "mobsf-upload.json",
+              "mobsf-scan.json",
+              "mobsf-report.pdf",
+          }
+          HTML_TAG_RE = re.compile(r"<[^>]+>")
+          ZAP_RISK = {"0": "info", "1": "low", "2": "medium", "3": "high", "4": "critical"}
+          
+          
+          @dataclass
+          class Finding:
+              rule_id: str
+              level: str
+              location: str
+              message: str
+          
+          
+          @dataclass
+          class ToolReport:
+              name: str
+              source_file: str
+              present: bool
+              findings: list[Finding] = field(default_factory=list)
+              note: str = ""
+          
+          
+          def pdf_safe(text: str) -> str:
+              raw = "" if text is None else str(text)
+              raw = raw.replace("\r\n", "\n").replace("\r", "\n")
+              raw = raw.encode("latin-1", "replace").decode("latin-1")
+              return xml_escape(raw)
+          
+          
+          def truncate(text: str, limit: int = MAX_MESSAGE) -> str:
+              text = " ".join((text or "").split())
+              if len(text) <= limit:
+                  return text
+              return text[: limit - 1] + "…"
+          
+          
+          def strip_html(text: str) -> str:
+              return HTML_TAG_RE.sub(" ", text or "")
+          
+          
+          def _unreadable(path: Path, name: str, exc: Exception) -> ToolReport:
+              return ToolReport(
+                  name=name,
+                  source_file=path.name,
+                  present=True,
+                  note=f"Could not parse {path.name}: {exc}",
+              )
+          
+          
+          def _placeholder_note(path: Path, prefix: str) -> str | None:
+              try:
+                  text = path.read_text(encoding="utf-8", errors="replace")
+              except OSError:
+                  return None
+              stripped = text.strip()
+              if stripped.startswith(prefix) or stripped.startswith("ZAP did not write"):
+                  return truncate(stripped, 200)
+              return None
+          
+          
+          def parse_zap(path: Path) -> ToolReport:
+              note = _placeholder_note(path, "ZAP did not write")
+              if note:
+                  return ToolReport(name="OWASP ZAP", source_file=path.name, present=True, note=note)
+              try:
+                  data = json.loads(path.read_text(encoding="utf-8") or "{}")
+              except (OSError, json.JSONDecodeError) as exc:
+                  return _unreadable(path, "OWASP ZAP", exc)
+              if not isinstance(data, dict):
+                  return ToolReport(
+                      name="OWASP ZAP",
+                      source_file=path.name,
+                      present=True,
+                      note="ZAP JSON was not an object.",
+                  )
+              findings: list[Finding] = []
+              for site in data.get("site") or []:
+                  if not isinstance(site, dict):
+                      continue
+                  site_name = site.get("@name") or site.get("name") or ""
+                  for alert in site.get("alerts") or []:
+                      if not isinstance(alert, dict):
+                          continue
+                      riskcode = str(alert.get("riskcode") or "")
+                      level = (alert.get("riskdesc") or ZAP_RISK.get(riskcode) or "warning").split()[0].lower()
+                      name = alert.get("alert") or alert.get("name") or "alert"
+                      instances = alert.get("instances") or []
+                      uri = site_name or "—"
+                      if instances and isinstance(instances[0], dict):
+                          uri = instances[0].get("uri") or uri
+                      desc = truncate(strip_html(str(alert.get("desc") or "")))
+                      findings.append(
+                          Finding(
+                              rule_id=str(alert.get("pluginid") or alert.get("alertRef") or name),
+                              level=level or "warning",
+                              location=str(uri),
+                              message=desc or truncate(str(name)),
+                          )
+                      )
+              return ToolReport(name="OWASP ZAP", source_file=path.name, present=True, findings=findings)
+          
+          
+          def parse_dastardly(path: Path) -> ToolReport:
+              try:
+                  text = path.read_text(encoding="utf-8")
+              except OSError as exc:
+                  return _unreadable(path, "Dastardly", exc)
+              stripped = text.strip()
+              if stripped in {"<testsuites name=\"dastardly\"/>", "<testsuites name='dastardly'/>"}:
+                  return ToolReport(
+                      name="Dastardly",
+                      source_file=path.name,
+                      present=True,
+                      note="Placeholder empty Dastardly report (scanner did not write XML).",
+                  )
+              try:
+                  root = ElementTree.fromstring(text)
+              except ElementTree.ParseError as exc:
+                  return _unreadable(path, "Dastardly", exc)
+              findings: list[Finding] = []
+              for case in root.iter("testcase"):
+                  name = case.get("name") or case.get("classname") or "testcase"
+                  location = case.get("classname") or "—"
+                  for child in list(case):
+                      tag = child.tag.split("}", 1)[-1]
+                      if tag not in {"failure", "error"}:
+                          continue
+                      msg = child.get("message") or ""
+                      findings.append(
+                          Finding(
+                              rule_id=str(name),
+                              level="high" if tag == "failure" else "error",
+                              location=str(location),
+                              message=truncate(msg or (child.text or tag)),
+                          )
+                      )
+              return ToolReport(name="Dastardly", source_file=path.name, present=True, findings=findings)
+          
+          
+          def parse_nuclei(path: Path) -> ToolReport:
+              try:
+                  text = path.read_text(encoding="utf-8")
+              except OSError as exc:
+                  return _unreadable(path, "Nuclei", exc)
+              findings: list[Finding] = []
+              notes: list[str] = []
+              for line_no, raw in enumerate(text.splitlines(), start=1):
+                  line = raw.strip()
+                  if not line:
+                      continue
+                  try:
+                      row = json.loads(line)
+                  except json.JSONDecodeError as exc:
+                      notes.append(f"line {line_no}: {exc}")
+                      continue
+                  if not isinstance(row, dict):
+                      continue
+                  info = row.get("info") if isinstance(row.get("info"), dict) else {}
+                  name = info.get("name") or row.get("template-id") or row.get("template_id") or "nuclei"
+                  level = str(info.get("severity") or "info").lower()
+                  location = str(row.get("matched-at") or row.get("matched_at") or row.get("host") or "—")
+                  desc = info.get("description") or name
+                  findings.append(
+                      Finding(
+                          rule_id=str(row.get("template-id") or row.get("template_id") or name),
+                          level=level,
+                          location=location,
+                          message=truncate(str(desc)),
+                      )
+                  )
+              note = ""
+              if notes:
+                  note = truncate("; ".join(notes[:5]))
+              return ToolReport(
+                  name="Nuclei",
+                  source_file=path.name,
+                  present=True,
+                  findings=findings,
+                  note=note,
+              )
+          
+          
+          def _mobsf_finding(rule_id: str, level: str, location: str, message: str) -> Finding:
+              return Finding(
+                  rule_id=truncate(str(rule_id), 80),
+                  level=(level or "warning").lower(),
+                  location=truncate(str(location or "—"), 120),
+                  message=truncate(str(message)),
+              )
+          
+          
+          def _walk_mobsf_list(items: object, default_level: str, location: str) -> list[Finding]:
+              findings: list[Finding] = []
+              if not isinstance(items, list):
+                  return findings
+              for item in items:
+                  if isinstance(item, str):
+                      findings.append(_mobsf_finding(item, default_level, location, item))
+                  elif isinstance(item, (list, tuple)) and item:
+                      level = default_level
+                      msg = item[-1] if len(item) > 1 else item[0]
+                      if len(item) >= 2 and isinstance(item[0], str):
+                          level = str(item[0])
+                      rule = item[1] if len(item) > 1 else item[0]
+                      findings.append(_mobsf_finding(str(rule), level, location, str(msg)))
+                  elif isinstance(item, dict):
+                      level = str(
+                          item.get("severity")
+                          or item.get("level")
+                          or item.get("stat")
+                          or default_level
+                      )
+                      title = item.get("title") or item.get("rule") or item.get("name") or "finding"
+                      desc = item.get("description") or item.get("desc") or title
+                      loc = item.get("file") or item.get("path") or location
+                      findings.append(_mobsf_finding(str(title), level, str(loc), str(desc)))
+              return findings
+          
+          
+          def parse_mobsf(path: Path) -> ToolReport:
+              try:
+                  data = json.loads(path.read_text(encoding="utf-8") or "{}")
+              except (OSError, json.JSONDecodeError) as exc:
+                  return _unreadable(path, "MobSF", exc)
+              if not isinstance(data, dict):
+                  return ToolReport(
+                      name="MobSF",
+                      source_file=path.name,
+                      present=True,
+                      note="MobSF JSON was not an object.",
+                  )
+              if data.get("error") and len(data) <= 2:
+                  return ToolReport(
+                      name="MobSF",
+                      source_file=path.name,
+                      present=True,
+                      note=truncate(str(data.get("error"))),
+                  )
+              findings: list[Finding] = []
+              for key, level in (("high", "high"), ("warning", "warning"), ("info", "info")):
+                  findings.extend(_walk_mobsf_list(data.get(key), level, key))
+              cert = data.get("certificate_analysis")
+              if isinstance(cert, dict):
+                  findings.extend(
+                      _walk_mobsf_list(cert.get("certificate_findings"), "warning", "certificate")
+                  )
+              manifest = data.get("manifest_analysis")
+              if isinstance(manifest, dict):
+                  findings.extend(
+                      _walk_mobsf_list(manifest.get("manifest_findings"), "warning", "manifest")
+                  )
+              network = data.get("network_security")
+              if isinstance(network, dict):
+                  findings.extend(
+                      _walk_mobsf_list(network.get("network_findings"), "warning", "network")
+                  )
+              code = data.get("code_analysis")
+              if isinstance(code, dict):
+                  code_findings = code.get("findings")
+                  if isinstance(code_findings, dict):
+                      for rule_id, body in code_findings.items():
+                          if not isinstance(body, dict):
+                              continue
+                          meta = body.get("metadata") if isinstance(body.get("metadata"), dict) else {}
+                          level = str(meta.get("severity") or "info")
+                          desc = meta.get("description") or rule_id
+                          files = body.get("files")
+                          loc = "code"
+                          if isinstance(files, dict) and files:
+                              loc = next(iter(files))
+                          findings.append(_mobsf_finding(str(rule_id), level, str(loc), str(desc)))
+              return ToolReport(name="MobSF", source_file=path.name, present=True, findings=findings)
+          
+          
+          PARSERS = {
+              "zap.json": parse_zap,
+              "dastardly-report.xml": parse_dastardly,
+              "nuclei.jsonl": parse_nuclei,
+              "mobsf-report.json": parse_mobsf,
+          }
+          
+          
+          def collect_reports(input_dir: Path) -> list[ToolReport]:
+              reports: list[ToolReport] = []
+              if not input_dir.is_dir():
+                  return reports
+              for filename, parser in PARSERS.items():
+                  path = input_dir / filename
+                  if path.is_file():
+                      reports.append(parser(path))
+              return reports
+          
+          
+          def level_counts(findings: list[Finding]) -> str:
+              counts = Counter(f.level for f in findings)
+              if not findings:
+                  return "0"
+              order = ["critical", "high", "medium", "low", "error", "warning", "info", "note", "none"]
+              parts = [f"{lvl}={counts[lvl]}" for lvl in order if counts.get(lvl)]
+              extra = sorted(k for k in counts if k not in order)
+              parts.extend(f"{lvl}={counts[lvl]}" for lvl in extra)
+              return f"{len(findings)} ({', '.join(parts)})"
+          
+          
+          def _styles() -> dict:
+              styles = getSampleStyleSheet()
+              styles.add(
+                  ParagraphStyle(
+                      name="Meta",
+                      parent=styles["Normal"],
+                      fontName="Helvetica",
+                      fontSize=9,
+                      leading=12,
+                      textColor=colors.HexColor("#333333"),
+                  )
+              )
+              styles.add(
+                  ParagraphStyle(
+                      name="Cell",
+                      parent=styles["Normal"],
+                      fontName="Helvetica",
+                      fontSize=8,
+                      leading=10,
+                  )
+              )
+              styles.add(
+                  ParagraphStyle(
+                      name="CellHead",
+                      parent=styles["Normal"],
+                      fontName="Helvetica-Bold",
+                      fontSize=8,
+                      leading=10,
+                  )
+              )
+              return styles
+          
+          
+          def _table(rows: list[list], col_widths: list[float]) -> Table:
+              table = Table(rows, colWidths=col_widths, repeatRows=1)
+              table.setStyle(
+                  TableStyle(
+                      [
+                          ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+                          ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8eef4")),
+                          ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                          ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                          ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                          ("TOPPADDING", (0, 0), (-1, -1), 3),
+                          ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                      ]
+                  )
+              )
+              return table
+          
+          
+          def build_story(reports: list[ToolReport], args: argparse.Namespace) -> list:
+              styles = _styles()
+              cell, head = styles["Cell"], styles["CellHead"]
+              story: list = [
+                  Paragraph(pdf_safe(args.title), styles["Title"]),
+                  Spacer(1, 8),
+                  Paragraph(f"<b>Repository:</b> {pdf_safe(args.repo)}", styles["Meta"]),
+                  Paragraph(f"<b>Commit:</b> {pdf_safe(args.sha)}", styles["Meta"]),
+                  Paragraph(f"<b>Workflow run:</b> {pdf_safe(args.run_url)}", styles["Meta"]),
+                  Paragraph(
+                      f"<b>Generated (UTC):</b> {pdf_safe(datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%SZ'))}",
+                      styles["Meta"],
+                  ),
+                  Paragraph(
+                      "Machine-readable DAST outputs remain in this artifact (ZAP JSON/HTML, "
+                      "Dastardly XML, Nuclei JSONL, MobSF JSON). This PDF is a human download. "
+                      "Request bodies and scanner evidence snippets are omitted.",
+                      styles["Meta"],
+                  ),
+                  Spacer(1, 14),
+                  Paragraph("Summary", styles["Heading1"]),
+              ]
+              usable = 7.5 * inch
+              if not reports:
+                  story.append(Paragraph("No DAST scanner outputs were produced in dast-reports/.", styles["Normal"]))
+                  return story
+          
+              summary_rows = [[
+                  Paragraph("Tool", head),
+                  Paragraph("File", head),
+                  Paragraph("Present", head),
+                  Paragraph("Findings", head),
+              ]]
+              for report in reports:
+                  summary_rows.append([
+                      Paragraph(pdf_safe(report.name), cell),
+                      Paragraph(pdf_safe(report.source_file), cell),
+                      Paragraph("yes" if report.present else "no", cell),
+                      Paragraph(pdf_safe(level_counts(report.findings)), cell),
+                  ])
+              story.append(_table(summary_rows, [1.6 * inch, 2.0 * inch, 0.8 * inch, usable - 4.4 * inch]))
+              story.append(Spacer(1, 12))
+          
+              for index, report in enumerate(reports):
+                  if index:
+                      story.append(PageBreak())
+                  story.append(Paragraph(pdf_safe(f"{report.name} ({report.source_file})"), styles["Heading1"]))
+                  if report.note:
+                      story.append(Paragraph(pdf_safe(report.note), styles["Normal"]))
+                  if not report.findings:
+                      story.append(Paragraph("No findings in this report.", styles["Normal"]))
+                      continue
+                  shown = report.findings[:MAX_FINDINGS_PER_TOOL]
+                  omitted = len(report.findings) - len(shown)
+                  rows = [[
+                      Paragraph("Level", head),
+                      Paragraph("Rule", head),
+                      Paragraph("Location", head),
+                      Paragraph("Message", head),
+                  ]]
+                  for finding in shown:
+                      rows.append([
+                          Paragraph(pdf_safe(finding.level), cell),
+                          Paragraph(pdf_safe(finding.rule_id), cell),
+                          Paragraph(pdf_safe(finding.location), cell),
+                          Paragraph(pdf_safe(finding.message).replace("\n", "<br/>"), cell),
+                      ])
+                  story.append(
+                      _table(rows, [0.8 * inch, 1.6 * inch, 2.0 * inch, usable - 4.4 * inch])
+                  )
+                  if omitted > 0:
+                      story.append(Spacer(1, 6))
+                      story.append(
+                          Paragraph(pdf_safe(f"… and {omitted} more finding(s) not listed."), styles["Meta"])
+                      )
+              return story
+          
+          
+          def add_page_number(canvas, doc) -> None:
+              canvas.saveState()
+              canvas.setFont("Helvetica", 8)
+              canvas.setFillColor(colors.HexColor("#555555"))
+              canvas.drawString(0.75 * inch, 0.45 * inch, "Combined DAST report")
+              canvas.drawRightString(letter[0] - 0.75 * inch, 0.45 * inch, f"Page {doc.page}")
+              canvas.restoreState()
+          
+          
+          def write_pdf(reports: list[ToolReport], args: argparse.Namespace) -> None:
+              output = Path(args.output)
+              output.parent.mkdir(parents=True, exist_ok=True)
+              doc = SimpleDocTemplate(
+                  str(output),
+                  pagesize=letter,
+                  leftMargin=0.75 * inch,
+                  rightMargin=0.75 * inch,
+                  topMargin=0.7 * inch,
+                  bottomMargin=0.7 * inch,
+                  title=args.title,
+                  author="Heavy Rental Release CI",
+              )
+              doc.build(build_story(reports, args), onFirstPage=add_page_number, onLaterPages=add_page_number)
+          
+          
+          def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+              parser = argparse.ArgumentParser(description=__doc__)
+              parser.add_argument("--input-dir", required=True)
+              parser.add_argument("--output", required=True)
+              parser.add_argument("--title", default="Combined DAST report")
+              parser.add_argument("--repo", default="")
+              parser.add_argument("--sha", default="")
+              parser.add_argument("--run-url", default="")
+              return parser.parse_args(argv)
+          
+          
+          def main(argv: list[str] | None = None) -> int:
+              args = parse_args(argv)
+              reports = collect_reports(Path(args.input_dir))
+              write_pdf(reports, args)
+              output = Path(args.output)
+              if not output.is_file() or output.stat().st_size == 0:
+                  print(f"error: PDF was not written: {output}", file=sys.stderr)
+                  return 1
+              print(f"Wrote {output} ({output.stat().st_size} bytes, {len(reports)} report(s))")
+              return 0
+          
+          
+          if __name__ == "__main__":
+              raise SystemExit(main())
+          COMBINE_DAST_REPORT_PY
+          python3 "${REPORT_DIR}/combine-dast-report.py" \
+            --input-dir "${REPORT_DIR}" \
+            --output "${REPORT_DIR}/combined-dast-report.pdf" \
+            --title "${COMBINED_PDF_TITLE}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --sha "${GITHUB_SHA}" \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          test -s "${REPORT_DIR}/combined-dast-report.pdf"
+
+      - name: Upload combined DAST report (PDF)
+        if: always() && hashFiles('dast-reports/combined-dast-report.pdf') != ''
+        id: upload-dast-pdf
+        uses: actions/upload-artifact@v4
+        with:
+          name: dast-combined-report-pdf
+          path: dast-reports/combined-dast-report.pdf
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Publish DAST PDF download
+        if: always() && steps.upload-dast-pdf.outputs.artifact-url != ''
+        env:
+          PDF_URL: ${{ steps.upload-dast-pdf.outputs.artifact-url }}
+        run: |
+          {
+            echo "### Combined DAST report (PDF)"
+            echo ""
+            echo "Download: [combined-dast-report.pdf](${PDF_URL})"
+            echo ""
+            echo "Artifact: \`dast-combined-report-pdf\` (also inside the DAST reports artifact)."
+            echo "On this run: Summary → Artifacts. Also attached to the GitHub Release."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Index DAST reports
         if: always()
@@ -1259,11 +1893,26 @@ jobs:
           path: ${{ github.workspace }}/release-dast
 
       - name: Load image
-        env:
-          IMAGE_TAR: ${{ needs.packaging.outputs.image_tar }}
         run: |
           set -euo pipefail
-          gzip -dc "${GITHUB_WORKSPACE}/${IMAGE_TAR}" | docker load
+          META="${GITHUB_WORKSPACE}/${IMAGE_META}"
+          ARCHIVE="${GITHUB_WORKSPACE}/${IMAGE_ARCHIVE}"
+          if [ -f "${META}" ]; then
+            set -a
+            # shellcheck disable=SC1090
+            . "${META}"
+            set +a
+          fi
+          if [ ! -f "${ARCHIVE}" ]; then
+            ARCHIVE="$(find "${GITHUB_WORKSPACE}" -maxdepth 2 -type f -name '*.tar.gz' | head -n 1 || true)"
+          fi
+          if [ -z "${ARCHIVE}" ] || [ ! -f "${ARCHIVE}" ]; then
+            echo "::error::Docker image archive not found after downloading haystack-fast-api-release-docker-image."
+            ls -la "${GITHUB_WORKSPACE}" || true
+            exit 1
+          fi
+          echo "Loading ${ARCHIVE} ($(wc -c < "${ARCHIVE}") bytes)"
+          gzip -dc "${ARCHIVE}" | docker load
           docker images
 
       - name: Login to GitHub Container Registry
@@ -1278,11 +1927,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPOSITORY_OWNER: ${{ github.repository_owner }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
-          IMAGE_TAG: ${{ needs.packaging.outputs.image_tag }}
-          IMAGE_REMOTE: ${{ needs.packaging.outputs.image_remote }}
-          IMAGE_REMOTE_LATEST: ${{ needs.packaging.outputs.image_remote_latest }}
         run: |
           set -euo pipefail
+          META="${GITHUB_WORKSPACE}/${IMAGE_META}"
+          if [ -f "${META}" ]; then
+            set -a
+            # shellcheck disable=SC1090
+            . "${META}"
+            set +a
+          fi
+          if [ -z "${IMAGE_REMOTE:-}" ] || [ -z "${IMAGE_REMOTE_LATEST:-}" ] || [ -z "${IMAGE_TAG:-}" ]; then
+            echo "::error::IMAGE_REMOTE/IMAGE_TAG missing. Expected ${IMAGE_META} in haystack-fast-api-release-docker-image."
+            cat "${META}" || true
+            exit 1
+          fi
           IMAGE_REMOTE="${IMAGE_REMOTE,,}"
           IMAGE_REMOTE_LATEST="${IMAGE_REMOTE_LATEST,,}"
           OWNER="${GH_REPOSITORY_OWNER}"
@@ -1306,30 +1964,52 @@ jobs:
           docker push "${IMAGE_REMOTE_LATEST}"
           echo "Pushed ${IMAGE_REMOTE} and ${IMAGE_REMOTE_LATEST}"
 
-          BODY='{"visibility":"public"}'
+          # GitHub has no public REST endpoint to change package visibility
+          # (POST .../visibility is not in the Packages API and returns 404).
+          # Read current visibility; if it is already public, continue. Otherwise
+          # warn with the UI path and do not fail — the image is already on GHCR.
+          PKG_HTML="https://github.com/orgs/${OWNER}/packages/container/${PKG}/settings"
+          VISIBILITY=""
           set +e
-          echo "${BODY}" | gh api --method POST "/orgs/${OWNER}/packages/container/${PKG}/visibility" --input -
-          ORG_RC=$?
-          if [ "${ORG_RC}" -ne 0 ]; then
-            echo "${BODY}" | gh api --method POST "/users/${OWNER}/packages/container/${PKG}/visibility" --input -
-            USER_RC=$?
-            if [ "${USER_RC}" -ne 0 ]; then
-              echo "::error::Could not set GHCR package ${PKG} visibility to public. Enable public packages on the org."
-              exit 1
-            fi
+          VISIBILITY="$(gh api "/orgs/${OWNER}/packages/container/${PKG}" --jq '.visibility' 2>/dev/null)"
+          if [ -z "${VISIBILITY}" ]; then
+            VISIBILITY="$(gh api "/users/${OWNER}/packages/container/${PKG}" --jq '.visibility' 2>/dev/null)"
+            PKG_HTML="https://github.com/users/${OWNER}/packages/container/${PKG}/settings"
           fi
           set -e
-          echo "Package visibility set to public."
+          if [ "${VISIBILITY}" = "public" ]; then
+            echo "GHCR package ${PKG} is already public."
+          else
+            echo "::warning::GHCR package '${PKG}' visibility is '${VISIBILITY:-unknown}'. GITHUB_TOKEN cannot change it (no Packages visibility API). Image tags were still pushed."
+            echo "Make it public once (org owners): ${PKG_HTML} → Danger Zone → Change visibility → Public."
+            echo "Also enable org Package Creation → Public: https://github.com/organizations/${OWNER}/settings/packages"
+            {
+              echo "### GHCR visibility"
+              echo ""
+              echo "Pushed \`${IMAGE_REMOTE}\` and \`${IMAGE_REMOTE_LATEST}\`."
+              echo "Package visibility is **${VISIBILITY:-unknown}** (not flipped by this job)."
+              echo "One-time UI: [package settings](${PKG_HTML}) → Danger Zone → Public."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Create GitHub Release on master
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ needs.integration.outputs.app_repository }}
-          IMAGE_TAG: ${{ needs.packaging.outputs.image_tag }}
-          IMAGE_REMOTE: ${{ needs.packaging.outputs.image_remote }}
-          IMAGE_REMOTE_LATEST: ${{ needs.packaging.outputs.image_remote_latest }}
         run: |
           set -euo pipefail
+          META="${GITHUB_WORKSPACE}/${IMAGE_META}"
+          if [ -f "${META}" ]; then
+            set -a
+            # shellcheck disable=SC1090
+            . "${META}"
+            set +a
+          fi
+          if [ -z "${IMAGE_TAG:-}" ] || [ -z "${IMAGE_REMOTE:-}" ]; then
+            echo "::error::IMAGE_TAG/IMAGE_REMOTE missing. Expected ${IMAGE_META} in haystack-fast-api-release-docker-image."
+            cat "${META}" || true
+            exit 1
+          fi
           TAG="v${IMAGE_TAG}"
           NOTES="$(
             printf '%s\n' \
@@ -1339,7 +2019,8 @@ jobs:
               "- \`docker pull ${IMAGE_REMOTE}\`" \
               "- \`docker pull ${IMAGE_REMOTE_LATEST}\`" \
               "" \
-              "DAST: OWASP ZAP baseline + Dastardly (gate) and Nuclei (report-only)."
+              "DAST: OWASP ZAP baseline + Dastardly (gate) and Nuclei (report-only)." \
+              "Combined DAST PDF: \`combined-dast-report.pdf\` (artifact \`dast-combined-report-pdf\`)."
           )"
           mapfile -t ATTACH < <(find "${GITHUB_WORKSPACE}/release-package" "${GITHUB_WORKSPACE}/release-dast" -type f 2>/dev/null | sort)
           gh release create "${TAG}" \

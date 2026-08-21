@@ -2,10 +2,10 @@
 # Install into: haystack-fast-api
 # Path:         .github/workflows/haystack-cd-academy.yml
 # =============================================================================
-# Reusable only. Sole caller: haystack-cd-academy-caller.yml
+# Reusable. Callers: haystack-cd-academy-caller.yml and haystack-cd-paid-caller.yml
 # =============================================================================
 
-name: Haystack CD Academy pipeline
+name: Haystack CD pipeline
 
 on:
   workflow_call:
@@ -39,24 +39,27 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   assert-lab:
-    name: Assert Vocareum session
+    name: Assert AWS profile
     runs-on: ubuntu-latest
     environment: ${{ inputs.aws_environment }}
     timeout-minutes: 5
     outputs:
       account_id: ${{ steps.sts.outputs.account_id }}
       bucket: ${{ steps.sts.outputs.bucket }}
+      ssm_bucket: ${{ steps.sts.outputs.ssm_bucket }}
+      deployment: ${{ steps.sts.outputs.deployment }}
     steps:
-      - name: Refuse paid Environment
+      - name: Assert academy or AWS_ACTUAL
         env:
           ENV_NAME: ${{ inputs.aws_environment }}
         run: |
           set -euo pipefail
-          if [ "${ENV_NAME}" != "academy" ]; then
-            echo "::error::This workflow is AWS Academy / Vocareum only. Use Environment academy (got '${ENV_NAME}')."
+          if [ "${ENV_NAME}" != "academy" ] && [ "${ENV_NAME}" != "AWS_ACTUAL" ]; then
+            echo "::error::aws_environment must be academy or AWS_ACTUAL (got '${ENV_NAME}')."
             exit 1
           fi
 
@@ -64,28 +67,34 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/resolve-vocareum-aws
+      - uses: ./.github/actions/resolve-aws-profile
         with:
+          profile: ${{ inputs.aws_environment }}
+          aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
           aws_access_key_id: ${{ inputs.aws_access_key_id || secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_access_key: ${{ inputs.aws_secret_access_key || secrets.AWS_SECRET_ACCESS_KEY }}
           aws_session_token: ${{ inputs.aws_session_token || secrets.AWS_SESSION_TOKEN }}
-          aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          aws_role_to_assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
 
-      - name: Prove the Vocareum session is live
+      - name: Prove the AWS session is live
         id: sts
         env:
           ACTION: ${{ inputs.action }}
+          PROFILE: ${{ inputs.aws_environment }}
+          DEPLOYMENT: ${{ inputs.aws_environment == 'AWS_ACTUAL' && 'actual' || 'academy' }}
         run: |
           set -euo pipefail
           if ! ARN=$(aws sts get-caller-identity --query Arn --output text); then
-            echo "::error::sts failed. Start Lab and paste a fresh session token."
+            echo "::error::sts failed. Academy: Start Lab and paste a fresh session token. Paid: check AWS_ROLE_TO_ASSUME / OIDC."
             exit 1
           fi
           ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
           echo "account_id=${ACCOUNT}" >> "$GITHUB_OUTPUT"
-          echo "bucket=heavy-rental-tfstate-${ACCOUNT}-academy" >> "$GITHUB_OUTPUT"
+          echo "deployment=${DEPLOYMENT}" >> "$GITHUB_OUTPUT"
+          echo "bucket=heavy-rental-tfstate-${ACCOUNT}-${DEPLOYMENT}" >> "$GITHUB_OUTPUT"
+          echo "ssm_bucket=heavy-rental-ssm-${ACCOUNT}-${DEPLOYMENT}" >> "$GITHUB_OUTPUT"
           {
-            echo "### Vocareum / Academy"
+            echo "### AWS profile \`${PROFILE}\` (deployment \`${DEPLOYMENT}\`)"
             echo ""
             echo "Caller: \`${ARN}\`"
             echo "Account: \`${ACCOUNT}\`"
@@ -103,12 +112,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/resolve-vocareum-aws
+      - uses: ./.github/actions/resolve-aws-profile
         with:
+          profile: ${{ inputs.aws_environment }}
+          aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
           aws_access_key_id: ${{ inputs.aws_access_key_id || secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_access_key: ${{ inputs.aws_secret_access_key || secrets.AWS_SECRET_ACCESS_KEY }}
           aws_session_token: ${{ inputs.aws_session_token || secrets.AWS_SESSION_TOKEN }}
-          aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          aws_role_to_assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
 
       - name: asg-haystack InService + SSM Online + secret shell
         run: |
@@ -248,12 +259,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/resolve-vocareum-aws
+      - uses: ./.github/actions/resolve-aws-profile
         with:
+          profile: ${{ inputs.aws_environment }}
+          aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
           aws_access_key_id: ${{ inputs.aws_access_key_id || secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_access_key: ${{ inputs.aws_secret_access_key || secrets.AWS_SECRET_ACCESS_KEY }}
           aws_session_token: ${{ inputs.aws_session_token || secrets.AWS_SESSION_TOKEN }}
-          aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          aws_role_to_assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
 
       - name: Session Manager plugin
         run: |
@@ -280,6 +293,8 @@ jobs:
           IMAGE_HTTP_INPUT: ${{ inputs.image_http_url }}
           AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
           BUCKET: ${{ needs.assert-lab.outputs.bucket }}
+          SSM_BUCKET: ${{ needs.assert-lab.outputs.ssm_bucket }}
+          DEPLOYMENT: ${{ needs.assert-lab.outputs.deployment }}
           APP_NAME: ${{ vars.APP_NAME }}
           APP_ENV: ${{ vars.APP_ENV }}
           LOG_LEVEL: ${{ vars.LOG_LEVEL }}
@@ -313,6 +328,11 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x inventory/aws_ssm.py
+          if [ "${DEPLOYMENT}" = "actual" ]; then
+            ANSIBLE_S3="${SSM_BUCKET}"
+          else
+            ANSIBLE_S3="${BUCKET}"
+          fi
           if [ "${ACTION}" = "deploy" ]; then
             HAY="${RESOLVED_IMAGE:-}"
             HTTP_URL="${RESOLVED_HTTP:-}"
@@ -361,7 +381,7 @@ jobs:
             -e "haystack_image=${HAY}" \
             -e "image_http_url=${HTTP_URL}" \
             -e "aws_region=${AWS_REGION}" \
-            -e "ansible_aws_ssm_bucket_name=${BUCKET}" \
+            -e "ansible_aws_ssm_bucket_name=${ANSIBLE_S3}" \
             -e @haystack-profile-overlay.json
           {
             echo "### Ansible haystack"
@@ -388,12 +408,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/resolve-vocareum-aws
+      - uses: ./.github/actions/resolve-aws-profile
         with:
+          profile: ${{ inputs.aws_environment }}
+          aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
           aws_access_key_id: ${{ inputs.aws_access_key_id || secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_access_key: ${{ inputs.aws_secret_access_key || secrets.AWS_SECRET_ACCESS_KEY }}
           aws_session_token: ${{ inputs.aws_session_token || secrets.AWS_SESSION_TOKEN }}
-          aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          aws_role_to_assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
 
       - name: SSM GET :8000 on asg-haystack
         run: |

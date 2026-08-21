@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Dynamic inventory: InService asg-haystack guests only. Connection is SSM."""
-
 from __future__ import annotations
 
 import json
