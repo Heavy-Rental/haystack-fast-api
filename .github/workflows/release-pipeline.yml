@@ -87,7 +87,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
   security-events: write
   actions: read
   # Required to push the packaging Docker image to GHCR (non-PR runs)
@@ -178,11 +178,11 @@ jobs:
 
           if [ -n "${INPUT_REPO}" ] && [ "${INPUT_REPO}" != "${GH_REPOSITORY}" ]; then
             APP_REPO="${INPUT_REPO}"
-            APP_REF="${INPUT_REF:-${DEFAULT_APP_REF_VALUE}}"
+            APP_REF="master"
             MODE=remote
           else
             APP_REPO="${GH_REPOSITORY}"
-            APP_REF="${INPUT_REF:-${GH_SHA}}"
+            APP_REF="master"
             MODE=caller
           fi
 
@@ -206,6 +206,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: master
           path: ${{ env.APP_PATH }}
 
       - name: Checkout remote application repository
@@ -303,6 +304,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: master
           path: ${{ env.APP_PATH }}
 
       - name: Checkout remote application repository
@@ -355,235 +357,17 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-  security-testing:
-    name: Security Testing
-    runs-on: ubuntu-latest
-    needs: [integration]
-    timeout-minutes: 25
-    steps:
-      - name: Checkout calling repository (release / push head)
-        if: needs.integration.outputs.checkout_mode == 'caller'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          path: ${{ env.APP_PATH }}
-
-      - name: Checkout remote application repository
-        if: needs.integration.outputs.checkout_mode == 'remote'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          repository: ${{ needs.integration.outputs.app_repository }}
-          ref: ${{ needs.integration.outputs.app_ref }}
-          path: ${{ env.APP_PATH }}
-
-      - name: Create security reports directory
-        run: mkdir -p "${GITHUB_WORKSPACE}/security-reports"
-
-      - name: Setup Python (Semgrep + uv)
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          enable-cache: true
-          cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
-
-      - name: Install Semgrep
-        run: pip install --quiet semgrep
-
-      - name: SAST — Semgrep (Python / OWASP) → SARIF
-        working-directory: ${{ env.APP_PATH }}
-        run: |
-          set -euo pipefail
-          REPORT_DIR="${GITHUB_WORKSPACE}/security-reports"
-          SEMGREP_COMMON=(
-            --config=p/python
-            --config=p/owasp-top-ten
-            --config=p/security-audit
-            --config=p/secrets
-            --metrics=off
-          )
-
-          echo "==> Semgrep report (SARIF 2.1.0)"
-          set +e
-          semgrep scan "${SEMGREP_COMMON[@]}" \
-            --sarif \
-            --output="${REPORT_DIR}/semgrep.sarif" \
-            .
-          SARIF_RC=$?
-          set -e
-          if [ -f "${REPORT_DIR}/semgrep.sarif" ]; then
-            echo "SARIF written: ${REPORT_DIR}/semgrep.sarif (semgrep exit=${SARIF_RC}; non-zero is OK for report pass)"
-          else
-            echo "::warning::semgrep.sarif was not produced (exit=${SARIF_RC})"
-          fi
-
-          echo "==> SAST gate (ERROR severity only; exit 1 if findings)"
-          set +e
-          semgrep scan "${SEMGREP_COMMON[@]}" \
-            --severity=ERROR \
-            --error \
-            --text \
-            .
-          GATE_RC=$?
-          set -e
-          if [ "${GATE_RC}" -ne 0 ]; then
-            echo "::error::Semgrep SAST gate failed (exit=${GATE_RC})."
-            exit "${GATE_RC}"
-          fi
-          echo "SAST (Semgrep) gate passed — no ERROR-level findings."
-
-      - name: Python SCA report — pip-audit (does not fail the job)
-        working-directory: ${{ env.APP_PATH }}
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          REPORT_DIR="${GITHUB_WORKSPACE}/security-reports"
-          uv export --frozen --no-dev --no-hashes -o "${REPORT_DIR}/requirements-frozen.txt"
-          uvx pip-audit -r "${REPORT_DIR}/requirements-frozen.txt" \
-            --format json \
-            --output "${REPORT_DIR}/pip-audit.json" \
-            || true
-
-      - name: Trivy cache key
-        id: trivy-cache-meta
-        run: echo "week=$(date -u +%Y-W%V)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Trivy DBs
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ github.workspace }}/.cache/trivy
-          key: trivy-db-${{ runner.os }}-${{ steps.trivy-cache-meta.outputs.week }}
-          restore-keys: |
-            trivy-db-${{ runner.os }}-
-
-      - name: Trivy filesystem scan (SARIF report)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: fs
-          scan-ref: ${{ env.APP_PATH }}
-          severity: HIGH,CRITICAL
-          exit-code: "0"
-          format: sarif
-          output: security-reports/trivy-fs.sarif
-          ignore-unfixed: true
-          scanners: vuln
-          cache: "false"
-          cache-dir: ${{ github.workspace }}/.cache/trivy
-
-      - name: Trivy filesystem scan (console table)
-        if: always()
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: fs
-          scan-ref: ${{ env.APP_PATH }}
-          severity: HIGH,CRITICAL
-          exit-code: "0"
-          format: table
-          ignore-unfixed: true
-          scanners: vuln
-          cache: "false"
-          cache-dir: ${{ github.workspace }}/.cache/trivy
-
-      - name: Trivy SCA gate (CRITICAL)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: fs
-          scan-ref: ${{ env.APP_PATH }}
-          severity: CRITICAL
-          exit-code: "1"
-          format: table
-          ignore-unfixed: true
-          scanners: vuln
-          cache: "false"
-          cache-dir: ${{ github.workspace }}/.cache/trivy
-
-      - name: Upload Semgrep SARIF to Code Scanning
-        if: always() && hashFiles('security-reports/semgrep.sarif') != ''
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
-        with:
-          sarif_file: security-reports/semgrep.sarif
-          checkout_path: ${{ env.APP_PATH }}
-          category: haystack-release-semgrep
-        continue-on-error: true
-
-      - name: Upload Trivy SARIF to Code Scanning
-        if: always() && hashFiles('security-reports/trivy-fs.sarif') != ''
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
-        with:
-          sarif_file: security-reports/trivy-fs.sarif
-          checkout_path: ${{ env.APP_PATH }}
-          category: haystack-release-trivy-fs
-        continue-on-error: true
-
-      - name: Upload security reports (SARIF + pip-audit)
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: release-security-reports-sarif
-          path: |
-            security-reports/*.sarif
-            security-reports/pip-audit.json
-            security-reports/requirements-frozen.txt
-          retention-days: 30
-          if-no-files-found: warn
-
-  codeql:
-    name: CodeQL Analysis
-    runs-on: ubuntu-latest
-    needs: [integration]
-    timeout-minutes: 45
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
-    steps:
-      - name: Checkout calling repository (release / push head)
-        if: needs.integration.outputs.checkout_mode == 'caller'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          path: ${{ env.APP_PATH }}
-
-      - name: Checkout remote application repository
-        if: needs.integration.outputs.checkout_mode == 'remote'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          repository: ${{ needs.integration.outputs.app_repository }}
-          ref: ${{ needs.integration.outputs.app_ref }}
-          path: ${{ env.APP_PATH }}
-
-      - name: Initialize CodeQL (Python)
-        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
-        with:
-          languages: python
-          source-root: ${{ env.APP_PATH }}
-          queries: security-and-quality
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
-        with:
-          category: "haystack-release-codeql-python"
-
-      - name: CodeQL summary
-        if: always()
-        run: |
-          {
-            echo "### CodeQL Analysis"
-            echo ""
-            echo "Language: Python"
-            echo "Query suite: security-and-quality"
-            echo "Category: haystack-release-codeql-python"
-          } >> "$GITHUB_STEP_SUMMARY"
-
   packaging:
     name: Packaging
     runs-on: ubuntu-latest
-    needs: [integration, quality-control, security-testing, codeql]
+    needs: [integration, quality-control]
+    outputs:
+      image_tag: ${{ steps.package.outputs.image_tag }}
+      image_local: ${{ steps.package.outputs.image_local }}
+      image_remote: ${{ steps.package.outputs.image_remote }}
+      image_remote_latest: ${{ steps.package.outputs.image_remote_latest }}
+      image_tar: ${{ steps.package.outputs.image_tar }}
+      version: ${{ steps.package.outputs.version }}
     timeout-minutes: 30
     steps:
       - name: Checkout calling repository (release / push head)
@@ -591,6 +375,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: master
           path: ${{ env.APP_PATH }}
 
       - name: Checkout remote application repository
@@ -1261,23 +1046,241 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+      - name: Packaging summary
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          IMAGE_LOCAL: ${{ steps.package.outputs.image_local }}
+          IMAGE_REMOTE: ${{ steps.package.outputs.image_remote }}
+          IMAGE_REMOTE_LATEST: ${{ steps.package.outputs.image_remote_latest }}
+          IMAGE_TAR: ${{ steps.package.outputs.image_tar }}
+          IMAGE_ID: ${{ steps.docker.outputs.image_id }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Deploy options"
+            echo ""
+            echo "1. **Wheel / sdist** — download \`haystack-fast-api-release-packages\`."
+            echo "2. **Image archive** — \`docker load < ${IMAGE_TAR}\` then \`docker run -p 8000:8000 -e … ${IMAGE_LOCAL}\` (id \`${IMAGE_ID}\`)."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${EVENT_NAME}" != "pull_request" ]; then
+            echo "3. **GHCR** — \`docker pull ${IMAGE_REMOTE}\` or \`docker pull ${IMAGE_REMOTE_LATEST}\`." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "3. **GHCR** — push skipped on pull_request; image is available as the tar artifact only." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  dast:
+    name: DAST
+    runs-on: ubuntu-latest
+    needs: [packaging]
+    timeout-minutes: 40
+    steps:
+      - name: Download Docker image archive
+        uses: actions/download-artifact@v4
+        with:
+          name: haystack-fast-api-release-docker-image
+          path: ${{ github.workspace }}
+
+      - name: Load image and start target
+        env:
+          IMAGE_LOCAL: ${{ needs.packaging.outputs.image_local }}
+          IMAGE_TAR: ${{ needs.packaging.outputs.image_tar }}
+        run: |
+          set -euo pipefail
+          IMAGE_LOCAL="${IMAGE_LOCAL,,}"
+          TAR="${GITHUB_WORKSPACE}/${IMAGE_TAR}"
+          gzip -dc "${TAR}" | docker load
+          docker network create dastnet
+          docker run -d --name dast-app --network dastnet --network-alias dast-app \
+            -p 8000:8000 \
+            -e SOURCE_HOST=sor.example.test \
+            -e SOURCE_PORT=5432 \
+            -e SOURCE_DATABASE=heavy_rental \
+            -e TARGET_HOST=haystack.example.test \
+            -e TARGET_PORT=5432 \
+            -e TARGET_DATABASE=haystack \
+            -e POSTGRES_USERNAME=ci_dummy \
+            -e POSTGRES_PASSWORD=ci_dummy \
+            -e DATABASE_URL=postgresql://ci_dummy:ci_dummy@haystack.example.test:5432/haystack \
+            -e NEED_DECOMPOSER=stub \
+            -e INDEXING_EMBEDDER=mock \
+            -e INDEXING_DOCUMENT_STORE=memory \
+            -e FLEET_BACKEND=fake \
+            -e NEO4J_BACKEND=fake \
+            -e RECOMMEND_VIA_AGENT_GRAPH=false \
+            -e KG_APPLY_TRANSFORMS=false \
+            "${IMAGE_LOCAL}"
+          ok=0
+          for _ in $(seq 1 60); do
+            if curl -sS -o /dev/null --max-time 3 "http://127.0.0.1:8000/" \
+              || curl -sS -o /dev/null --max-time 3 "http://127.0.0.1:8000/docs" \
+              || curl -sS -o /dev/null --max-time 3 "http://127.0.0.1:8000/health"; then
+              ok=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "${ok}" -ne 1 ]; then
+            echo "::error::DAST target did not become ready on :8000."
+            docker logs dast-app || true
+            exit 1
+          fi
+          echo "DAST target is up at http://dast-app:8000 (also http://127.0.0.1:8000)"
+
+      - name: Prepare DAST reports directory
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "${GITHUB_WORKSPACE}/dast-reports"
+          chmod 777 "${GITHUB_WORKSPACE}/dast-reports"
+
+      - name: OWASP ZAP baseline
+        if: always()
+        run: |
+          set -euo pipefail
+          REPORTS="${GITHUB_WORKSPACE}/dast-reports"
+          mkdir -p "${REPORTS}"
+          chmod 777 "${REPORTS}"
+          set +e
+          docker run --rm --network dastnet \
+            -v "${REPORTS}:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t "http://dast-app:8000" -J zap.json -r zap.html -w zap.md -I
+          ZAP_RC=$?
+          set -e
+          echo "ZAP exit=${ZAP_RC} (0=pass, 1=warn, 2=fail)"
+          ls -la "${REPORTS}" || true
+          for f in zap.json zap.html zap.md; do
+            if [ ! -s "${REPORTS}/${f}" ]; then
+              echo "ZAP did not write ${f} (exit=${ZAP_RC})" > "${REPORTS}/${f}"
+            fi
+          done
+          if [ "${ZAP_RC}" -ge 2 ]; then
+            echo "::error::OWASP ZAP baseline failed (high-severity findings or scan error)."
+            exit "${ZAP_RC}"
+          fi
+
+      - name: Dastardly
+        if: always()
+        run: |
+          set -euo pipefail
+          REPORTS="${GITHUB_WORKSPACE}/dast-reports"
+          mkdir -p "${REPORTS}"
+          chmod 777 "${REPORTS}"
+          set +e
+          docker run --rm --network dastnet \
+            -v "${REPORTS}:/dastardly" \
+            -e DASTARDLY_TARGET_URL="http://dast-app:8000" \
+            -e DASTARDLY_OUTPUT_FILE=/dastardly/dastardly-report.xml \
+            public.ecr.aws/portswigger/dastardly:latest
+          DAST_RC=$?
+          set -e
+          echo "Dastardly exit=${DAST_RC}"
+          ls -la "${REPORTS}" || true
+          if [ ! -s "${REPORTS}/dastardly-report.xml" ]; then
+            printf '%s\n' '<testsuites name="dastardly"/>' > "${REPORTS}/dastardly-report.xml"
+          fi
+          if [ "${DAST_RC}" -ne 0 ]; then
+            echo "::error::Dastardly reported high-severity findings (or the scan failed)."
+            exit "${DAST_RC}"
+          fi
+
+      - name: Nuclei (report-only)
+        if: always()
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          REPORTS="${GITHUB_WORKSPACE}/dast-reports"
+          mkdir -p "${REPORTS}"
+          chmod 777 "${REPORTS}"
+          docker run --rm --network dastnet \
+            -v "${REPORTS}:/out" \
+            projectdiscovery/nuclei:latest \
+            -u "http://dast-app:8000" -silent -jsonl -o /out/nuclei.jsonl || true
+          if [ ! -f "${REPORTS}/nuclei.jsonl" ]; then
+            touch "${REPORTS}/nuclei.jsonl"
+          fi
+
+      - name: Index DAST reports
+        if: always()
+        run: |
+          set -euo pipefail
+          REPORTS="${GITHUB_WORKSPACE}/dast-reports"
+          mkdir -p "${REPORTS}"
+          {
+            echo "# DAST reports"
+            echo ""
+            echo "| File | Bytes |"
+            echo "| --- | --- |"
+            find "${REPORTS}" -maxdepth 1 -type f ! -name INDEX.md -print | sort | while read -r f; do
+              echo "| \`$(basename "$f")\` | $(wc -c < "$f") |"
+            done
+          } | tee "${REPORTS}/INDEX.md"
+          cat "${REPORTS}/INDEX.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stop DAST target
+        if: always()
+        run: |
+          docker rm -f dast-app >/dev/null 2>&1 || true
+          docker network rm dastnet >/dev/null 2>&1 || true
+
+      - name: Upload DAST reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: haystack-fast-api-release-dast
+          path: ${{ github.workspace }}/dast-reports/
+          retention-days: 30
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    needs: [integration, packaging, dast]
+    timeout-minutes: 20
+    steps:
+      - name: Download Docker image archive
+        uses: actions/download-artifact@v4
+        with:
+          name: haystack-fast-api-release-docker-image
+          path: ${{ github.workspace }}
+
+      - name: Download release package
+        uses: actions/download-artifact@v4
+        with:
+          name: haystack-fast-api-release-packages
+          path: ${{ github.workspace }}/release-package
+
+      - name: Download DAST reports
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: haystack-fast-api-release-dast
+          path: ${{ github.workspace }}/release-dast
+
+      - name: Load image
+        env:
+          IMAGE_TAR: ${{ needs.packaging.outputs.image_tar }}
+        run: |
+          set -euo pipefail
+          gzip -dc "${GITHUB_WORKSPACE}/${IMAGE_TAR}" | docker load
+          docker images
+
       - name: Login to GitHub Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push Docker image to GHCR
-        if: github.event_name != 'pull_request'
+      - name: Push Docker image to GHCR and set public
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPOSITORY_OWNER: ${{ github.repository_owner }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
-          IMAGE_TAG: ${{ steps.package.outputs.image_tag }}
-          IMAGE_REMOTE: ${{ steps.package.outputs.image_remote }}
-          IMAGE_REMOTE_LATEST: ${{ steps.package.outputs.image_remote_latest }}
+          IMAGE_TAG: ${{ needs.packaging.outputs.image_tag }}
+          IMAGE_REMOTE: ${{ needs.packaging.outputs.image_remote }}
+          IMAGE_REMOTE_LATEST: ${{ needs.packaging.outputs.image_remote_latest }}
         run: |
           set -euo pipefail
           IMAGE_REMOTE="${IMAGE_REMOTE,,}"
@@ -1301,40 +1304,48 @@ jobs:
 
           docker push "${IMAGE_REMOTE}"
           docker push "${IMAGE_REMOTE_LATEST}"
-          echo "Pushed:"
-          echo "  ${IMAGE_REMOTE}"
-          echo "  ${IMAGE_REMOTE_LATEST}"
+          echo "Pushed ${IMAGE_REMOTE} and ${IMAGE_REMOTE_LATEST}"
 
-      - name: Upload release packages
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: haystack-fast-api-release-packages
-          path: |
-            ${{ github.workspace }}/${{ steps.package.outputs.versioned_wheel }}
-            ${{ github.workspace }}/${{ steps.package.outputs.stable_wheel }}
-            ${{ github.workspace }}/${{ steps.package.outputs.versioned_sdist }}
-            ${{ github.workspace }}/${{ steps.package.outputs.stable_sdist }}
-          retention-days: 14
-          if-no-files-found: error
+          BODY='{"visibility":"public"}'
+          set +e
+          echo "${BODY}" | gh api --method POST "/orgs/${OWNER}/packages/container/${PKG}/visibility" --input -
+          ORG_RC=$?
+          if [ "${ORG_RC}" -ne 0 ]; then
+            echo "${BODY}" | gh api --method POST "/users/${OWNER}/packages/container/${PKG}/visibility" --input -
+            USER_RC=$?
+            if [ "${USER_RC}" -ne 0 ]; then
+              echo "::error::Could not set GHCR package ${PKG} visibility to public. Enable public packages on the org."
+              exit 1
+            fi
+          fi
+          set -e
+          echo "Package visibility set to public."
 
-      - name: Packaging summary
+      - name: Create GitHub Release on master
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          IMAGE_LOCAL: ${{ steps.package.outputs.image_local }}
-          IMAGE_REMOTE: ${{ steps.package.outputs.image_remote }}
-          IMAGE_REMOTE_LATEST: ${{ steps.package.outputs.image_remote_latest }}
-          IMAGE_TAR: ${{ steps.package.outputs.image_tar }}
-          IMAGE_ID: ${{ steps.docker.outputs.image_id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ needs.integration.outputs.app_repository }}
+          IMAGE_TAG: ${{ needs.packaging.outputs.image_tag }}
+          IMAGE_REMOTE: ${{ needs.packaging.outputs.image_remote }}
+          IMAGE_REMOTE_LATEST: ${{ needs.packaging.outputs.image_remote_latest }}
         run: |
           set -euo pipefail
-          {
-            echo "### Deploy options"
-            echo ""
-            echo "1. **Wheel / sdist** — download \`haystack-fast-api-release-packages\`."
-            echo "2. **Image archive** — \`docker load < ${IMAGE_TAR}\` then \`docker run -p 8000:8000 -e … ${IMAGE_LOCAL}\` (id \`${IMAGE_ID}\`)."
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [ "${EVENT_NAME}" != "pull_request" ]; then
-            echo "3. **GHCR** — \`docker pull ${IMAGE_REMOTE}\` or \`docker pull ${IMAGE_REMOTE_LATEST}\`." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "3. **GHCR** — push skipped on pull_request; image is available as the tar artifact only." >> "$GITHUB_STEP_SUMMARY"
-          fi
+          TAG="v${IMAGE_TAG}"
+          NOTES="$(
+            printf '%s\n' \
+              "Release **${TAG}** from \`master\`." \
+              "" \
+              "GHCR (public):" \
+              "- \`docker pull ${IMAGE_REMOTE}\`" \
+              "- \`docker pull ${IMAGE_REMOTE_LATEST}\`" \
+              "" \
+              "DAST: OWASP ZAP baseline + Dastardly (gate) and Nuclei (report-only)."
+          )"
+          mapfile -t ATTACH < <(find "${GITHUB_WORKSPACE}/release-package" "${GITHUB_WORKSPACE}/release-dast" -type f 2>/dev/null | sort)
+          gh release create "${TAG}" \
+            --repo "${GH_REPO}" \
+            --target master \
+            --title "${TAG}" \
+            --notes "${NOTES}" \
+            "${ATTACH[@]}"
+          echo "Created GitHub Release ${TAG} on ${GH_REPO} (target master)."

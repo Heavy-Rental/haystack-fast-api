@@ -389,7 +389,7 @@ jobs:
     name: Security Testing
     runs-on: ubuntu-latest
     needs: [integration]
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - name: Checkout calling repository (PR / push head)
         if: needs.integration.outputs.checkout_mode == 'caller'
@@ -429,11 +429,143 @@ jobs:
         run: |
           set -euo pipefail
           REPORT_DIR="${GITHUB_WORKSPACE}/security-reports"
+          # Community packs plus custom ERROR rules for plaintext credentials
+          # that p/secrets and p/gitleaks miss (generic passwords, not tokens).
+          RULES_FILE="${REPORT_DIR}/semgrep-custom-rules.yml"
+          cat > "${RULES_FILE}" << 'SEMGREP_CUSTOM_RULES'
+          rules:
+            - id: heavy-rental.haystack.hardcoded-credential-in-properties
+              languages: [regex]
+              severity: ERROR
+              message: >
+                Hard-coded credential in a properties/env file (CWE-798). Use
+                an environment variable or secrets manager. A plaintext
+                password, secret, token, or API key in config is a shipping secret.
+              metadata:
+                category: security
+                cwe: ["CWE-798: Use of Hard-coded Credentials"]
+                owasp: ["A07:2021 - Identification and Authentication Failures"]
+                confidence: HIGH
+                subcategory: [vuln]
+                likelihood: HIGH
+                impact: HIGH
+                technology: [secrets]
+              paths:
+                include:
+                  - "*.properties"
+                  - "*.env"
+                  - "*.ini"
+                  - ".env"
+                  - ".env.*"
+                exclude:
+                  - "**/src/test/**"
+                  - "**/*example*"
+                  - "**/*sample*"
+                  - "**/node_modules/**"
+              pattern-regex: >-
+                (?i)^[ \t]*[A-Za-z0-9._-]*(?:password|passwd|pwd|secret|secret[-_]?key|api[-._]?key|access[-._]?key|private[-._]?key|auth[-._]?token|credentials?)[ \t]*=[ \t]*(?!\$\{)(?!ENC\()(?!\{cipher\})(?![ \t]*(?:#|$))[^\s#]+
+            - id: heavy-rental.haystack.hardcoded-credential-in-yaml
+              languages: [regex]
+              severity: ERROR
+              message: >
+                Hard-coded credential in YAML config (CWE-798). Use an
+                environment variable or secrets manager instead of plaintext.
+              metadata:
+                category: security
+                cwe: ["CWE-798: Use of Hard-coded Credentials"]
+                owasp: ["A07:2021 - Identification and Authentication Failures"]
+                confidence: HIGH
+                subcategory: [vuln]
+                likelihood: HIGH
+                impact: HIGH
+                technology: [secrets]
+              paths:
+                include:
+                  - "*.yml"
+                  - "*.yaml"
+                exclude:
+                  - "**/src/test/**"
+                  - "**/*example*"
+                  - "**/*sample*"
+                  - "**/.github/**"
+                  - "**/node_modules/**"
+              pattern-regex: >-
+                (?i)^[ \t-]*["']?(?:[A-Za-z0-9._-]*[\._-])?(password|passwd|pwd|secret|secret[-_]?key|api[-._]?key|access[-._]?key|private[-._]?key|auth[-._]?token|credentials?)["']?[ \t]*:[ \t]*(?!\$\{)(?!~)(?!null\b)(?!ENC\()(?!\{cipher\})(?!["']?[ \t]*(?:#|$))["']?[^\s#"']+
+            - id: heavy-rental.haystack.env-placeholder-plaintext-default
+              languages: [regex]
+              severity: ERROR
+              message: >
+                Placeholder ${VAR:default} embeds a plaintext credential
+                default (CWE-798). Empty defaults (${VAR:} or ${VAR}) are OK.
+              metadata:
+                category: security
+                cwe: ["CWE-798: Use of Hard-coded Credentials"]
+                owasp: ["A07:2021 - Identification and Authentication Failures"]
+                confidence: HIGH
+                subcategory: [vuln]
+                likelihood: HIGH
+                impact: HIGH
+                technology: [secrets]
+              paths:
+                include:
+                  - "*.properties"
+                  - "*.yml"
+                  - "*.yaml"
+                  - "*.env"
+                  - ".env"
+                  - ".env.*"
+                exclude:
+                  - "**/src/test/**"
+                  - "**/*example*"
+                  - "**/*sample*"
+              pattern-regex: >-
+                (?i)^[ \t]*[A-Za-z0-9._-]*(?:password|passwd|pwd|secret|secret[-_]?key|api[-._]?key|access[-._]?key|private[-._]?key|auth[-._]?token|credentials?)[ \t]*[=:][ \t]*\$\{[^}:]+:(?![ \t]*\})[^}]+\}
+            - id: heavy-rental.haystack.python-hardcoded-secret-assignment
+              languages: [python]
+              severity: ERROR
+              message: >
+                Hard-coded credential assigned in Python source (CWE-798). Inject
+                the value from the environment or a secrets manager.
+              metadata:
+                category: security
+                cwe: ["CWE-798: Use of Hard-coded Credentials"]
+                owasp: ["A07:2021 - Identification and Authentication Failures"]
+                confidence: HIGH
+                subcategory: [vuln]
+                likelihood: HIGH
+                impact: HIGH
+                technology: [python, secrets]
+              paths:
+                exclude:
+                  - "**/tests/**"
+                  - "**/test_*.py"
+                  - "**/*_test.py"
+              patterns:
+                - pattern-either:
+                    - pattern: $VAR = "$VAL"
+                    - pattern: $VAR = '$VAL'
+                - metavariable-regex:
+                    metavariable: $VAR
+                    regex: (?i).*(password|passwd|secret|api[_]?key|token|credential).*
+                - metavariable-regex:
+                    metavariable: $VAL
+                    regex: (?!\$\{|os\.environ).{3,}
+          SEMGREP_CUSTOM_RULES
+          sed -i 's/^          //' "${RULES_FILE}"
+          echo "==> Validating custom Semgrep rules"
+          semgrep --validate --config="${RULES_FILE}" --metrics=off
           SEMGREP_COMMON=(
             --config=p/python
+            --config=p/fastapi
             --config=p/owasp-top-ten
             --config=p/security-audit
             --config=p/secrets
+            --config=p/cwe-top-25
+            --config=p/gitleaks
+            --config=p/sql-injection
+            --config=p/jwt
+            --config=p/insecure-transport
+            --config="${RULES_FILE}"
             --metrics=off
           )
 
