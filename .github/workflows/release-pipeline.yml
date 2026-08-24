@@ -1813,7 +1813,7 @@ jobs:
       - name: Upload combined DAST report (PDF)
         if: always() && hashFiles('dast-reports/combined-dast-report.pdf') != ''
         id: upload-dast-pdf
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dast-combined-report-pdf
           path: dast-reports/combined-dast-report.pdf
@@ -1859,7 +1859,7 @@ jobs:
 
       - name: Upload DAST reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: haystack-fast-api-release-dast
           path: ${{ github.workspace }}/dast-reports/
