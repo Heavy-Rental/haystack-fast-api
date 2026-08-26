@@ -1093,7 +1093,7 @@ jobs:
     timeout-minutes: 40
     steps:
       - name: Download Docker image archive
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: haystack-fast-api-release-docker-image
           path: ${{ github.workspace }}
@@ -1873,13 +1873,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Download Docker image archive
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: haystack-fast-api-release-docker-image
           path: ${{ github.workspace }}
 
       - name: Download release package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: haystack-fast-api-release-packages
           path: ${{ github.workspace }}/release-package
@@ -1887,7 +1887,7 @@ jobs:
       - name: Download DAST reports
         if: always()
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: haystack-fast-api-release-dast
           path: ${{ github.workspace }}/release-dast
