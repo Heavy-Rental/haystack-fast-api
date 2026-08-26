@@ -2,10 +2,14 @@
 # Install into: haystack-fast-api
 # Path:         .github/workflows/haystack-release-caller.yml
 # =============================================================================
-# Release caller — manual dispatch only (Actions → Release → Run workflow).
+# Release caller — manual dispatch only
+# (Actions → Haystack Release Pipeline Invoke → Run workflow).
 # Checks out master, QC, image, DAST, then public GHCR + GitHub Release.
+# Do not use on: release — Publish in the reusable workflow creates the
+# GitHub Release.
 #
 # Feature-branch PR validation remains CI (haystack-ci-caller.yml).
+# SAST / CodeQL live on Integration CI, not this caller.
 #
 # Place both files in the FastAPI / Haystack application repository:
 #
@@ -14,21 +18,21 @@
 #
 # When this runs
 # --------------
-#   A) GitHub → Releases → Publish release
-#   B) Pull request whose head is develop and base is master
+#   workflow_dispatch only (Actions → this workflow → Run workflow)
 #
 #   Does NOT run on:
+#     - published GitHub Release (this pipeline creates that Release)
+#     - pull request develop → master
 #     - push to master/develop alone
-#     - PRs from feature branches (even into master)
+#     - PRs from feature branches
 #     - PRs into develop
-#     - tag push alone (publish a GitHub Release, or open develop→master PR)
+#     - tag push alone
 #
 # Flow
 # ----
-#   feature → develop (CI) → PR develop→master (this release pipeline)
-#   and/or: publish GitHub Release → this pipeline
-#     → Integration → QC → Security → CodeQL → Packaging
-#       (uv build + GHCR haystack_recommender:<semver> and :latest)
+#   feature → develop (CI) → merge to master → workflow_dispatch this pipeline
+#     → Integration → QC → Packaging → DAST → Publish
+#       (public GHCR haystack_recommender:<semver> + :latest + GitHub Release)
 #
 # Reusable workflow (same repository):
 #   ./.github/workflows/release-pipeline.yml

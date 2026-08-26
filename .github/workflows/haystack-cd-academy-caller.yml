@@ -4,7 +4,7 @@
 # =============================================================================
 # Also copy:
 #   deploy-pipeline/haystack-cd-academy.yml → .github/workflows/
-#   deploy-pipeline/resolve-vocareum-aws/action.yml → .github/actions/resolve-vocareum-aws/
+#   deploy-pipeline/resolve-aws-profile/action.yml → .github/actions/resolve-aws-profile/
 #   deploy-pipeline/ansible/ → deploy-pipeline/ansible/  (keep this path)
 #
 # Haystack app CD (Academy) — branch 2 compose.

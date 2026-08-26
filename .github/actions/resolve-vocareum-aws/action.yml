@@ -1,5 +1,10 @@
 name: Resolve Vocareum AWS
-description: Read form keys from GITHUB_EVENT_PATH, mask them, fall back to Environment secrets, configure AWS.
+description: >
+  Academy-only helper that reads form keys from GITHUB_EVENT_PATH, masks them,
+  falls back to Environment secrets, and configures AWS. Haystack CD does not
+  call this action — haystack-cd-academy.yml uses resolve-aws-profile, which
+  already embeds the same masking. Keep this file as the extracted helper; do
+  not copy it into the app repo unless you invoke it by path.
 
 inputs:
   aws_access_key_id:

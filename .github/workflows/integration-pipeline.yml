@@ -3,14 +3,19 @@
 # =============================================================================
 # Stages (priority order — Integration is highest priority):
 #   1. Integration           (HIGHEST) checkout, Python 3.12 + uv, Haystack smoke
+#      On pull_request: reuse a successful Fast Feedback CI run for the PR head
+#      SHA instead of repeating those steps. Fast Feedback owns the Integration
+#      stage on feature-branch pushes; this job must not invoke that workflow.
+#      Push to develop / workflow_dispatch / missing Fast Feedback → run fully.
 #   2. Quality Control       needs Integration — Ruff + pytest (CI-safe backends)
-#   3. Security Testing      needs Integration — SAST (Semgrep p/python) + pip-audit
-#                            report + SCA/FS (Trivy)
+#   3. Security Testing      needs Integration — SAST (Semgrep app + GHA) +
+#                            pip-audit report + SCA/FS (Trivy)
 #   4. CodeQL Analysis       needs Integration — GitHub CodeQL (Python)
 #   5. GitHub Flow CI Gate   aggregate: Integration first, then QC + Security + CodeQL
 #
 # Security report format (standard): SARIF 2.1.0
-#   - Semgrep → semgrep.sarif
+#   - Semgrep app → semgrep.sarif
+#   - Semgrep GHA → semgrep-gha.sarif
 #   - Trivy FS → trivy-fs.sarif
 #   - CodeQL → GitHub Code Scanning (native SARIF via analyze)
 # Human-readable combined report: security-reports/combined-security-report.pdf
@@ -25,16 +30,20 @@
 # run uv build or publish artifacts to GHCR.
 #
 #   1. Branch from develop
-#   2. Open PR → develop (or push to develop) → haystack-ci-caller → this workflow
-#   3. Branch protection on develop should require:
+#   2. Push feature branch → haystack-fast-feedback-caller (Integration stage once)
+#   3. Open PR → develop (or push to develop) → haystack-ci-caller → this workflow
+#      PR Integration reuses Fast Feedback for the head SHA; do not call
+#      fast-feedback-pipeline.yml from haystack-ci-caller.yml (that would run it twice).
+#   4. Branch protection on develop should require:
 #        - "Integration"              ← highest priority / must pass first
 #        - "Quality Control"
 #        - "Security Testing"
 #        - "CodeQL Analysis"
 #        - "GitHub Flow CI Gate"       ← optional single aggregate check
-#   4. Merge when green → develop is integration-tested, not production-deployed
-#   5. Wheel packaging lives only in release-pipeline.yml
-#   6. This family does not provision infrastructure, deploy, or operate.
+#   5. Merge when green → develop is integration-tested, not production-deployed
+#   6. Wheel packaging, DAST, GHCR, and GitHub Release live only in
+#      release-pipeline.yml (workflow_dispatch; SAST/CodeQL stay here)
+#   7. This family does not provision infrastructure, deploy, or operate.
 #      Those concerns belong to another project.
 #
 # Application:
@@ -153,7 +162,12 @@ jobs:
           esac
 
   # ---------------------------------------------------------------------------
-  # 1. Integration — HIGHEST PRIORITY
+  # 1. Integration — HIGHEST PRIORITY (GitHub Flow PR gate starts here)
+  #    Always run this job (never if: skip it) so QC / Security / CodeQL keep
+  #    their needs: and branch protection still sees the check.
+  #    On pull_request, skip uv/layout when Fast Feedback already passed for
+  #    the PR head SHA. Do not uses: fast-feedback-pipeline.yml from the CI caller.
+  #    Job id stays `integration` (Haystack has no environment: integration).
   # ---------------------------------------------------------------------------
   integration:
     name: Integration
@@ -205,6 +219,118 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "Integrating application: $APP_REPO @ $APP_REF (mode=$MODE)"
 
+      - name: Reuse Fast Feedback Integration when it already passed
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_REPOSITORY: ${{ github.repository }}
+          FF_WORKFLOW_FILE: haystack-fast-feedback-caller.yml
+        run: |
+          set -euo pipefail
+          REUSE=false
+
+          finish() {
+            echo "reuse=${REUSE}" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Fast Feedback reuse"
+              echo ""
+              echo "$1"
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          if [ "${EVENT_NAME}" != "pull_request" ]; then
+            echo "Event is ${EVENT_NAME} (not pull_request) — run Integration."
+            finish "Event \`${EVENT_NAME}\` — ran Integration locally (Fast Feedback is feature-branch push only)."
+            exit 0
+          fi
+
+          COMMIT="${HEAD_SHA}"
+          if [ -z "${COMMIT}" ]; then
+            echo "PR head SHA is empty — run Integration."
+            finish "PR head SHA empty — ran Integration locally."
+            exit 0
+          fi
+
+          echo "Looking up Fast Feedback (${FF_WORKFLOW_FILE}) for commit ${COMMIT}"
+
+          list_runs() {
+            gh run list \
+              --repo "${GH_REPOSITORY}" \
+              --workflow "${FF_WORKFLOW_FILE}" \
+              --commit "${COMMIT}" \
+              --json databaseId,status,conclusion,url \
+              --limit 20 \
+              2>/dev/null || echo "[]"
+          }
+
+          run_count() {
+            echo "${1}" | jq 'length' 2>/dev/null || echo 0
+          }
+
+          jq_field() {
+            echo "${1}" | jq -r "${2}" 2>/dev/null || true
+          }
+
+          # PR opened in the same moment as the push: the Fast Feedback run may
+          # not exist yet. Retry briefly before falling back to local checks.
+          ATTEMPT=1
+          MAX_APPEAR=12
+          RUNS="[]"
+          while [ "${ATTEMPT}" -le "${MAX_APPEAR}" ]; do
+            RUNS="$(list_runs)"
+            [ -n "${RUNS}" ] || RUNS="[]"
+            if [ "$(run_count "${RUNS}")" -gt 0 ]; then
+              break
+            fi
+            echo "No Fast Feedback run for ${COMMIT} yet (attempt ${ATTEMPT}/${MAX_APPEAR})"
+            sleep 5
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+          [ -n "${RUNS}" ] || RUNS="[]"
+          if [ "$(run_count "${RUNS}")" -eq 0 ]; then
+            echo "No Fast Feedback run for ${COMMIT} — run Integration."
+            finish "No Fast Feedback run for \`${COMMIT}\` — ran Integration locally."
+            exit 0
+          fi
+
+          jq_field "${RUNS}" '.[] | "id=\(.databaseId) status=\(.status) conclusion=\(.conclusion // "null") url=\(.url)"'
+
+          SUCCESS_ID="$(jq_field "${RUNS}" '[.[] | select(.conclusion == "success")] | .[0].databaseId // empty')"
+          SUCCESS_URL="$(jq_field "${RUNS}" '[.[] | select(.conclusion == "success")] | .[0].url // empty')"
+          if [ -n "${SUCCESS_ID}" ]; then
+            REUSE=true
+            echo "Reusing successful Fast Feedback run ${SUCCESS_ID}: ${SUCCESS_URL}"
+            finish "Reused Fast Feedback run [${SUCCESS_ID}](${SUCCESS_URL}) for \`${COMMIT}\`. uv/layout steps skipped."
+            exit 0
+          fi
+
+          PENDING_FILTER='[.[] | select(.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "pending" or .status == "requested")]'
+          PENDING_ID="$(jq_field "${RUNS}" "${PENDING_FILTER} | .[0].databaseId // empty')"
+          PENDING_URL="$(jq_field "${RUNS}" "${PENDING_FILTER} | .[0].url // empty')"
+          if [ -z "${PENDING_ID}" ]; then
+            echo "Fast Feedback finished without success for ${COMMIT} — run Integration."
+            finish "Fast Feedback did not succeed for \`${COMMIT}\` — ran Integration locally."
+            exit 0
+          fi
+
+          echo "Waiting for in-flight Fast Feedback run ${PENDING_ID}: ${PENDING_URL}"
+          set +e
+          timeout 600 gh run watch "${PENDING_ID}" --repo "${GH_REPOSITORY}" --exit-status --interval 10
+          WATCH_RC=$?
+          set -e
+          if [ "${WATCH_RC}" -eq 0 ]; then
+            REUSE=true
+            echo "Fast Feedback run ${PENDING_ID} succeeded — skip uv/layout."
+            finish "Waited for Fast Feedback run [${PENDING_ID}](${PENDING_URL}) (success). uv/layout steps skipped."
+            exit 0
+          fi
+
+          echo "Fast Feedback run ${PENDING_ID} did not succeed (watch exit=${WATCH_RC}) — run Integration."
+          finish "Fast Feedback run [${PENDING_ID}](${PENDING_URL}) did not succeed (watch exit=${WATCH_RC}) — ran Integration locally."
+
       - name: Checkout calling repository (PR / push head)
         if: steps.meta.outputs.checkout_mode == 'caller'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -233,6 +359,7 @@ jobs:
           cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
 
       - name: Require uv.lock and sync frozen environment
+        if: steps.reuse.outputs.reuse != 'true'
         working-directory: ${{ env.APP_PATH }}
         run: |
           set -euo pipefail
@@ -249,6 +376,7 @@ jobs:
           uv sync --frozen --all-groups
 
       - name: Verify project layout and Haystack / FastAPI smoke
+        if: steps.reuse.outputs.reuse != 'true'
         working-directory: ${{ env.APP_PATH }}
         env:
           PYTHON_VERSION_VALUE: ${{ env.PYTHON_VERSION }}
@@ -388,7 +516,7 @@ jobs:
           if-no-files-found: warn
 
   # ---------------------------------------------------------------------------
-  # 3. Security testing — Semgrep (Python) + pip-audit + Trivy
+  # 3. Security testing — Semgrep (Python app + GitHub Actions) + pip-audit + Trivy
   # ---------------------------------------------------------------------------
   security-testing:
     name: Security Testing
@@ -494,8 +622,12 @@ jobs:
                   - "**/*sample*"
                   - "**/.github/**"
                   - "**/node_modules/**"
-              pattern-regex: >-
-                (?i)^[ \t-]*["']?(?:[A-Za-z0-9._-]*[\._-])?(password|passwd|pwd|secret|secret[-_]?key|api[-._]?key|access[-._]?key|private[-._]?key|auth[-._]?token|credentials?)["']?[ \t]*:[ \t]*(?!\$\{)(?!~)(?!null\b)(?!ENC\()(?!\{cipher\})(?!["']?[ \t]*(?:#|$))["']?[^\s#"']+
+              # persist-credentials is filtered with pattern-not-regex; a key
+              # lookahead still matches because credentials? is a suffix.
+              patterns:
+                - pattern-regex: |-
+                    (?i)^[ \t-]*["']?(?:[A-Za-z0-9._-]*[\._-])?(password|passwd|pwd|secret|secret[-_]?key|api[-._]?key|access[-._]?key|private[-._]?key|auth[-._]?token|credentials?)["']?[ \t]*:[ \t]*(?!\$\{)(?!~)(?!null\b)(?!ENC\()(?!\{cipher\})(?!["']?[ \t]*(?:#|$))["']?[^\s#"']+
+                - pattern-not-regex: '(?i)persist[-_]credentials\s*:'
             - id: heavy-rental.haystack.env-placeholder-plaintext-default
               languages: [regex]
               severity: ERROR
@@ -555,12 +687,74 @@ jobs:
                 - metavariable-regex:
                     metavariable: $VAL
                     regex: (?!\$\{|os\.environ).{3,}
+            # Reusable-workflow / composite-action secret wiring:
+            #   secrets: inherit                         → ERROR (over-privilege)
+            #   KEY: GitHub secrets context (explicit)   → allowed (least-privilege map)
+            #   KEY: literal-password                    → ERROR (CWE-798)
+            #   persist-credentials: true|false          → allowed (checkout boolean)
+            # p/secrets and p/gitleaks are not applied to .github (they treat
+            # a secrets-context password mapping as a leaked credential).
+            - id: heavy-rental.gha.secrets-inherit-forbidden
+              languages: [yaml]
+              severity: ERROR
+              message: >
+                secrets: inherit passes every secret the caller can read to the
+                reusable workflow (CWE-200). That is over-privilege, not required
+                wiring. Pass only the secrets the callee declares via an explicit
+                secrets: map. An explicit secrets-context map is least privilege
+                and is not a leaked credential. Paid CD is the exception (OIDC).
+              metadata:
+                category: security
+                cwe: ["CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"]
+                owasp: ["A05:2021 - Security Misconfiguration"]
+                technology: [github-actions, secrets]
+                confidence: HIGH
+                subcategory: [vuln]
+                likelihood: HIGH
+                impact: HIGH
+              paths:
+                include:
+                  - "**/.github/workflows/**"
+                  - "**/.github/actions/**"
+                exclude:
+                  - "**/haystack-cd-paid-caller.yml"
+              patterns:
+                - pattern: |
+                    secrets: inherit
+            - id: heavy-rental.gha.hardcoded-workflow-secret
+              languages: [regex]
+              severity: ERROR
+              message: >
+                Hard-coded credential in a GitHub Actions workflow or composite
+                action (CWE-798). Use an explicit secrets: map with the GitHub
+                secrets context when calling a reusable workflow. Passing
+                secrets-context (or inputs-context into a composite action) is
+                required wiring, not a vulnerability. A literal password in YAML is.
+              metadata:
+                category: security
+                cwe: ["CWE-798: Use of Hard-coded Credentials"]
+                owasp: ["A07:2021 - Identification and Authentication Failures"]
+                technology: [github-actions, secrets]
+                confidence: HIGH
+                subcategory: [vuln]
+                likelihood: HIGH
+                impact: HIGH
+              paths:
+                include:
+                  - "**/.github/workflows/**"
+                  - "**/.github/actions/**"
+              patterns:
+                - pattern-regex: |-
+                    (?i)^[ \t-]*["']?(?:[A-Za-z0-9._-]*[\._-])?(password|passwd|pwd|secret|secret[-_]?key|api[-._]?key|access[-._]?key|private[-._]?key|auth[-._]?token|credentials?)["']?[ \t]*:[ \t]*(?!\$\{\{)(?!~)(?!null\b)(?!inherit\b)(?!["']?[ \t]*(?:#|$))["']?[^\s#"']+
+                - pattern-not-regex: '(?i)persist[-_]credentials\s*:'
           SEMGREP_CUSTOM_RULES
           # run: | already strips this step's indent from the heredoc. A second
           # de-indent (sed) would pull nested list items to column 1 and break YAML.
           echo "==> Validating custom Semgrep rules"
           semgrep --validate --config="${RULES_FILE}" --metrics=off
-          SEMGREP_COMMON=(
+          # App SAST: Python/FastAPI/OWASP/secrets packs. Skip .github so p/secrets
+          # and p/gitleaks do not flag reusable-workflow secrets: maps.
+          SEMGREP_APP=(
             --config=p/python
             --config=p/fastapi
             --config=p/owasp-top-ten
@@ -572,41 +766,77 @@ jobs:
             --config=p/jwt
             --config=p/insecure-transport
             --config="${RULES_FILE}"
+            --exclude='.github/**'
+            --metrics=off
+          )
+          # Workflow SAST: GitHub Actions pack + custom GHA rules.
+          # Explicit secrets-context maps are not findings. secrets: inherit is.
+          # Drop the community inherit rule so the custom one (with paid-CD
+          # path exclude) is the only inherit check.
+          SEMGREP_GHA=(
+            --config=p/github-actions
+            --config="${RULES_FILE}"
+            --exclude-rule=yaml.github-actions.security.secrets-inherit.secrets-inherit
+            --include='.github/**'
             --metrics=off
           )
 
-          echo "==> Semgrep report (SARIF 2.1.0)"
+          echo "==> Semgrep report (SARIF 2.1.0) — application"
           set +e
-          semgrep scan "${SEMGREP_COMMON[@]}" \
+          semgrep scan "${SEMGREP_APP[@]}" \
             --sarif \
             --output="${REPORT_DIR}/semgrep.sarif" \
             .
           SARIF_RC=$?
+          echo "==> Semgrep report (SARIF 2.1.0) — GitHub Actions"
+          semgrep scan "${SEMGREP_GHA[@]}" \
+            --sarif \
+            --output="${REPORT_DIR}/semgrep-gha.sarif" \
+            .
+          GHA_SARIF_RC=$?
           set -e
           if [ -f "${REPORT_DIR}/semgrep.sarif" ]; then
             echo "SARIF written: ${REPORT_DIR}/semgrep.sarif (semgrep exit=${SARIF_RC}; non-zero is OK for report pass)"
           else
             echo "::warning::semgrep.sarif was not produced (exit=${SARIF_RC})"
           fi
+          if [ -f "${REPORT_DIR}/semgrep-gha.sarif" ]; then
+            echo "SARIF written: ${REPORT_DIR}/semgrep-gha.sarif (semgrep exit=${GHA_SARIF_RC}; non-zero is OK for report pass)"
+          else
+            echo "::warning::semgrep-gha.sarif was not produced (exit=${GHA_SARIF_RC})"
+          fi
 
-          echo "==> SAST gate (ERROR severity only; exit 1 if findings)"
+          echo "==> SAST gate — application (ERROR severity only)"
           set +e
-          semgrep scan "${SEMGREP_COMMON[@]}" \
+          semgrep scan "${SEMGREP_APP[@]}" \
             --severity=ERROR \
             --error \
             --text \
             .
-          GATE_RC=$?
+          APP_GATE_RC=$?
+          echo "==> SAST gate — GitHub Actions (ERROR severity only)"
+          semgrep scan "${SEMGREP_GHA[@]}" \
+            --severity=ERROR \
+            --error \
+            --text \
+            .
+          GHA_GATE_RC=$?
           set -e
-          if [ "${GATE_RC}" -ne 0 ]; then
-            echo "::error::Semgrep SAST gate failed (exit=${GATE_RC})."
+          if [ "${APP_GATE_RC}" -ne 0 ] || [ "${GHA_GATE_RC}" -ne 0 ]; then
+            echo "::error::Semgrep SAST gate failed (app exit=${APP_GATE_RC}, gha exit=${GHA_GATE_RC})."
             echo "The SARIF report may still have been written successfully."
             echo "This step fails because --severity=ERROR --error found ERROR-level issues"
             echo "(or Semgrep could not complete the gate scan)."
-            echo "Open security-reports/semgrep.sarif or the text findings above."
-            exit "${GATE_RC}"
+            echo "Application: security-reports/semgrep.sarif"
+            echo "GitHub Actions: security-reports/semgrep-gha.sarif"
+            echo "Explicit reusable-workflow secrets-context maps are allowed."
+            echo "secrets: inherit is an ERROR (least privilege) except haystack-cd-paid-caller.yml."
+            if [ "${APP_GATE_RC}" -ne 0 ]; then
+              exit "${APP_GATE_RC}"
+            fi
+            exit "${GHA_GATE_RC}"
           fi
-          echo "SAST (Semgrep) gate passed — no ERROR-level findings. SARIF: security-reports/semgrep.sarif"
+          echo "SAST (Semgrep) gate passed — no ERROR-level findings. SARIF: security-reports/semgrep.sarif + semgrep-gha.sarif"
 
       - name: Python SCA report — pip-audit (does not fail the job)
         working-directory: ${{ env.APP_PATH }}
@@ -680,16 +910,25 @@ jobs:
 
       - name: Upload Semgrep SARIF to Code Scanning
         if: always() && hashFiles('security-reports/semgrep.sarif') != ''
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           sarif_file: security-reports/semgrep.sarif
           checkout_path: ${{ env.APP_PATH }}
           category: haystack-ci-semgrep
         continue-on-error: true
 
+      - name: Upload Semgrep GHA SARIF to Code Scanning
+        if: always() && hashFiles('security-reports/semgrep-gha.sarif') != ''
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        with:
+          sarif_file: security-reports/semgrep-gha.sarif
+          checkout_path: ${{ env.APP_PATH }}
+          category: haystack-ci-semgrep-gha
+        continue-on-error: true
+
       - name: Upload Trivy SARIF to Code Scanning
         if: always() && hashFiles('security-reports/trivy-fs.sarif') != ''
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           sarif_file: security-reports/trivy-fs.sarif
           checkout_path: ${{ env.APP_PATH }}
@@ -1145,7 +1384,7 @@ jobs:
         continue-on-error: true
         env:
           PDF_URL: ${{ steps.upload-security-pdf.outputs.artifact-url }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const url = process.env.PDF_URL;
@@ -1213,14 +1452,14 @@ jobs:
           path: ${{ env.APP_PATH }}
 
       - name: Initialize CodeQL (Python)
-        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           languages: python
           source-root: ${{ env.APP_PATH }}
           queries: security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           category: "haystack-ci-codeql-python"
 
