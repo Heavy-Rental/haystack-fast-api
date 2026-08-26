@@ -17,13 +17,14 @@
     path = Path("{{ env_path }}")
     data = {}
     order = []
-    for line in path.read_text().splitlines():
-        if not line or line.lstrip().startswith("#") or "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        if key not in data:
-            order.append(key)
-        data[key] = val
+    if path.is_file():
+        for line in path.read_text().splitlines():
+            if not line or line.lstrip().startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            if key not in data:
+                order.append(key)
+            data[key] = val
     for dest, src in (
         ("POSTGRES_HOSTNAME", "POSTGRES_HOST"),
         ("POSTGRES_DB", "POSTGRES_DATABASE"),

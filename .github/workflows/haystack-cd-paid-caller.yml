@@ -2,7 +2,10 @@
 # Install into: haystack-fast-api
 # Path:         .github/workflows/haystack-cd-paid-caller.yml
 # =============================================================================
-# Also copy haystack-cd-academy.yml, resolve-aws-profile, deploy-pipeline/ansible/.
+# Also copy:
+#   deploy-pipeline/haystack-cd-academy.yml → .github/workflows/
+#   deploy-pipeline/resolve-aws-profile/action.yml → .github/actions/resolve-aws-profile/
+#   deploy-pipeline/ansible/ → deploy-pipeline/ansible/  (keep this path)
 # Haystack app CD (paid / AWS_ACTUAL). OIDC only. No Vocareum keys. No neo4j. No Terraform.
 # =============================================================================
 
@@ -81,8 +84,7 @@ jobs:
       aws_environment: AWS_ACTUAL
       image_ref: ${{ inputs.image_ref }}
       image_http_url: ${{ inputs.image_http_url }}
-    secrets:
-      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+    secrets: inherit
     permissions:
       contents: read
       id-token: write
