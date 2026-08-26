@@ -307,9 +307,8 @@ jobs:
             exit 0
           fi
 
-          PENDING_FILTER='[.[] | select(.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "pending" or .status == "requested")]'
-          PENDING_ID="$(jq_field "${RUNS}" "${PENDING_FILTER} | .[0].databaseId // empty')"
-          PENDING_URL="$(jq_field "${RUNS}" "${PENDING_FILTER} | .[0].url // empty')"
+          PENDING_ID="$(jq_field "${RUNS}" '[.[] | select(.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "pending" or .status == "requested")] | .[0].databaseId // empty')"
+          PENDING_URL="$(jq_field "${RUNS}" '[.[] | select(.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "pending" or .status == "requested")] | .[0].url // empty')"
           if [ -z "${PENDING_ID}" ]; then
             echo "Fast Feedback finished without success for ${COMMIT} — run Integration."
             finish "Fast Feedback did not succeed for \`${COMMIT}\` — ran Integration locally."
