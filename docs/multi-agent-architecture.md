@@ -4,13 +4,14 @@
 |-------|--------|
 | **Status** | As-built |
 | **Audience** | Engineers, coding agents, Spring integrators |
-| **Date** | 2026-08-14 |
+| **Date** | 2026-08-27 |
 | **Runtime package** | `app/agents/` |
 | **Framework** | LangGraph (state graphs) + in-process tools (Haystack / SQL / Neo4j / ML) |
 | **OpenSpec map** | [`../openspec/AGENTS.md`](../openspec/AGENTS.md) · knowledge-graph · equipment-recommendation |
 | **C/W/D study** | [`../Feasibility_Study/multi-agent-coordinator-worker-delegator.md`](../Feasibility_Study/multi-agent-coordinator-worker-delegator.md) |
 | **Call 1 / Call 2 process** | [`call1-call2-endpoint-process.md`](./call1-call2-endpoint-process.md) |
 | **OpenSPDD prompts** | [`../openspec/spdd/prompts/`](../openspec/spdd/prompts/) |
+| **ADRs** | [`../openspec/adrs/`](../openspec/adrs/) (0003 dual-hop, 0008 graph flag, 0009 Neo4j) |
 
 This document describes **all multi-agent (and agent-adjacent LangGraph) systems** in this service: roles, topologies, tools, state partitions, configuration, and how they bind to Call 1 / 2 / 3.
 

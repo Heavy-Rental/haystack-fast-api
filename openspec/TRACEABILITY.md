@@ -1,6 +1,6 @@
 # Traceability matrix — legacy `specification/` → OpenSpec
 
-Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** · **OpenSPDD**.
+Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** · **OpenSPDD** · **MADR**.
 
 ## File map
 
@@ -38,14 +38,19 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | — (S4 new) | `openspec/changes/archive/2026-08-13-s4-live-sql-fleet-backend/` | Phase 4 app: D0 fleet-read contract + live SQL fleet backend |
 | — (S8.1 new) | `openspec/changes/archive/2026-08-13-s8-1-t3-neo4j-populate/` | Phase 8.1 T3 config pack neo4j-populate as-built stamp |
 | — (S2b new) | `openspec/changes/archive/2026-08-13-s2b-spring-resilience-stamp/` | Phase 2 S2b Spring client/saga as-built stamp |
-| — (process doc) | `openspec/specs/portal-dual-hop/spec.md` | Call 1 → Call 2 dual-hop process (FR-PDH-001…011); links indexing + recommend contracts |
+| — (process doc) | `openspec/specs/portal-dual-hop/spec.md` + `design.md` | Call 1 → Call 2 dual-hop process (FR-PDH-001…011); OpenSPDD REASONS; ADR-0003 |
 | — (S8.2 new) | `openspec/changes/archive/2026-08-13-s8-2-t4-neo4j-populate-trigger/` | Phase 8.2 T4 config post-sync + admin HTTP as-built stamp |
 | — (S8.3 new) | `openspec/changes/archive/2026-08-13-s8-3-live-neo4j-tools/` | Phase 8.3 app live Neo4j Bolt client + populate HTTP |
 | — (S7.8 new) | `openspec/changes/archive/2026-08-13-s7-8-worker5-kg1-live/` | Worker [5] live KG-1 vector + project KG query |
 | `app/agents/prompts.py` | `openspec/spdd/prompts/project-knowledge-agents.md` (index) | OpenSPDD first-class Stage-1 Q&A prompts |
 | `app/agents/recommend_prompts.py` | `openspec/spdd/prompts/recommend-agents.md` (index) | OpenSPDD first-class recommend A–L prompts (S7.7) |
-| — (HR-206 / FR-P-013) | `openspec/changes/2026-08-20-call2-quote-quantity-collapse/` | Call 2 quote: collapse unit-need siblings sharing `equipment.id` |
-| — (FR-P-014) | `openspec/changes/2026-08-20-llm-need-decompose-timeout/` | LLM need-decompose timeout retry + keyword fallback |
+| — (HR-206 / FR-P-013) | `openspec/changes/archive/2026-08-20-call2-quote-quantity-collapse/` | Call 2 quote collapse; **ADR-0010** |
+| — (FR-P-014) | `openspec/changes/archive/2026-08-20-llm-need-decompose-timeout/` | LLM need-decompose timeout retry; **ADR-0011** |
+| — (Phase 3a–3d) | `openspec/changes/archive/2026-08-15-scheduled-model-retrain/` | Scheduled retrain; **ADR-0005**; live spec 3.1.0 |
+| — (Call 2/3 numbering) | `openspec/changes/archive/2026-08-12-call2-recommend-call3-qa/` | Call 2 = recommend, Call 3 = Q&A; **ADR-0003** |
+| — (superseded dual-hop docs) | `openspec/changes/archive/2026-08-12-portal-dual-hop-docs/` | Superseded (Call 2 was Q&A) |
+| — (Call 1 lean summary) | `openspec/changes/archive/2026-08-10-call1-project-spec-summary/` | FR-IX-023 S1a–S1e shipped |
+| — (MADR log) | `openspec/adrs/` | Numbered ADRs 0001–0011 |
 
 ## FR / requirement ID map
 
@@ -68,13 +73,13 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | S5-I1 pipeline wire (as-built) | Same as FR-IX-028 | `changes/archive/2026-08-12-s5-i1-document-store-pipeline-wire/` |
 | Portal dual-hop (docs) | React project-spec → Call 1 → **Call 2 recommend quote** → React; Call 3 = chatbot Q&A | `AGENTS.md` · recommend + KG contracts · `portal-to-haystack-mapping.md` v2.1 · impl-plan §1.2.0 |
 | Call 2 quote hydration (as-built) | Quote `equipment.id` = `assets.id` (live SQL); DTO `asset_id` = `assets.name`; extra catalog fields; evidence scores; `PRICING_SCHEMA` | `specs/recommendation-pipeline/contracts/get-asset-recommendations.md` · `fleet-read-contract.md` · impl-plan **3.18.0** |
-| Call 2 quote quantity collapse (FR-P-013) | Fold unit-need siblings that share parent `{base}` + `equipment.id` into one quote line (`quantity` = duplicate count; `quantity > 1` → `available=false`; qty-1 availability from `bookings` + `return_records`) | `specs/recommendation-pipeline/spec.md` + contract; `app/services/session_recommend.py`; `app/repositories/fleet_repository.py`; `tests/test_quote_duplicate_collapse.py`; change `changes/2026-08-20-call2-quote-quantity-collapse/` |
+| Call 2 quote quantity collapse (FR-P-013) | Fold unit-need siblings that share parent `{base}` + `equipment.id` into one quote line (`quantity` = duplicate count; `quantity > 1` → `available=false`; qty-1 availability from `bookings` + `return_records`) | `specs/recommendation-pipeline/spec.md` + contract; ADR-0010; `session_recommend.py`; `tests/test_quote_duplicate_collapse.py`; archive `changes/archive/2026-08-20-call2-quote-quantity-collapse/` |
 | Call 1 extract expansions (as-built) | File-before-text + ignore caption; multi-need hint split; expanded date/budget patterns | `specs/indexing/spec.md` + ingest contract; impl-plan **3.18.0** |
 | S2a change archive | Idempotency + correlation tasks | `changes/archive/2026-08-12-s2a-ingest-idempotency-correlation/` |
 | S2b (as-built Spring) | Resilience C1 client + saga in heavy-rental-spring-rest-api | Spring plan v2.1.1; impl-plan **3.14.0**; archive `changes/archive/2026-08-13-s2b-spring-resilience-stamp/` |
 | S3 change archive | Agent indexing tool + Coordinator gate | `changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/` |
-| Portal dual-hop (superseded) | Earlier Call 2 = Q&A wording | `changes/2026-08-12-portal-dual-hop-docs/` (**superseded**) |
-| Call 2 recommend + Call 3 Q&A | Breaking renumber | `changes/2026-08-12-call2-recommend-call3-qa/` |
+| Portal dual-hop (superseded) | Earlier Call 2 = Q&A wording | `changes/archive/2026-08-12-portal-dual-hop-docs/` (**superseded**) |
+| Call 2 recommend + Call 3 Q&A | Breaking renumber | `changes/archive/2026-08-12-call2-recommend-call3-qa/`; ADR-0003 |
 | FR-I-016 (as-built alignment) | Intake — FR-IX-023 summary ≠ recommend | `specs/recommendation-intake/spec.md` |
 | MIME map §3 | Indexing | Requirement: MIME classification map |
 | FR-KG-001 … FR-KG-008 | KG Part A | `specs/knowledge-graph/spec.md` |
@@ -82,8 +87,8 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | FR-I-001 … FR-I-015 | Intake | `specs/recommendation-intake/spec.md` |
 | FR-010.1 … FR-010.8 | Pipeline | `specs/recommendation-pipeline/spec.md` |
 | FR-P-001 … FR-P-014 | Pipeline | same |
-| FR-P-013 (as-built) | Pipeline — Call 2 quote collapse of unit-need siblings sharing `equipment.id` | `specs/recommendation-pipeline/spec.md` + contract; `session_recommend.py`; `tests/test_quote_duplicate_collapse.py`; change `changes/2026-08-20-call2-quote-quantity-collapse/` |
-| FR-P-014 (as-built) | Pipeline — LLM need-decompose timeout retry + keyword fallback | `specs/recommendation-pipeline/spec.md`; `app/services/llm_need_decomposer.py`; `tests/test_llm_need_decomposer.py`; change `changes/2026-08-20-llm-need-decompose-timeout/` |
+| FR-P-013 (as-built) | Pipeline — Call 2 quote collapse of unit-need siblings sharing `equipment.id` | `specs/recommendation-pipeline/spec.md` + contract; ADR-0010; `session_recommend.py`; `tests/test_quote_duplicate_collapse.py`; archive `changes/archive/2026-08-20-call2-quote-quantity-collapse/` |
+| FR-P-014 (as-built) | Pipeline — LLM need-decompose timeout retry + keyword fallback | `specs/recommendation-pipeline/spec.md`; ADR-0011; `app/services/llm_need_decomposer.py`; `tests/test_llm_need_decomposer.py`; archive `changes/archive/2026-08-20-llm-need-decompose-timeout/` |
 | US-1 … US-4 + pricing FRs | Dynamic pricing | `specs/dynamic-pricing/spec.md` |
 | US-5 / S6 (as-built) | Dynamic pricing — agent tool `predict_asset_price` → `pricing_client` | `specs/dynamic-pricing/spec.md` + design; `app/agents/tools.py`; `tests/test_predict_asset_price_tool.py`; impl-plan **Phase 6 / S6** · archive `changes/archive/2026-08-12-s6-predict-asset-price-tool/` |
 | S6 change archive | predict_asset_price tool tasks | `changes/archive/2026-08-12-s6-predict-asset-price-tool/` |
@@ -119,12 +124,14 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | Check | Status |
 |-------|--------|
 | OpenSpec `openspec/specs/<cap>/spec.md` for all capabilities | Yes |
-| `### Requirement:` + `#### Scenario:` with WHEN/THEN | Yes (~119 req, ~141 scenarios) |
-| Design as REASONS Canvas (OpenSPDD) for major caps | Yes |
-| Spec-kit constitution | Yes (`.specify/memory/constitution.md`) |
+| `### Requirement:` + `#### Scenario:` with WHEN/THEN | Yes (~172 unique req, ~270 unique scenarios; spring-entity-repository is a schema catalog, not FR format) |
+| Design as REASONS Canvas (OpenSPDD) for major caps | Yes (incl. portal-dual-hop; index `spdd/README.md`) |
+| Spec-kit constitution | Yes (`.specify/memory/constitution.md` 1.1.0) |
 | User stories on product-facing caps | Yes |
-| Contracts for live HTTP | Yes (ingest + project-knowledge query) |
+| Contracts for live HTTP | Yes (ingest + Call 2 get-asset-recommendations + Call 3 project-knowledge query) |
 | Structured agent prompts indexed (OpenSPDD) | Yes |
+| MADR numbered ADR log | Yes (`openspec/adrs/` ADR-0001…0011) |
+| Completed changes archived | Yes (no live `openspec/changes/` except `archive/`) |
 | Testing guides not mislabeled as behaviour SoT | Yes (`docs/testing/`) |
 | Historical HR-65 archived | Yes |
 | Legacy path stubs | **Removed 2026-08-13** (`specification/` deleted; map above) |

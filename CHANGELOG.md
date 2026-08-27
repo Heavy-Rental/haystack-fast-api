@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed (docs — OpenSpec / OpenSPDD / MADR sync, 2026-08-27)
+
+- Added MADR log `openspec/adrs/` (ADR-0001…0011) and OpenSPDD canvas index `openspec/spdd/README.md`.
+- Folded Phase 3b–3d into live `openspec/specs/dynamic-pricing/` **3.1.0** (ADR-0005); archived `2026-08-15-scheduled-model-retrain`.
+- Archived shipped OpenSpec changes (Call 1 summary, Call 2/3 numbering, superseded dual-hop docs, FR-P-013, FR-P-014).
+- Constitution / `project.md` / `AGENTS.md` Path C: Call 2 quote is live HTTP; host is `postgres-haystack` (not `db`).
+- Replaced template root `README.md` with product + spec-standard entry points.
+- Portal dual-hop OpenSPDD `design.md`; removed duplicate indexing FR-IX-024/025; intake live pointer matches lean FR-IX-023.
+
 ### Added (docs)
 
 - `QUICKSTART.md` at the uv project root: install, two `.env` profiles (fake vs live compose), pytest, Call 1 → Call 2 curl smoke.

@@ -6,8 +6,9 @@
 | **Date** | 2026-08-20 |
 | **Capability** | recommendation-pipeline (FR-010.2) / indexing Call 1 `needs_summary` |
 | **Trace** | FR-P-014 |
-| **OpenSpec** | [`specs/recommendation-pipeline/spec.md`](../../specs/recommendation-pipeline/spec.md) |
+| **OpenSpec** | [`specs/recommendation-pipeline/spec.md`](../../../specs/recommendation-pipeline/spec.md) |
 | **OpenSPDD** | [`design.md`](./design.md) |
+| **MADR** | [`../../../adrs/0011-llm-need-decompose-timeout-retry.md`](../../../adrs/0011-llm-need-decompose-timeout-retry.md) |
 
 ## Context
 

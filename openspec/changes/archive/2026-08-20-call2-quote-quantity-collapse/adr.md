@@ -6,8 +6,9 @@
 | **Date** | 2026-08-20 |
 | **Capability** | recommendation-pipeline (Call 2 quote) |
 | **Trace** | FR-P-013 |
-| **OpenSpec** | [`specs/recommendation-pipeline/spec.md`](../../specs/recommendation-pipeline/spec.md) |
+| **OpenSpec** | [`specs/recommendation-pipeline/spec.md`](../../../specs/recommendation-pipeline/spec.md) |
 | **OpenSPDD** | [`design.md`](./design.md) |
+| **MADR** | [`../../../adrs/0010-call2-quote-quantity-collapse.md`](../../../adrs/0010-call2-quote-quantity-collapse.md) |
 
 ## Context
 

@@ -95,28 +95,16 @@
       - --remove-orphans
     chdir: "{{ compose_dir }}"
 
-- name: Haystack health
+# ALB tg-haystack waits for GET <instance>:8000/health matcher 200-299.
+# GET / is 404; /docs is OpenAPI only — not the ALB check.
+- name: Haystack must answer 2xx on :8000/health
   ansible.builtin.uri:
-    url: "{{ item }}"
-    status_code: [200, 301, 302]
-  loop:
-    - http://127.0.0.1:8000/docs
-    - http://127.0.0.1:8000/health
-    - http://127.0.0.1:8000/
-  register: hay_health
-  retries: 15
+    url: http://127.0.0.1:8000/health
+    status_code: "{{ range(200, 300) | list }}"
+  register: hay_live
+  retries: 30
   delay: 5
-  until: hay_health is succeeded
-  failed_when: false
-
-- name: Uvicorn must answer on 8000
-  ansible.builtin.command:
-    argv: [curl, -sS, -o, /dev/null, -w, "%{http_code}", http://127.0.0.1:8000/docs]
-  register: hay_code
-  retries: 15
-  delay: 5
-  until: (hay_code.stdout | default('000')) in ['200', '301', '302']
-  changed_when: false
+  until: hay_live is succeeded
 
 - name: Sidecar status (missing modules may crash-loop)
   ansible.builtin.command:

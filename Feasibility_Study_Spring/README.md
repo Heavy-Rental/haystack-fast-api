@@ -2,8 +2,8 @@
 
 | Field | Value |
 |-------|--------|
-| **Version** | **2.1.0** |
-| **Date** | 2026-08-13 |
+| **Version** | **2.2.0** |
+| **Date** | 2026-08-27 |
 | **Audience** | Spring Boot engineers integrating with `haystack-fast-api` |
 
 **Behaviour SoT:** haystack OpenSpec + this package for Spring orchestration.
@@ -19,7 +19,7 @@
 | Topic | Haystack | This package |
 |-------|----------|--------------|
 | Portal saga | `implementation-plan.md` §1.2.0 (v3.18+) | [`portal-to-haystack-mapping.md`](./portal-to-haystack-mapping.md) **2.1** |
-| Call 2 recommend | OpenSpec recommend contract (`equipment.id` = `assets.id` live) | [`wire-contract-call1-call2.md`](./wire-contract-call1-call2.md) **2.1** |
+| Call 2 recommend | OpenSpec recommend contract (`equipment.id` = `assets.id` live; FR-P-013 collapse) | [`wire-contract-call1-call2.md`](./wire-contract-call1-call2.md) **2.2** |
 | Call 3 Q&A | KG contract `project-knowledge-query.md` | Same wire doc § Call 3 |
 | S2a | `phase2-s2a-*.md` v1.1.2 | [`s2a-haystack-dependency.md`](./s2a-haystack-dependency.md) |
 | S2b | pointer | [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) **2.0** — **as-built in Spring repo** (canonical **2.1.1**) |

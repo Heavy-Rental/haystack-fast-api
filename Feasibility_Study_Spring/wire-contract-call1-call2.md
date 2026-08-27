@@ -2,8 +2,8 @@
 
 | Field | Value |
 |-------|--------|
-| **Version** | **2.1.0** |
-| **Date** | 2026-08-13 |
+| **Version** | **2.2.0** |
+| **Date** | 2026-08-27 |
 | **Status** | As-built: Call 2 **recommend**, Call 3 **chatbot Q&A** |
 | **Base URL (local)** | `http://localhost:8000` |
 | **Auth** | None yet — private network only |
@@ -116,6 +116,7 @@ See lean FR-IX-023 fields in [`call1-ingest-response-for-spring.md`](./call1-ing
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **2.2.0** | 2026-08-27 | FR-P-013 quote quantity collapse + ADR-0003/0010 pointers; live OpenSpec remains SoT |
 | **2.1.0** | 2026-08-13 | Quote identity + equipment fields + evidence scores aligned to OpenSpec |
 | **2.0.0** | 2026-08-12 | Call 2 recommend; Call 3 query; full path inventory |
 | **1.1.1** | 2026-08-12 | Prior Call 2 = Q&A (superseded) |

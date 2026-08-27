@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | Draft — target state (6-day plan + Haystack Ch. 3–5, 7 deployment patterns; KG target); as-built HTTP override on live ingest |
+| **Status** | Target product capability; **live HTTP** is Call 1 ingest + Call 2 quote (children win). Remaining target: production-default graph/pgvector, naive/hybrid RAG manuals. |
 | **Feature id** | `agentic-equipment-recommendation-pricing` |
 | **Standards** | OpenSpec · Spec-kit user stories · OpenSPDD (see [`design.md`](./design.md)) |
 | **Parent product capability** | Yes — owns end-to-end product SDD |
@@ -33,7 +33,7 @@ This capability defines the **agentic AI decision and recommendation system** in
 2. **LLM-decomposes** that text into internal equipment needs (description, optional hints, optional **quantity**), then **expands quantity** into unit-needs (`RecommendationItem` has **no** `quantity` field).
 3. Runs a **Haystack 2.0 pipeline-first** recommendation path (custom components + ranking generation) to select suitable equipment against the real fleet schema.
 4. Filters candidates by **availability** using `Booking` / `BookingItem` overlap for the requested window.
-5. Attaches **pricing** by calling the pricing team’s `predict_price()` (experimental `ml-experiments/` during prototype; production `app/services/pricing/` when ready).
+5. Attaches **pricing** by calling production `app/services/pricing/` `predict_price()` (Call 2 `mlPredictedPrice`).
 6. Returns **exactly one ranked `RecommendationItem` per unit-need** (or null if no match) with honest rationales (assumptions, refinement suggestions, schema-gap callouts)—**not** a top-N list of alternatives per need.
 7. **(Target / post–6-day MVP)** Exposes the same deterministic work as **tools** (and optionally a LangGraph orchestrator) and allows an agent tool or operator endpoint to **trigger the machine-learning training pipeline** asynchronously.
 

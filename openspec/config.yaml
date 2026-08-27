@@ -1,5 +1,5 @@
 # OpenSpec project configuration (schema: spec-driven)
-# Standards: OpenSpec + GitHub Spec-kit + OpenSPDD
+# Standards: OpenSpec + GitHub Spec-kit + OpenSPDD + MADR
 
 schema: spec-driven
 
@@ -12,12 +12,14 @@ context: |
   Agents: LangGraph under app/agents/ (Stage-1 project knowledge)
   KG: Ragas KnowledgeGraph (mandatory after project-spec indexing)
   DB: PostgreSQL host `postgres-haystack`, db `heavy_rental`, SQLAlchemy sync + psycopg (default)
-  Pricing: predict_price() experimental under ml-experiments/; production path deferred
+  Pricing: production app/services/pricing/ (predict_price + internal /internal/v1/pricing/quote);
+    Phase 3a–3d default-disabled monthly APScheduler; no retrain HTTP (ADR-0005)
   Spec standards:
     - OpenSpec: openspec/specs/<capability>/spec.md (Requirements + Scenarios)
     - Spec-kit: .specify/memory/constitution.md; user stories; contracts; tasks
     - OpenSPDD: design.md as REASONS Canvas; structured prompts first-class;
       when behaviour wrong → fix prompt/spec first, then code
+    - MADR: openspec/adrs/ numbered decision log
   Portal project-spec submit (React → Spring → haystack dual-hop):
     React POST /api/recommendations/project-spec
     → Call 1 POST /internal/v1/recommendations/submitprojectspecification (user_id required)
@@ -43,10 +45,12 @@ rules:
     - Every requirement needs ≥1 scenario with **WHEN**/**THEN**.
     - Keep legacy FR-IDs as (Trace: FR-…) tags.
     - Status front-matter: as-built | deferred | target.
+    - Architecturally significant choices also get a numbered MADR under openspec/adrs/.
   design: |
     - Structure design.md as OpenSPDD REASONS Canvas (R-E-A-S-O-N-S).
     - Norms and Safeguards are mandatory for multi-agent and API work.
     - Link structured prompts (e.g. app/agents/prompts.py).
+    - Link numbered ADRs from openspec/adrs/ when the canvas records a chosen alternative.
   tasks: |
     - Checkbox tasks with IDs; group by phase or user story (Spec-kit).
     - Completed work lives under openspec/changes/archive/.

@@ -390,7 +390,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   verify:
-    name: Health GET :8000
+    name: Health GET :8000/health
     needs: [assert-lab, discover-targets, ansible-haystack]
     if: >-
       always()
@@ -417,7 +417,7 @@ jobs:
           aws_session_token: ${{ inputs.aws_session_token || secrets.AWS_SESSION_TOKEN }}
           aws_role_to_assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
 
-      - name: SSM GET :8000 on asg-haystack
+      - name: SSM GET :8000/health on asg-haystack
         run: |
           set -euo pipefail
           ASG=asg-haystack
@@ -444,7 +444,7 @@ jobs:
             CMD_ID="$(aws ssm send-command \
               --instance-ids "${id}" \
               --document-name AWS-RunShellScript \
-              --parameters 'commands=["code=$(curl -sS -o /dev/null -w %{http_code} http://127.0.0.1:8000/docs || true); if [ \"$code\" = \"000\" ]; then curl -sS -o /dev/null -w %{http_code} http://127.0.0.1:8000/health; else echo -n \"$code\"; fi"]' \
+              --parameters 'commands=["curl -sS -o /dev/null -w %{http_code} http://127.0.0.1:8000/health"]' \
               --query Command.CommandId --output text)"
             if ! aws ssm wait command-executed --command-id "${CMD_ID}" --instance-id "${id}"; then
               echo "::warning::SSM command did not finish on a guest (id omitted)."
@@ -455,16 +455,16 @@ jobs:
               --instance-id "${id}" \
               --query StandardOutputContent --output text | tr -d '[:space:]')"
             case "${CODE}" in
-              200|301|302) OK=$((OK + 1)) ;;
-              *) echo "::warning::GET :8000 returned '${CODE}' on a guest (id omitted)." ;;
+              2[0-9][0-9]) OK=$((OK + 1)) ;;
+              *) echo "::warning::GET :8000/health returned '${CODE}' on a guest (id omitted). tg-haystack matcher is 200-299." ;;
             esac
           done
           if [ "${OK}" -eq 0 ]; then
-            echo "::error::No Haystack guest answered GET :8000/docs or /health with 200–302. SoR/Bolt down does not fail this job by itself if uvicorn answers."
+            echo "::error::No Haystack guest answered GET :8000/health with 2xx (tg-haystack). SoR/Bolt down does not fail this job by itself if /health is 2xx."
             exit 1
           fi
           {
             echo "### Verify Haystack :8000"
             echo ""
-            echo "Guests with GET :8000 accepted: ${OK} / ${#ONLINE[@]}"
+            echo "Guests with GET :8000/health 2xx: ${OK} / ${#ONLINE[@]}"
           } >> "$GITHUB_STEP_SUMMARY"

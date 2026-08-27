@@ -8,7 +8,7 @@
 | **Application module** | `haystack-fast-api` (uv project root) |
 | **Python package** | `app` |
 | **Spec root** | `openspec/` |
-| **Standards** | OpenSpec · GitHub Spec-kit · OpenSPDD |
+| **Standards** | OpenSpec · GitHub Spec-kit · OpenSPDD · MADR |
 | **SPDD Ready** | Yes |
 
 **Reading order:** [`AGENTS.md`](./AGENTS.md). **Constitution:** [`.specify/memory/constitution.md`](../.specify/memory/constitution.md).
@@ -65,7 +65,7 @@ The industry is capital-intensive. Success depends on:
 | Packaging | **uv** project (`pyproject.toml` + `uv.lock`), Python **≥ 3.12** |
 | Runtime entry | `app.main:app` (Uvicorn), port **8000** |
 | Public API (baseline) | `GET /health`; Call 1 ingest; Call 2 `.../getassetrecommendations` (recommend); Call 3 `.../project-knowledge/query` (Q&A) |
-| Persistence (runtime) | PostgreSQL on host **`db`**; SQLAlchemy **sync** + **psycopg** |
+| Persistence (runtime) | PostgreSQL on host **`postgres-haystack`**; SQLAlchemy **sync** + **psycopg** |
 | Auth | None (deferred) |
 | Pipelines | Haystack under `app/pipelines/` (indexing, kg, recommend components) |
 | Agents | LangGraph under `app/agents/`: Stage-1 Q&A + **S3** indexing gate (`indexing_gate.py`); prompts OpenSPDD-first |
@@ -78,7 +78,7 @@ Environment, packaging, database host defaults, layering rules, and runbooks: [`
 
 | Role | Interest in this product |
 |------|---------------------------|
-| **Customer / portal / intake UI** | Submit project-spec via React → Spring; today: ingest + Q&A saga; later ranked equipment + prices |
+| **Customer / portal / intake UI** | Submit project-spec via React → Spring; Call 1 ingest then Call 2 quote (optional Call 3 Q&A) |
 | **Recommendation pipeline / implementers** | Orchestrate filter → availability → price → rank under Haystack 2.0 contracts |
 | **Pricing team** | Own `predict_price()` and model training; recommendation **calls** pricing |
 | **Ops / data scientist** (target) | Trigger or schedule ML training; poll job status |
@@ -95,9 +95,13 @@ Environment, packaging, database host defaults, layering rules, and runbooks: [`
 | `project.md` (this file) | Vision, product focus, identity |
 | `specs/domain` | Ubiquitous language & product invariants |
 | `specs/project-setup` | Stack, env, layering, runbooks |
-| `specs/indexing` + `knowledge-graph` | **Live** project-spec HTTP flow |
-| Recommend / pricing specs | Deferred recommend + service FR-010 |
-| `specs/equipment-recommendation` | Full product capability |
+| `specs/indexing` + `knowledge-graph` | **Live** Call 1 ingest + Call 3 Q&A |
+| `specs/portal-dual-hop` | Call 1 → Call 2 process |
+| `specs/recommendation-pipeline` | FR-010 service + **live Call 2 quote** |
+| `specs/recommendation-intake` | Deferred `results_by_need` envelope (not Call 2) |
+| `specs/dynamic-pricing` | Production `predict_price` + Phase 3a–3d scheduler |
+| `specs/equipment-recommendation` | Full product capability (children win on live HTTP) |
+| `adrs/` | MADR architectural decisions |
 | `.specify/memory/constitution.md` | Immutable process principles |
 | `docs/testing/` | Verification guides (not behaviour SoT) |
 
@@ -122,3 +126,4 @@ Treat these as **authoritative industry context** when present. Product behaviou
 |---------|------|--------|
 | 1.0.0 | 2026-08-10 | Migrated from `specification/00-overview.md` + `SPEC-project.md` into OpenSpec project context |
 | 1.1.0 | 2026-08-19 | Dynamic-pricing Phase 3d added default-disabled in-process APScheduler 3.x monthly retraining with restart-aware timing and FastAPI lifespan ownership; no retrain HTTP route was added. |
+| 1.2.0 | 2026-08-27 | Host `postgres-haystack` (not `db`); Call 2 recommend is live HTTP; MADR log under `openspec/adrs/`; FR-P-013/014 + Phase 3b–3d folded into live specs. |

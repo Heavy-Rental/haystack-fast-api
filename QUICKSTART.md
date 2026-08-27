@@ -2,7 +2,7 @@
 
 FastAPI service that turns a project specification into a **lean ingest summary** (Call 1) and an **equipment quote** (Call 2). Optional Call 3 is chatbot Q&A on the same session.
 
-This file is the short path: install → configure `.env` → start → test. Contracts live under [`openspec/`](./openspec/).
+This file is the short path: install → configure `.env` → start → test. Contracts live under [`openspec/`](./openspec/). Decisions: [`openspec/adrs/`](./openspec/adrs/).
 
 Run every command from this directory (the uv project root: `pyproject.toml`, `.env`, `app/`).
 

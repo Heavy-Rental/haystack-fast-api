@@ -3,10 +3,11 @@
 ## R — Requirements
 
 See [`spec.md`](./spec.md) Purpose, Outcomes, FR-010.1–8, and FR-P-001..014.  
-Service-level recommend graph; not default HTTP (live path is indexing).
+Call 1 live path is indexing. Call 2 quote HTTP is as-built (`getassetrecommendations`).
 Call 2 quote collapse of unit-need siblings that share `equipment.id` is
-**FR-P-013** (quote envelope only). Merged `quantity` is the duplicate count
-(3 copies → `quantity: 3`).
+**FR-P-013** (quote envelope only; [ADR-0010](../../adrs/0010-call2-quote-quantity-collapse.md)).
+Merged `quantity` is the duplicate count (3 copies → `quantity: 3`).
+LLM timeout recovery is **FR-P-014** ([ADR-0011](../../adrs/0011-llm-need-decompose-timeout-retry.md)).
 
 ## E — Entities
 

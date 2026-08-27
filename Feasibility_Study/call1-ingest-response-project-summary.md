@@ -8,7 +8,7 @@
 | **Version** | 1.3.0 |
 | **Endpoint** | `POST /internal/v1/recommendations/submitprojectspecification` |
 | **Question** | What should Call 1 return for Spring/portal without over-exposing indexing/KG internals, while enabling Call 2? |
-| **OpenSpec** | FR-IX-023 **as-built** (S1a–S1e) · contract `openspec/specs/indexing/contracts/ingest-from-project-spec.md` · proposal `openspec/changes/2026-08-10-call1-project-spec-summary/` |
+| **OpenSpec** | FR-IX-023 **as-built** (S1a–S1e) · contract `openspec/specs/indexing/contracts/ingest-from-project-spec.md` · archive `openspec/changes/archive/2026-08-10-call1-project-spec-summary/` |
 | **Related** | Dual-plane §2.1 Call 1 · multi-agent synthesis · ml-pricing · C/W/D · [`implementation-plan.md`](./implementation-plan.md) Phase 1 · portal [`../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../Feasibility_Study_Spring/portal-to-haystack-mapping.md) |
 | **Portal entry** | React `POST /api/recommendations/project-spec` → Call 1 then **Call 2 recommend quote** → React; Call 3 = chatbot Q&A |
 

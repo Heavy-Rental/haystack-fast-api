@@ -11,6 +11,8 @@
 | **Env** | [`../../../.env.example`](../../../.env.example) · live [`.env`](../../../.env) |
 | **Postman** | [`../../../postman/README.md`](../../../postman/README.md) |
 | **Spring mapping** | [`../../../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../../../Feasibility_Study_Spring/portal-to-haystack-mapping.md) |
+| **Design** | [`design.md`](./design.md) (OpenSPDD REASONS) |
+| **ADR** | [`../../adrs/0003-dual-hop-call1-ingest-call2-recommend-call3-qa.md`](../../adrs/0003-dual-hop-call1-ingest-call2-recommend-call3-qa.md) |
 
 **Spec-kit phases:** Specify (this file) → Plan → Tasks → Implement → Converge.
 
@@ -610,6 +612,8 @@ curl -sS -X POST http://localhost:8000/internal/v1/recommendations/project-knowl
 | Doc | When |
 |-----|------|
 | [`../../AGENTS.md`](../../AGENTS.md) | Runtime map Paths A–D |
+| [`design.md`](./design.md) | OpenSPDD REASONS |
+| [`../../adrs/0003-dual-hop-call1-ingest-call2-recommend-call3-qa.md`](../../adrs/0003-dual-hop-call1-ingest-call2-recommend-call3-qa.md) | Dual-hop ADR |
 | [`../indexing/contracts/ingest-from-project-spec.md`](../indexing/contracts/ingest-from-project-spec.md) | Call 1 fields |
 | [`../recommendation-pipeline/contracts/get-asset-recommendations.md`](../recommendation-pipeline/contracts/get-asset-recommendations.md) | Call 2 quote |
 | [`../../../QUICKSTART.md`](../../../QUICKSTART.md) | Smoke curls |
@@ -622,3 +626,10 @@ curl -sS -X POST http://localhost:8000/internal/v1/recommendations/project-knowl
 
 **Call 1** turns a project file/text into indexed project knowledge (vectors + KG-1) and a lean summary/`ingest_id`.  
 **Call 2** loads that session, grounds needs in project knowledge, matches live fleet (SQL ± Neo4j), prices candidates, and returns a quote — without inventing equipment ids or rates.
+
+## Change control
+
+| Version | Date | Notes |
+|---------|------|--------|
+| 1.0.0 | 2026-08-12 | As-built Call 1 → Call 2 process (FR-PDH-001…011) |
+| 1.1.0 | 2026-08-27 | OpenSPDD `design.md`; ADR-0003; FR-P-013/014 pointers |
