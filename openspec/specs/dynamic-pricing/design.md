@@ -2,9 +2,9 @@
 
 ## R — Requirements
 
-See [`spec.md`](./spec.md) Purpose, Outcomes, Requirements, and Phase 3a scenarios.
+See [`spec.md`](./spec.md) Purpose, Outcomes, Requirements, Phase 3a–3d scenarios, and [ADR-0005](../../adrs/0005-scheduler-only-pricing-retrain.md).
 
-Productionize the Phase 1 XGBoost model and provide reusable validate-before-promote and real-data-readiness foundations for Phase 3.
+Productionize the Phase 1 XGBoost model and run default-disabled monthly retraining with validate-before-promote.
 
 ## E — Entities
 
@@ -18,6 +18,8 @@ Productionize the Phase 1 XGBoost model and provide reusable validate-before-pro
 | Spec-band | Bucket by capacity (excavator/forklift) or platform_height (scissor/boom) |
 | Promotion gate decision | Current/candidate checks plus pass/fail details; exact-count or minimum-count completeness mode |
 | Real-price quality row | Read-only booking item status/category with `daily_rate` and `subtotal` |
+| Blended training set | Real realized rows + synthetic; per-category cutover + sample weights |
+| Retrain outcome | `promoted` \| `gate_failed` \| `error` persisted to `retrain_state.json` |
 
 ## A — Approach
 
@@ -41,6 +43,11 @@ app/services/pricing/
 │                         # category-name mapping fix applied here (see below)
 ├── read_resilience.py    # relocated from app/repositories/pricing_read_resilience.py (Phase 1e)
 ├── promotion_gate.py      # Phase 3a: reusable validation rows/model evaluation/gate decision
+├── blend.py               # Phase 3b: real+synthetic blend / per-category cutover
+├── real_training.py       # Phase 3b: fetch_real_training_rows
+├── training_sampling.py   # Phase 3b: shared distance_km imputation
+├── retrain_job.py         # Phase 3c: candidate train → gate → promote/rollback
+├── scheduler.py           # Phase 3d: default-disabled AsyncIOScheduler
 └── artifacts/
     ├── model.pkl          # promoted from ml-experiments/artifacts/ (already-trained Phase 1 model)
     └── current.json
@@ -289,20 +296,19 @@ No auth stack yet (project-setup). No manual retrain HTTP route exists or should
 Two completeness modes deliberately share every other gate check:
 
 - **Historical exact mode:** `candidate_validation_check.py` passes `expected_asset_count=27`, preserving its frozen one-time comparison and tests. SHA-pinned candidate-data provenance, chart rendering, printing, and before/after artifact hashes remain script-specific.
-- **Recurring-job floor mode:** future Phase 3c calls with `expected_asset_count=None` and `min_asset_count=1`, so normal fleet growth does not invalidate the job while an empty fleet still fails.
+- **Recurring-job floor mode:** Phase 3c calls with `expected_asset_count=None` and `min_asset_count=1`, so normal fleet growth does not invalidate the job while an empty fleet still fails.
 
 `ml-experiments/real_training_data_check.py` defines minimal SQLAlchemy Core table shapes for `booking_items`, `bookings`, `assets`, and `asset_categories`; it uses `resolve_pricing_schema()`/`schema_translate_map`, normalizes DB category names, and loads no ORM writes. Pandas summaries report null/zero/negative counts and percentages by status and by category. The readiness decision considers `{CONFIRMED, MOBILISED, COMPLETED}` realized and fails when realized rows are absent, a realized value is negative, or any model category lacks positive `daily_rate`/`subtotal` signal.
 
 Live result on 2026-08-18: undegraded `primary_snapshot`, 98 total rows, 76 realized rows, zero invalid values, and all four categories positive — Phase 3b data quality is unblocked.
 
-### Phase 3b–3d — cold-start blend, promotion orchestration, and scheduler (pending)
+### Phase 3b–3d — cold-start blend, promotion orchestration, and scheduler (as-built 2026-08-19)
 
-- **Bootstrap:** continue with grounded synthetic data until real rows are extracted and blended.
-- **Blend/cutover (3b):** weight real rows higher and drop synthetic rows independently per category after its threshold.
-- **Validated promotion (3c):** train a candidate and reuse `promotion_gate`; promote only on pass with rollback.
-- **Monthly trigger (3d):** default-disabled APScheduler in app lifespan. It is the sole planned runtime trigger; the manual HTTP endpoint is scrapped.
+- **Blend/cutover (3b):** `app/services/pricing/blend.py` + `real_training.py`. Real rows weighted (`PRICING_RETRAIN_REAL_SAMPLE_WEIGHT`, default 10); a category drops synthetic rows once it reaches `PRICING_RETRAIN_MIN_REAL_ROWS_PER_CATEGORY` (default 125). Empty real rows → pure synthetic. `distance_km` imputed via shared `training_sampling.sample_distance_km`.
+- **Validated promotion (3c):** `retrain_job.run_scheduled_retrain()` trains candidate-only paths, evaluates via `promotion_gate` min-asset mode, promotes on pass with one rolling backup, rolls back on promotion failure, never raises, persists `retrain_state.json`.
+- **Monthly trigger (3d):** default-disabled `AsyncIOScheduler` in `app/main.py` lifespan (`PRICING_RETRAIN_ENABLED=false`). Interval 30 days. Job wrapped in `asyncio.to_thread`. No retrain HTTP route (ADR-0005).
 
-No 3b–3d runtime behavior is implemented by Phase 3a. Full reasoning and sequencing: `docs/dynamic-pricing-scheduled-retrain-plan.md`.
+Full reasoning: `docs/dynamic-pricing-scheduled-retrain-plan.md`.
 
 ## S — Structure
 
@@ -353,10 +359,11 @@ uv run python ml-experiments/shap_review.py
 uv run pytest tests/test_pricing_feature_schema.py tests/test_pricing_model.py \
   tests/test_pricing_repository.py -v
 
-# Phase 3a (implemented 2026-08-18):
+# Phase 3a–3d (implemented 2026-08-18/19):
 uv run pytest tests/test_candidate_validation_check.py \
-  tests/test_pricing_promotion_gate.py tests/test_real_training_data_check.py -q
-uv run python ml-experiments/real_training_data_check.py
+  tests/test_pricing_promotion_gate.py tests/test_real_training_data_check.py \
+  tests/test_pricing_real_training_rows.py tests/test_pricing_blend.py \
+  tests/test_pricing_retrain_job.py tests/test_pricing_scheduler.py -q
 
 # Phase 2b (implemented 2026-08-11):
 uv run pytest tests/test_pricing_client_phase1e.py tests/test_pricing_phase2b_wiring.py \
@@ -441,7 +448,7 @@ uv run python ml-experiments/phase2e_serving_smoke.py
 - Guardrails from per-asset rate bounds, not env tables.
 - Port feature schema from ml-experiments — do not re-derive.
 - Spring owns schema; Python maps only.
-- Phase 3a quality probing is read-only and reuses the pricing schema resolver; no reflected writes or ORM expansion before Phase 3b.
+- Phase 3a quality probing is read-only and reuses the pricing schema resolver.
 - Promotion evaluation is canonical in `promotion_gate.py`; historical provenance/chart code remains in the historical script.
 - Full decision rationale lives in masterplan; this design restates contract only.
 
@@ -452,7 +459,7 @@ uv run python ml-experiments/phase2e_serving_smoke.py
 - Do not invent `weekly_rate = daily × 7` on recommend surfaces.
 - Do not "fix" low period_utilization early-booking prices.
 - Do not add booking_month, fuel price, or purchaseYear without a new decision + this capability update.
-- Do not add any manual retrain HTTP route. The Phase 3d scheduler is the sole planned runtime trigger and remains default-disabled.
+- Do not add any manual retrain HTTP route. The Phase 3d scheduler is the sole runtime trigger and remains default-disabled (ADR-0005).
 - Do not compare `AssetCategory.name` against `feature_schema.CATEGORIES` (or vice versa) without going through `DB_NAME_TO_FEATURE_NAME` — a silent zero-row match degrades to the static fallback with no error, the exact bug found 2026-08-11.
 - Do not "fix" the category mismatch by renaming `asset_categories.name` values in the DB — see "Category name mapping" above for why the mapping lives in Haystack code, not seed data.
 - Do not write a test for category-name-dependent code paths using a fully mocked `session.execute()` only — it can't catch a filter-clause mismatch; assert against real DB-shaped names too.
@@ -472,7 +479,7 @@ See [`spec.md`](./spec.md) Key decisions / non-goals table (mirrored here for RE
 | NaN platform_height | Structurally N/A for non-aerial |
 | No Alembic / no new tables | Spring owns schema |
 | Sync SQLAlchemy + psycopg | Project default |
-| Monthly scheduler only; no manual HTTP retrain | Manual endpoint never shipped and is scrapped; Phase 3a provides only gate/data foundations, Phase 3d wires runtime scheduling |
+| Monthly scheduler only; no manual HTTP retrain | Manual endpoint never shipped and is scrapped; Phase 3a–3d as-built (ADR-0005) |
 | Spec-band + period_utilization | Correct scarcity signal |
 | booking_month / fuel not added | Superseded / rejected |
 | Category-name mapping fixed in code, not DB data | `AssetCategory.name` is Spring-Boot canonical; `feature_schema.CATEGORIES` is the derived ML slug baked into trained artifacts |
@@ -485,4 +492,5 @@ See [`spec.md`](./spec.md) Key decisions / non-goals table (mirrored here for RE
 
 ## Design change note
 
-- **2026-08-18 / Phase 3a:** recorded reusable promotion-gate ownership, exact-vs-minimum asset modes, read-only real-price probe topology and readiness rules, live PASS evidence, verification commands, and explicit Phase 3b–3d pending boundaries.
+- **2026-08-18 / Phase 3a:** recorded reusable promotion-gate ownership, exact-vs-minimum asset modes, read-only real-price probe topology and readiness rules, live PASS evidence, verification commands.
+- **2026-08-27 / Phase 3e spec merge:** recorded as-built Phase 3b–3d blend, retrain job, and default-disabled scheduler (ADR-0005).

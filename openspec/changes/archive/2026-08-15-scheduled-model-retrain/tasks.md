@@ -94,5 +94,5 @@ retrain, so no serving artifact or database row changed.
 - [ ] Real geocoding for `distance_km`
 - [x] Phase 2e (Phase 2d candidate promotion) — completed separately 2026-08-17
 - [ ] Multi-generation rollback history beyond one rolling backup
-- [ ] Merging the finished requirement into live `spec.md`/`design.md`
-      (separate, later archival change)
+- [x] Merging the finished requirement into live `spec.md`/`design.md`
+      (Phase 3e, 2026-08-27; ADR-0005)

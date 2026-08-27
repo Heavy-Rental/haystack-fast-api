@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Implemented (Phase 3a–3d complete 2026-08-19; Phase 3e archive pending) |
+| **Status** | Archived — Phase 3a–3d as-built; Phase 3e live-spec merge 2026-08-27 (ADR-0005) |
 | **Date** | 2026-08-15 |
 | **Capability** | `dynamic-pricing` |
 | **Phase** | 3a–3d (reserved "Phase 3" name — see `spec.md` Status field) |

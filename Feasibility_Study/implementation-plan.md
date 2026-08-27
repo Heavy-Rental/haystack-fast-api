@@ -4,11 +4,11 @@
 |-------|--------|
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
-| **Date** | 2026-08-13 |
-| **Version** | 3.18.0 |
+| **Date** | 2026-08-27 |
+| **Version** | 3.19.0 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.18.0** Call 2 quote `equipment.id`=`assets.id` + scores + `PRICING_SCHEMA` + Call 1 extract expansions; **3.17.1** Call 2 `items[].mlPredictedPrice` as-built; **3.17.0** S7.8; **3.16.0** S8.3 live Neo4j; **3.15.0** S8.2 T4 config; **3.14.0** S2b Spring; **3.13.0** S8.1 T3; **3.12.0** S4 T0–T2 config; **3.11.0** S4 app live SQL; **3.10.0** S7.2; **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
+| **Revision notes** | **3.19.0** FR-P-013 quote collapse + FR-P-014 LLM timeout + Phase 3a–3d scheduler as-built + MADR ADRs; **3.18.0** Call 2 quote `equipment.id`=`assets.id` + scores + `PRICING_SCHEMA` + Call 1 extract expansions; **3.17.1** Call 2 `items[].mlPredictedPrice` as-built; **3.17.0** S7.8; **3.16.0** S8.3 live Neo4j; **3.15.0** S8.2 T4 config; **3.14.0** S2b Spring; **3.13.0** S8.1 T3; **3.12.0** S4 T0–T2 config; **3.11.0** S4 app live SQL; **3.10.0** S7.2; **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -70,7 +70,7 @@ Call 3: POST /internal/v1/recommendations/project-knowledge/query
   → tools: project_vector_search, project_kg_query
   → optional follow-ups after submit (not required for portal project-spec UX)
 
-Full multi-agent C/W/D recommend graph remains future enrichment behind Call 2 DTO
+Call 2 quote DTO is as-built. Optional C/W/D enrich remains behind `RECOMMEND_VIA_AGENT_GRAPH` (S7.5, default off; S7.0–S7.8 as-built).
 
 DocumentStore: InMemory per-ingest session (default)
   S5-I0 as-built: INDEXING_DOCUMENT_STORE + build_document_store()
@@ -1220,4 +1220,4 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | BDD process (P10) | **Specified** (§2.2 Given/When/Then; stage PR workflow §2.3) |
 | PR description template | **Specified** (§6 — What & Why + Key Changes required; optional details) |
 | Accuracy validation | **3.2.1** cross-checked against app + OpenSpec |
-| Ready to implement | **Yes — start S1 (Call 1) + parallel S2a idempotency / S2b Spring C1 / S4 config sync**, each with **BDD scenarios + TDD-first** test pack and the §6 PR body template; multi-agent via S7.0→S7.7 increments |
+| Ready to implement | **As-built through S8.3 / Call 2 quote / Phase 3a–3d.** Remaining targets: I2 pgvector default, production-default `RECOMMEND_VIA_AGENT_GRAPH`, table-name pack alignment. New work follows OpenSpec change + MADR when choosing alternatives. |

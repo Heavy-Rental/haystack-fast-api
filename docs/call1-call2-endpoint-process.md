@@ -4,8 +4,9 @@
 |-------|--------|
 | **Status** | As-built (haystack-fast-api) |
 | **Audience** | Engineers, Spring integrators, operators |
-| **Date** | 2026-08-14 |
+| **Date** | 2026-08-27 |
 | **OpenSpec twin** | [`../openspec/specs/portal-dual-hop/spec.md`](../openspec/specs/portal-dual-hop/spec.md) |
+| **ADRs** | [ADR-0003](../openspec/adrs/0003-dual-hop-call1-ingest-call2-recommend-call3-qa.md) dual-hop · [ADR-0010](../openspec/adrs/0010-call2-quote-quantity-collapse.md) quote collapse |
 | **Call 1 contract** | [`../openspec/specs/indexing/contracts/ingest-from-project-spec.md`](../openspec/specs/indexing/contracts/ingest-from-project-spec.md) |
 | **Call 2 contract** | [`../openspec/specs/recommendation-pipeline/contracts/get-asset-recommendations.md`](../openspec/specs/recommendation-pipeline/contracts/get-asset-recommendations.md) |
 | **Spring mapping** | [`../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../Feasibility_Study_Spring/portal-to-haystack-mapping.md) |

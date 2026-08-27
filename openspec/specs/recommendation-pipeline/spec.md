@@ -2,12 +2,12 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | As-built MVP — full FR-010.1–8 **service-level** orchestration; **NOT** default HTTP for `/submitprojectspecification` |
+| **Status** | as-built — FR-010.1–8 **service-level** + **Call 2 quote HTTP**; Call 1 `/submitprojectspecification` remains indexing |
 | **Feature id** | `recommendation-pipeline-mvp` |
 | **Tracking** | HR-65 (pipeline structure completion) |
 | **Standards** | OpenSpec · Spec-kit user stories · OpenSPDD (see [`design.md`](./design.md)) |
 | **Parent** | [`../equipment-recommendation/spec.md`](../equipment-recommendation/spec.md) |
-| **Reading map** | [`../../AGENTS.md`](../../AGENTS.md) Path C (deferred recommend) |
+| **Reading map** | [`../../AGENTS.md`](../../AGENTS.md) Path C (Call 2 recommend; deferred intake envelope) |
 | **Related** | [`../indexing/spec.md`](../indexing/spec.md) (**live HTTP**); [`../knowledge-graph/spec.md`](../knowledge-graph/spec.md); [`../recommendation-intake/spec.md`](../recommendation-intake/spec.md); [`../dynamic-pricing/spec.md`](../dynamic-pricing/spec.md) |
 | **Tests** | `tests/test_pipeline_intake_front.py`, `tests/test_recommend_pipeline_mvp.py` (service e2e), `tests/test_llm_need_decomposer.py`, `tests/test_quote_duplicate_collapse.py` (FR-P-013); HTTP ingest: `tests/test_recommendations_intake.py` (indexing, not this graph) |
 | **Testing guide** | [`../../../docs/testing/recommendation-pipeline-testing-guide.md`](../../../docs/testing/recommendation-pipeline-testing-guide.md) |
@@ -17,7 +17,7 @@
 
 **Conflict rule:** Pipeline step behaviour and component contracts for FR-010 → **this capability**. **Live** HTTP response for `/submitprojectspecification` → **indexing**. Broader product policy (catalog of four types, deposit 30%, SGD) → parent + this restatement.
 
-**As-built note (2026-08-07):** `app/api/recommendations.py` calls `IndexingIngestService`, not `RecommendationService`. FR-010 remains callable via `RecommendationService.recommend_from_project_spec` in tests and for future reattach.
+**As-built note:** Call 1 (`POST .../submitprojectspecification`) still calls `IndexingIngestService`. Call 2 (`POST .../getassetrecommendations`) uses `SessionRecommendService` → `RecommendationService` (quote envelope, FR-P-013). FR-010 remains callable via `recommend_from_project_spec` in tests.
 
 ---
 
@@ -524,8 +524,9 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | **1.2.1** | 2026-08-07 | Sequential README; live path notes user_id + mandatory KG |
 | **2.0.0** | 2026-08-10 | Migrated to OpenSpec Requirement/Scenario + design REASONS under `openspec/specs/recommendation-pipeline/` |
 | **2.7.0** | 2026-08-13 | Call 2 quote: `equipment.id` = `assets.id` (live SQL); extra catalog fields; `PRICING_SCHEMA`; seed remains CI only |
-| **2.8.0** | 2026-08-20 | **FR-P-013:** collapse Call 2 unit-need siblings that share parent need + `equipment.id` into one quote line; merged `quantity` is the duplicate count (3 copies → `quantity: 3`); `quantity > 1` → `available=false`; qty-1 availability from `bookings` + `return_records` |
-| **2.9.0** | 2026-08-20 | **FR-P-014:** LLM need-decompose retries once on read/connect timeout then keyword-fallback; default `LLM_TIMEOUT_SECONDS` 120 |
+| **2.8.0** | 2026-08-20 | **FR-P-013:** collapse Call 2 unit-need siblings that share parent need + `equipment.id` into one quote line; merged `quantity` is the duplicate count (3 copies → `quantity: 3`); `quantity > 1` → `available=false`; qty-1 availability from `bookings` + `return_records`. **ADR-0010.** |
+| **2.9.0** | 2026-08-20 | **FR-P-014:** LLM need-decompose retries once on read/connect timeout then keyword-fallback; default `LLM_TIMEOUT_SECONDS` 120. **ADR-0011.** |
+| **2.10.0** | 2026-08-27 | Status: Call 2 quote HTTP as-built (Call 1 remains indexing). Path C heading no longer “deferred recommend”. |
 | **2.6.0** | 2026-08-13 | Call 2 quote: `items[].mlPredictedPrice` as-built (same daily rate as `equipment.baseDailyRate`) |
 | **2.5.0** | 2026-08-13 | S4 app: live SQL fleet backend (`FLEET_BACKEND=sql`); DTO sql path unchanged |
 | **2.4.0** | 2026-08-13 | S7.2 as-built: Neo4j template tools + populate no-op; recommend not blocked when graph empty |

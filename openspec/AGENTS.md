@@ -7,6 +7,7 @@ This folder is the **SDD source of truth**. Standards:
 | **OpenSpec** | Capability behaviour in `specs/<cap>/spec.md` |
 | **GitHub Spec-kit** | Constitution (`.specify/memory/constitution.md`), user stories, contracts, tasks, converge |
 | **OpenSPDD** | REASONS Canvas in `design.md`; structured prompts; **fix prompt/spec first, then code** |
+| **MADR** | Numbered architectural choices in [`adrs/`](./adrs/) |
 
 **Start here**, then follow a path. Do not treat all capabilities as equally “live.”
 
@@ -139,14 +140,16 @@ Dynamic pricing Phase 3a–3d as-built: real-data blend + gated promotion + defa
 
 ---
 
-## Path C — Deferred recommend (service / reattach)
+## Path C — Call 2 recommend (live HTTP + service) and deferred intake envelope
+
+Call 2 quote HTTP is **as-built**. What remains deferred is the old `results_by_need` envelope on `/submitprojectspecification` (that route stays indexing).
 
 | Step | Document | Status |
 |------|----------|--------|
-| **11** | [`specs/recommendation-intake/spec.md`](./specs/recommendation-intake/spec.md) | Deferred `results_by_need` envelope |
-| **12** | [`specs/recommendation-pipeline/spec.md`](./specs/recommendation-pipeline/spec.md) | FR-010.1–8 **service-level** |
-| **13** | [`specs/dynamic-pricing/spec.md`](./specs/dynamic-pricing/spec.md) | `predict_price` for recommend; S6 tool `predict_asset_price` (US-5) |
-| **13.5** | [`specs/domain-seed-data/spec.md`](./specs/domain-seed-data/spec.md) | Seed-data richness required for §13 to be verifiable — executed on the Spring Boot side, not this repo |
+| **11** | [`specs/recommendation-intake/spec.md`](./specs/recommendation-intake/spec.md) | Deferred `results_by_need` on Call 1; live ingest is indexing |
+| **12** | [`specs/recommendation-pipeline/spec.md`](./specs/recommendation-pipeline/spec.md) | FR-010.1–8 service + **Call 2 quote** (`getassetrecommendations`, FR-P-013/014) |
+| **13** | [`specs/dynamic-pricing/spec.md`](./specs/dynamic-pricing/spec.md) | Production `predict_price`; S6 tool; Phase 3a–3d scheduler (default off) |
+| **13.5** | [`specs/domain-seed-data/spec.md`](./specs/domain-seed-data/spec.md) | Seed-data richness — executed on the Spring Boot side, not this repo |
 
 ---
 
@@ -156,7 +159,7 @@ Dynamic pricing Phase 3a–3d as-built: real-data blend + gated promotion + defa
 |------|----------|------|
 | **14** | [`specs/equipment-recommendation/spec.md`](./specs/equipment-recommendation/spec.md) | Full product SDD |
 | **15** | [`../docs/testing/recommendation-pipeline-testing-guide.md`](../docs/testing/recommendation-pipeline-testing-guide.md) | Pytest / curl (live = ingest + `user_id`) |
-| **16** | [`../docs/testing/recommendation-postman-testing-guide.md`](../docs/testing/recommendation-postman-testing-guide.md) | **Deferred** recommend Postman |
+| **16** | [`../docs/testing/recommendation-postman-testing-guide.md`](../docs/testing/recommendation-postman-testing-guide.md) | Historical `results_by_need` Postman (**deferred**; live HTTP uses [`../postman/README.md`](../postman/README.md)) |
 
 ---
 
@@ -165,9 +168,11 @@ Dynamic pricing Phase 3a–3d as-built: real-data blend + gated promotion + defa
 | Concern | Wins |
 |---------|------|
 | Live `POST .../submitprojectspecification` fields & index graph | **`specs/indexing/`** |
-| Mandatory KG after joiner / multi-agent Stage 1 | **`specs/knowledge-graph/`** |
-| FR-010 components / seed fleet | **`specs/recommendation-pipeline/`** (service) |
-| Deferred recommend JSON envelope | **`specs/recommendation-intake/`** (deferred) |
+| Mandatory KG after joiner / multi-agent Stage 1 / Call 3 Q&A | **`specs/knowledge-graph/`** |
+| Call 1 → Call 2 saga / dual-plane order | **`specs/portal-dual-hop/`** |
+| Call 2 quote DTO, FR-010, FR-P-013/014 | **`specs/recommendation-pipeline/`** |
+| Deferred `results_by_need` on Call 1 | **`specs/recommendation-intake/`** (deferred) |
+| Architectural choice among alternatives | **`adrs/`** (MADR) |
 
 ---
 
@@ -179,6 +184,7 @@ Dynamic pricing Phase 3a–3d as-built: real-data blend + gated promotion + defa
    - `specs/<cap>/spec.md` deltas (`## ADDED|MODIFIED|REMOVED Requirements`)
    - `design.md` as **REASONS Canvas** (Requirements, Entities, Approach, Structure, Operations, Norms, Safeguards)
    - `tasks.md` checkbox list
+   - `adr.md` when the change chooses among architectural alternatives; add a numbered file under [`adrs/`](./adrs/)
 3. **Structured prompts:** if agents change, edit `app/agents/prompts.py` (or `openspec/spdd/prompts/`) **before** or **with** code — never only in chat.
 4. **Implement** tasks; keep specs/prompts/code in the same change set.
 5. **Converge:** verify tests + scenarios; on mismatch, fix spec/prompt first.

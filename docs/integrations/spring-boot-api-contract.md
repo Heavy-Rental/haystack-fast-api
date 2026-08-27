@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|--------|
 | **Document type** | External integration contract (caller-facing — written for the Spring Boot team, not internal reasoning) |
-| **Status** | Draft — pending Spring Boot review, see "Open items" below |
+| **Status** | As-built wire notes — prefer [`Feasibility_Study_Spring/wire-contract-call1-call2.md`](../../Feasibility_Study_Spring/wire-contract-call1-call2.md) |
 | **Audience** | Spring Boot backend engineers integrating against `haystack-fast-api` |
 | **Caller** | Spring Boot only. No route below is called directly by a browser/mobile client. |
 | **Base URL (local dev)** | `http://localhost:8000` |
@@ -12,7 +12,7 @@
 | **Portal → haystack mapping** | [`Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../../Feasibility_Study_Spring/portal-to-haystack-mapping.md) |
 | **Internal reasoning (Haystack maintainers only, not required reading for integration)** | [`openspec/specs/dynamic-pricing/`](../../openspec/specs/dynamic-pricing/), [`openspec/specs/recommendation-intake/`](../../openspec/specs/recommendation-intake/), [`openspec/project.md`](../../openspec/project.md) |
 
-> **Path note:** Live Call 1 / Call 2 / Call 3 routes are under **`/internal/v1/recommendations/`** (see OpenSpec + Spring pack). Sections below that still show `/api/v1/...` are historical draft text — prefer [`Feasibility_Study_Spring/wire-contract-call1-call2.md`](../../Feasibility_Study_Spring/wire-contract-call1-call2.md) for Spring integration.
+> **Path note:** Live Call 1 / Call 2 / Call 3 routes are under **`/internal/v1/recommendations/`**. Quote collapse: [ADR-0010](../../openspec/adrs/0010-call2-quote-quantity-collapse.md) (FR-P-013). Dual-hop: [ADR-0003](../../openspec/adrs/0003-dual-hop-call1-ingest-call2-recommend-call3-qa.md).
 
 ### Portal project-spec submit saga (normative)
 

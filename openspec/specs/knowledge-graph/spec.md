@@ -179,13 +179,14 @@ KG build or save failure MUST fail the ingest request. There is no soft-fail pat
 - **WHEN** ingest is processed
 - **THEN** the HTTP request fails (not 200 with warnings only)
 
-### Requirement: FR-KG-007 Ingest response exposes kg_* fields
-The ingest response SHALL include: `kg_built`, `kg_node_count`, `kg_relationship_count`, `kg_artifact_path`, `kg_transform_applied`. On success `kg_built` is always `true`.  
-(Trace: source FR-KG-007; field list shared with indexing SPEC)
+### Requirement: FR-KG-007 KG metadata is session-internal (not public Call 1)
+Call 1's **public** lean body (FR-IX-023) MUST NOT include `kg_built`, `kg_node_count`, `kg_relationship_count`, `kg_artifact_path`, or `kg_transform_applied`. Those fields SHALL exist on the internal ingest/session meta after a successful KG build (`kg_built` true).  
+(Trace: source FR-KG-007; superseded public-body wording 2026-08-27 — lean FR-IX-023 wins)
 
-#### Scenario: Success response kg fields
+#### Scenario: Success keeps kg_* off the public body
 - **WHEN** ingest and KG succeed
-- **THEN** `kg_built` is `true`, `kg_node_count` and `kg_relationship_count` are present, `kg_artifact_path` is non-empty, and `kg_transform_applied` reflects config
+- **THEN** the HTTP Call 1 body matches FR-IX-023 (no public `kg_*`)
+- **AND** session/internal meta still records `kg_built=true` with node/relationship counts and artifact path
 
 ### Requirement: FR-KG-008 Sanitize user_id for filesystem paths
 `user_id` SHALL be sanitized for filesystem paths when writing user-scoped KG artifacts.  

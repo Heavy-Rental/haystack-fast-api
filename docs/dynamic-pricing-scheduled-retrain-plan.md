@@ -2,8 +2,8 @@
 
 > **This file tracks tasks and schedule only**, scoped to the scheduled-retrain
 > feature. Decisions and rationale live in
-> `openspec/changes/2026-08-15-scheduled-model-retrain/proposal.md` — don't
-> duplicate reasoning here; link back to that instead.
+> [`openspec/changes/archive/2026-08-15-scheduled-model-retrain/proposal.md`](../openspec/changes/archive/2026-08-15-scheduled-model-retrain/proposal.md)
+> and [ADR-0005](../openspec/adrs/0005-scheduler-only-pricing-retrain.md).
 >
 > **Runs in parallel with the existing `dynamic-pricing-execution-plan.md`**
 > (Phase 2e promotion completed 2026-08-17; its artifact swap remains separate
@@ -14,10 +14,10 @@
 > added candidate orchestration, gated promotion/rollback, and durable retrain
 > state. Phase 3d added the scheduler/config/app-lifespan wiring. Per the
 > 2026-08-18 documentation sync, Phase 3a's completed requirements are recorded in
-> `openspec/specs/dynamic-pricing/{spec.md,design.md}`. Phase 3e still owns
-> the final merge of completed Phase 3b–3d behavior and retirement of US-2.
+> `openspec/specs/dynamic-pricing/{spec.md,design.md}`. Phase 3e (live-spec merge
+> of 3b–3d + US-2 retirement) completed **2026-08-27** (spec **3.1.0**, ADR-0005).
 
-Last updated: 2026-08-19
+Last updated: 2026-08-27
 
 Naming: this feature claims the "**Phase 3**" name `openspec/specs/dynamic-pricing/spec.md`'s
 own Status field already reserves for "real-data blend + scheduled retrain" —
@@ -39,7 +39,7 @@ artifacts; Phase 3d now supplies the sole runtime trigger.
 
 **Decision: scrap the manual endpoint entirely.** The scheduler completed in
 Phase 3d is the sole retrain trigger, monthly. No HTTP route for on-demand
-retrain exists or should be added. Phase 3a foundations are now recorded in the live spec/design; Phase 3e will retire US-2 after the scheduler itself lands.
+retrain exists or should be added. Live spec/design record Phase 3a–3d (3.1.0); US-2 is a historical non-goal (ADR-0005).
 
 ---
 
@@ -76,14 +76,14 @@ retrain exists or should be added. Phase 3a foundations are now recorded in the 
 | 3b | ☑ | Phase 3b — real-data extraction + blend/cutover | `feature/ml-3b-real-data-blend` | Added `daily_rate`/`subtotal` and `created_at`/`total_amount` ORM fields; `real_training.py::fetch_real_training_rows()` is re-exported by `repository.py`; `training_sampling.py::sample_distance_km()` is shared with the synthetic generator; `blend.py::build_training_dataset()` performs per-category cutover and weighting; `train.py::train()` accepts optional `data`/`sample_weight`. Added `tests/test_pricing_real_training_rows.py` and `tests/test_pricing_blend.py`. | 3a (data confirmed usable by the probe) |
 | 3c | ☑ | Phase 3c — retrain job orchestration | `feature/ml-3c-retrain-job` | Added `app/services/pricing/retrain_job.py`: blended training writes only candidate paths; current/candidate artifacts are freshly loaded and checked through `promotion_gate`; a pass takes a rolling backup, atomically swaps both serving files, and reloads the singleton; a promotion error rolls both files back. Every outcome is returned rather than raised and atomically persisted to dedicated `retrain_state.json`. Added `tests/test_pricing_retrain_job.py`. | 3a (gate), 3b (blend) |
 | 3d | ☑ | Phase 3d — scheduler, app wiring, docs & regression | `feature/ml-3d-scheduler-and-docs` | Added APScheduler 3.x; five `PRICING_RETRAIN_*` config fields; restart-aware `app/services/pricing/scheduler.py`; additive default-disabled `lifespan` wiring; runtime-artifact ignores; `tests/test_pricing_scheduler.py`; finalized plan/tasks and full regression. | 3c |
-| 3e | ☐ *(separate, later, outside the four plan PRs)* | Phase 3e — merge completed runtime requirement into live spec | TBD | Fold finished Phase 3b–3d behavior into `openspec/specs/dynamic-pricing/{spec.md,design.md}` and retire "Manual retrain path (US-2)". Phase 3a foundations were synchronized early on 2026-08-18; they are not repeated here. | 3d, archival decision |
+| 3e | ☑ | Phase 3e — merge completed runtime requirement into live spec | docs stamp 2026-08-27 | Folded Phase 3b–3d into `openspec/specs/dynamic-pricing/{spec.md,design.md}` **3.1.0**; retired pending-3d language; ADR-0005; change archived. | 3d |
 
 Four PRs (3a–3d) ship the feature; the chain is strictly sequential since each
 PR wires directly into the next. Full architecture detail (function
 signatures, `AsyncIOScheduler` vs. `BackgroundScheduler` rationale, state
 persistence design, promotion/rollback mechanics) lives in
-`openspec/changes/2026-08-15-scheduled-model-retrain/proposal.md` and this
-change's PR descriptions as each phase lands — not duplicated here.
+[`openspec/changes/archive/2026-08-15-scheduled-model-retrain/proposal.md`](../openspec/changes/archive/2026-08-15-scheduled-model-retrain/proposal.md)
+and [ADR-0005](../openspec/adrs/0005-scheduler-only-pricing-retrain.md) — not duplicated here.
 
 ---
 
@@ -160,4 +160,5 @@ uv run python ml-experiments/real_training_data_check.py
 | 2026-08-19 | Phase 3b completed. Added Spring-owned price/booking ORM fields, `real_training.py` extraction with schema-resolution threading, a shared `training_sampling.py` distance sampler, per-category synthetic cutover and real-row weighting, and in-memory weighted training. Live `primary_snapshot` extraction returned 76 rows (21 boom lift, 15 excavator, 16 forklift, 24 scissor lift); the default threshold produced a 2,606-row blended smoke dataset and trained successfully without touching production artifacts. Full regression: 439 passed, 5 skipped; Ruff passed. |
 | 2026-08-19 | Phase 3c completed. Added the synchronous never-raise retrain job, candidate-only training paths, fresh current/candidate artifact validation, recurring minimum-fleet gate mode, atomic one-generation backup/swap, rollback and serving reload, plus dedicated atomic state persistence. Six new tests, 29 cross-phase focused tests, and the full 445-test regression passed; 5 optional tests skipped. |
 | 2026-08-19 | Phase 3d completed. Added APScheduler 3.x, five env-backed controls, restart-aware monthly scheduling, thread-offloaded retraining, default-disabled lifespan start/stop, runtime-artifact ignores, and scheduler coverage. Six new tests, 38 cross-phase focused tests, and the full 451-test regression passed with 5 optional skips; Ruff/diff hygiene and no-retrain-route inventory passed. Phase 3e remains the separate live-spec merge/archive step. |
+| 2026-08-27 | Phase 3e completed. Live `dynamic-pricing` spec/design **3.1.0** records 3b–3d; US-2 remains a historical non-goal; ADR-0005; change archived. |
 | 2026-08-19 (retrain controls adjusted) | Raised the default per-category cutover threshold from 20 to 125 and real sample weight from 5.0 to 10.0. With only 15–24 real rows/category, all categories now remain blended; 125×10 also keeps effective real loss mass near the roughly 1,250 synthetic rows/category at the cutover boundary. These are safer starting defaults, not a substitute for held-out real-booking validation. |
