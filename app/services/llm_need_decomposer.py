@@ -19,6 +19,9 @@ from app.services.need_decomposer import split_needs_from_text
 
 logger = logging.getLogger(__name__)
 
+_CONNECT_TIMEOUT_SECONDS = 10.0
+_TIMEOUT_ATTEMPTS = 2  # initial POST + one retry on read/connect timeout
+
 _SYSTEM_PROMPT = """You extract equipment rental needs from unstructured project text.
 
 Return ONLY a JSON array (no markdown fences, no commentary). Each element:
@@ -108,7 +111,7 @@ class LlmNeedDecomposer:
         base_url: str,
         api_key: str,
         model: str,
-        timeout_seconds: float = 60.0,
+        timeout_seconds: float = 120.0,
         temperature: float = 0.0,
         client: httpx.Client | None = None,
     ) -> None:
@@ -120,6 +123,14 @@ class LlmNeedDecomposer:
         self._client = client
         self._owns_client = client is None
 
+    def _http_timeout(self) -> httpx.Timeout:
+        return httpx.Timeout(
+            connect=_CONNECT_TIMEOUT_SECONDS,
+            read=self._timeout,
+            write=_CONNECT_TIMEOUT_SECONDS,
+            pool=_CONNECT_TIMEOUT_SECONDS,
+        )
+
     def warm_up(self) -> None:
         """Create HTTP client once (call from app lifespan when mode=llm)."""
         if self._client is None:
@@ -129,7 +140,7 @@ class LlmNeedDecomposer:
                     "Authorization": f"Bearer {self._api_key}",
                     "Content-Type": "application/json",
                 },
-                timeout=self._timeout,
+                timeout=self._http_timeout(),
             )
             logger.info(
                 "LlmNeedDecomposer warmed up base_url=%s model=%s",
@@ -163,12 +174,29 @@ class LlmNeedDecomposer:
             ],
         }
 
-        try:
-            response = self._client.post("/chat/completions", json=body)
-            response.raise_for_status()
-            payload = response.json()
-        except httpx.HTTPError:
-            logger.exception("LLM need decompose HTTP error")
+        payload: dict[str, Any] | None = None
+        for attempt in range(1, _TIMEOUT_ATTEMPTS + 1):
+            try:
+                response = self._client.post("/chat/completions", json=body)
+                response.raise_for_status()
+                payload = response.json()
+                break
+            except httpx.TimeoutException as exc:
+                logger.warning(
+                    "LLM need decompose timeout attempt=%s/%s "
+                    "read_timeout_s=%s: %s",
+                    attempt,
+                    _TIMEOUT_ATTEMPTS,
+                    self._timeout,
+                    exc,
+                )
+                if attempt >= _TIMEOUT_ATTEMPTS:
+                    return split_needs_from_text(text)
+            except httpx.HTTPError:
+                logger.exception("LLM need decompose HTTP error")
+                return split_needs_from_text(text)
+
+        if payload is None:
             return split_needs_from_text(text)
 
         content = _extract_message_content(payload)

@@ -7,7 +7,11 @@
 # Stages:
 #   1. Integration only — checkout, Python 3.12 + uv, Haystack smoke, layout
 #
-# Use this for early signal on feature-branch pushes. Full gates remain in:
+# Use this for early signal on feature-branch pushes (no pull_request trigger).
+# Sole Integration-stage run for a feature-branch SHA. Integration CI must not
+# call this workflow on PR; it reuses a successful run of this pipeline for the
+# PR head SHA and skips repeating uv/layout in Integration.
+# Full gates remain in:
 #   integration-pipeline.yml  (haystack-ci-caller.yml)
 #   release-pipeline.yml      (haystack-release-caller.yml)
 #
@@ -20,6 +24,8 @@
 #
 # This file exposes only workflow_call (no push / PR / workflow_dispatch).
 # A gate job rejects any caller other than haystack-fast-feedback-caller.yml.
+# haystack-ci-caller.yml must not become a second caller (that would re-run
+# Fast Feedback on every PR).
 #
 # This family does not provision infrastructure, deploy, or operate production.
 # Those concerns belong to another project.

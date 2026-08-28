@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | Draft — target state (6-day plan + Haystack Ch. 3–5, 7 deployment patterns; KG target); as-built HTTP override on live ingest |
+| **Status** | Target product capability; **live HTTP** is Call 1 ingest + Call 2 quote (children win). Remaining target: production-default graph/pgvector, naive/hybrid RAG manuals. |
 | **Feature id** | `agentic-equipment-recommendation-pricing` |
 | **Standards** | OpenSpec · Spec-kit user stories · OpenSPDD (see [`design.md`](./design.md)) |
 | **Parent product capability** | Yes — owns end-to-end product SDD |
@@ -33,7 +33,7 @@ This capability defines the **agentic AI decision and recommendation system** in
 2. **LLM-decomposes** that text into internal equipment needs (description, optional hints, optional **quantity**), then **expands quantity** into unit-needs (`RecommendationItem` has **no** `quantity` field).
 3. Runs a **Haystack 2.0 pipeline-first** recommendation path (custom components + ranking generation) to select suitable equipment against the real fleet schema.
 4. Filters candidates by **availability** using `Booking` / `BookingItem` overlap for the requested window.
-5. Attaches **pricing** by calling the pricing team’s `predict_price()` (experimental `ml-experiments/` during prototype; production `app/services/pricing/` when ready).
+5. Attaches **pricing** by calling production `app/services/pricing/` `predict_price()` (Call 2 `mlPredictedPrice`).
 6. Returns **exactly one ranked `RecommendationItem` per unit-need** (or null if no match) with honest rationales (assumptions, refinement suggestions, schema-gap callouts)—**not** a top-N list of alternatives per need.
 7. **(Target / post–6-day MVP)** Exposes the same deterministic work as **tools** (and optionally a LangGraph orchestrator) and allows an agent tool or operator endpoint to **trigger the machine-learning training pipeline** asynchronously.
 
@@ -446,7 +446,7 @@ When `FLEET_BACKEND=sql`, recommend fleet tools SHALL read Postgres-Haystack via
 
 Recommend-mode SHALL expose allowlisted in-process KG-2 tools `neo4j_cypher_read` and `trigger_neo4j_populate` via `app/agents/neo4j_tools.py` + `tool_factory.py`. `neo4j_cypher_read` MUST accept only named templates (`asset_neighbors`, `assets_by_category`, `compatible_attachments`) and MUST reject free-form `cypher` / `query` / `raw_cypher` / `sql`. An empty backend MUST return `[]`. `trigger_neo4j_populate` MUST return a `job_id` immediately with `blocking=false` and MUST NOT run on the recommend hot path. Delegator K-3: when the Neo4j backend is empty/unavailable, fleet `tool_allowlist` MUST omit `neo4j_cypher_read` and record `skip_tools`; required SQL fleet tools MUST still run. Recommend MUST NOT invent `asset_id` from graph neighbors. `NEO4J_BACKEND` SHALL be `fake` (default, CI) or `bolt` (live fleet labels only; never `:Document`). Live populate enqueue MUST `POST` `NEO4J_POPULATE_URL` and MUST treat transport errors as `status=unavailable` without raising. Default CI uses `FakeNeo4jBackend` (no `neo4j` package required).
 
-**Status:** **as-built (S7.2 + S8.3)**. Runtime: `neo4j_tools.py`. Tests: `tests/test_neo4j_tools.py`; optional `tests/test_neo4j_tools_integration.py` (`@pytest.mark.neo4j`). Config **S8.1–S8.2** persist + trigger as-built.
+**Status:** **as-built (S7.2 + S8.3)**. Runtime: `neo4j_tools.py`. Tests: `tests/test_neo4j_tools.py`; optional `tests/test_neo4j_tools_integration.py` (`@pytest.mark.neo4j`). Ops **S8.1–S8.2** persist + trigger as-built (config pack locally; this repo’s deploy-pipeline vendors copies — **ADR-0012**).
 
 #### Scenario: Empty graph returns empty list
 - **GIVEN** a `FakeNeo4jBackend` with no nodes
@@ -775,6 +775,7 @@ Architecture, Ragas pattern, deps, and offline pipeline sketch: [`design.md`](./
 | 0.9.2 | 2026-08-07 | KG as-built pointer; sequential map |
 | 1.0.0 | 2026-08-10 | Migrated to OpenSpec under `openspec/specs/equipment-recommendation/`; architecture/day plan/deployment → design.md |
 | 1.1.0 | 2026-08-12 | **S7.0 + S7.1 as-built:** `RecommendAgentState` + F-2 partition validation; allowlisted fleet/needs tools + DI factory (FR-019b note). Graph (S7.3+) still TARGET. Archives `changes/archive/2026-08-12-s7-0-recommend-agent-state/`, `.../s7-1-fleet-tool-catalog/`. |
+| 1.11.0 | 2026-08-28 | **ADR-0012:** academy/paid deploy vendors pack `neo4j-populate` / `postgres-haystack-sync` scripts. App tools unchanged (S8.3). Archive `changes/archive/2026-08-28-hr-244-deploy-pipeline-sync-workers/`. |
 | 1.10.0 | 2026-08-13 | Call 2 quote identity: `equipment.id` = `assets.id` (live SQL); DTO `asset_id` remains `assets.name`. Extra quote fields + `platformHeight` aerial-only; no `img`. `PRICING_SCHEMA` documented. |
 | 1.9.1 | 2026-08-13 | Call 2 quote: `items[].mlPredictedPrice` as-built (same daily rate as `equipment.baseDailyRate`). |
 | 1.9.0 | 2026-08-13 | **S7.8 as-built:** Worker [5] live `project_vector_search` + `project_kg_query` before decompose; soft-fail notes. Archive `changes/archive/2026-08-13-s7-8-worker5-kg1-live/`. |

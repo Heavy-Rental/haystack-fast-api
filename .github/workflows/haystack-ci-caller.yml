@@ -2,20 +2,30 @@
 # Install into: haystack-fast-api
 # Path:         .github/workflows/haystack-ci-caller.yml
 # =============================================================================
-# GitHub Flow CI caller — validates feature-branch pull requests before merge.
+# GitHub Flow CI caller — validate PRs/pushes to develop only.
+# Does NOT deploy. Does NOT run release packaging / GHCR.
 #
 # Place both files in the FastAPI / Haystack application repository:
 #
 #   .github/workflows/haystack-ci-caller.yml       ← this file (triggers)
 #   .github/workflows/integration-pipeline.yml     ← reusable pipeline (called)
 #
+# Fast Feedback (do NOT call it from this file)
+# ---------------------------------------------
+# haystack-fast-feedback-caller.yml owns the Integration stage on feature-branch
+# pushes. Do not `uses:` fast-feedback-pipeline.yml here — that would run Fast
+# Feedback a second time when a PR is opened.
+# On pull_request, integration-pipeline.yml Integration reuses a successful
+# Fast Feedback run for the PR head SHA instead of repeating uv/layout.
+#
 # GitHub Flow
 # -----------
 #   1. Branch from develop
 #   2. Open a pull request into develop → this workflow runs (Integration first)
 #   3. Review + green checks → merge into develop
-#   4. Release packaging → haystack-release-caller.yml on GitHub Release
-#                          publish, or on PR develop → master
+#   4. Release packaging → haystack-release-caller.yml on workflow_dispatch
+#                          (Actions → Haystack Release Pipeline Invoke).
+#                          That workflow creates the GitHub Release.
 #
 # Reusable workflow (same repository):
 #   ./.github/workflows/integration-pipeline.yml
@@ -24,7 +34,7 @@
 # -----------------------------------------
 #   1. Integration           ← HIGHEST PRIORITY (required status check)
 #   2. Quality Control       (needs Integration; Ruff + pytest)
-#   2. Security Testing      (needs Integration; Semgrep p/python + Trivy)
+#   2. Security Testing      (needs Integration; Semgrep p/python + pip-audit + Trivy)
 #   2. CodeQL Analysis       (needs Integration; Python Code Scanning)
 #   3. GitHub Flow CI Gate   (aggregate of the above — optional single check)
 #
@@ -75,6 +85,7 @@ permissions:
   pull-requests: read
   security-events: write
   actions: read
+  checks: write
 
 jobs:
   integration-pipeline:

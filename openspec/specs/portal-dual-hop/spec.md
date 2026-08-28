@@ -11,6 +11,8 @@
 | **Env** | [`../../../.env.example`](../../../.env.example) · live [`.env`](../../../.env) |
 | **Postman** | [`../../../postman/README.md`](../../../postman/README.md) |
 | **Spring mapping** | [`../../../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../../../Feasibility_Study_Spring/portal-to-haystack-mapping.md) |
+| **Design** | [`design.md`](./design.md) (OpenSPDD REASONS) |
+| **ADR** | [`../../adrs/0003-dual-hop-call1-ingest-call2-recommend-call3-qa.md`](../../adrs/0003-dual-hop-call1-ingest-call2-recommend-call3-qa.md) |
 
 **Spec-kit phases:** Specify (this file) → Plan → Tasks → Implement → Converge.
 
@@ -60,7 +62,7 @@ Call 3 (chatbot Q&A) is out of primary scope here; it is noted only for orientat
 | Call 2 HTTP process | MVP service path + optional agent graph path |
 | Dual data planes | Plane B project vs Plane A fleet |
 | Env flags that change path | `INDEXING_*`, `FLEET_*`, `NEO4J_*`, `RECOMMEND_VIA_AGENT_GRAPH` |
-| Ops note | `neo4j-populate` lives in config pack; app is client/reader |
+| Ops note | `neo4j-populate` is an ops sidecar (pack locally; this repo’s deploy-pipeline on academy/paid). FastAPI is client/reader. **ADR-0012.** |
 
 ### Out of scope
 
@@ -68,7 +70,7 @@ Call 3 (chatbot Q&A) is out of primary scope here; it is noted only for orientat
 |------|--------|
 | Call 3 chatbot field contract | [`../knowledge-graph/contracts/project-knowledge-query.md`](../knowledge-graph/contracts/project-knowledge-query.md) |
 | Spring Resilience4j implementation | Spring repo / Feasibility_Study_Spring |
-| neo4j-populate SQL→Cypher ETL source | Config pack, not this app |
+| neo4j-populate SQL→Cypher ETL in Call 1/2 handlers | Out of request path. Job origin is the config pack; academy/paid copies live in `deploy-pipeline/ansible/roles/haystack/files/` |
 
 ---
 
@@ -272,6 +274,20 @@ Rates SHALL come from `pricing_client` / `predict_price` (or agent tool `predict
 - **AND** a warning is included
 - **AND** seed `AST-*` ids are not emitted
 
+#### Scenario: Duplicate catalog equipment is one quote line
+
+- **GIVEN** two unit-needs of the same parent (`need_1__u1`, `need_1__u2`) that resolve to the same `equipment.id`
+- **WHEN** Call 2 assembles the quote
+- **THEN** `items[]` contains one line with `needId` `need_1` and `quantity` 2
+- **AND** internal `results_by_need` stays expanded (FR-P-013 / FR-P-005)
+
+#### Scenario: Three duplicates become quantity 3
+
+- **GIVEN** three unit-needs of the same parent (`need_1__u1`, `need_1__u2`, `need_1__u3`) that resolve to the same `equipment.id`
+- **WHEN** Call 2 assembles the quote
+- **THEN** `items[]` contains one line with `needId` `need_1` and `quantity` 3
+- **AND** `equipment.available` is false (one `assets.id` cannot fulfill 3 units)
+
 #### Scenario: Neo4j empty does not block quote
 
 - **GIVEN** `NEO4J_BACKEND=bolt` but the fleet graph is empty or unavailable
@@ -303,7 +319,7 @@ Project chunks SHALL be written by Call 1 via `create_session_document_store()`:
 
 ### Requirement: FR-PDH-010 Neo4j populate is ops plane
 
-Postgres → Neo4j fleet projection SHALL be performed by the **config pack** service `neo4j-populate` (SQL → Cypher MERGE), not by Call 1/2 request handlers. This app MAY enqueue populate via `trigger_neo4j_populate` (non-blocking) and MAY read via `neo4j_cypher_read` templates only.
+Postgres → Neo4j fleet projection SHALL be performed by the ops service `neo4j-populate` (SQL → Cypher MERGE), **not** by Call 1/2 request handlers. Local/devcontainer compose SHALL use the **config pack** job. Academy/paid compose SHALL vendor those pack scripts via Ansible (`deploy-pipeline/ansible/roles/haystack/files/`) and MUST NOT run `python -m neo4j_populate` from the FastAPI uvicorn image. This compose file MUST NOT start a `neo4j:` service. This app MAY enqueue populate via `trigger_neo4j_populate` (non-blocking POST to `NEO4J_POPULATE_URL`) and MAY read via `neo4j_cypher_read` templates only. **ADR-0012.**
 
 #### Scenario: Populate not on recommend hot path
 
@@ -311,6 +327,14 @@ Postgres → Neo4j fleet projection SHALL be performed by the **config pack** se
 - **WHEN** fleet graph is stale
 - **THEN** recommend MUST NOT block on a full Neo4j rebuild
 - **AND** tools may read whatever graph is already projected
+
+#### Scenario: Academy/paid compose vendors pack workers
+
+- **GIVEN** the Ansible haystack role is applied
+- **WHEN** compose starts
+- **THEN** `postgres-haystack-sync` and `neo4j-populate` run scripts from `{{ compose_dir }}/workers/`
+- **AND** those services MUST NOT invoke `python -m postgres_haystack_sync` or `python -m neo4j_populate` from the uvicorn image
+- **AND** compose MUST NOT define a `neo4j:` service on this host
 
 ---
 
@@ -581,7 +605,7 @@ curl -sS -X POST http://localhost:8000/internal/v1/recommendations/project-knowl
 
 - [ ] Same process as Call 1 (or durable project store)
 - [ ] `FLEET_BACKEND=sql` and `postgres-haystack` has `assets`
-- [ ] Optional: Neo4j populated (config pack `neo4j-populate`)
+- [ ] Optional: Neo4j populated (`neo4j-populate` sidecar — pack locally or deploy-pipeline on academy/paid)
 - [ ] App `NEO4J_PASSWORD` matches pack (often `heavyrental`)
 
 ### On Call 2 failure
@@ -596,6 +620,8 @@ curl -sS -X POST http://localhost:8000/internal/v1/recommendations/project-knowl
 | Doc | When |
 |-----|------|
 | [`../../AGENTS.md`](../../AGENTS.md) | Runtime map Paths A–D |
+| [`design.md`](./design.md) | OpenSPDD REASONS |
+| [`../../adrs/0003-dual-hop-call1-ingest-call2-recommend-call3-qa.md`](../../adrs/0003-dual-hop-call1-ingest-call2-recommend-call3-qa.md) | Dual-hop ADR |
 | [`../indexing/contracts/ingest-from-project-spec.md`](../indexing/contracts/ingest-from-project-spec.md) | Call 1 fields |
 | [`../recommendation-pipeline/contracts/get-asset-recommendations.md`](../recommendation-pipeline/contracts/get-asset-recommendations.md) | Call 2 quote |
 | [`../../../QUICKSTART.md`](../../../QUICKSTART.md) | Smoke curls |
@@ -608,3 +634,11 @@ curl -sS -X POST http://localhost:8000/internal/v1/recommendations/project-knowl
 
 **Call 1** turns a project file/text into indexed project knowledge (vectors + KG-1) and a lean summary/`ingest_id`.  
 **Call 2** loads that session, grounds needs in project knowledge, matches live fleet (SQL ± Neo4j), prices candidates, and returns a quote — without inventing equipment ids or rates.
+
+## Change control
+
+| Version | Date | Notes |
+|---------|------|--------|
+| 1.0.0 | 2026-08-12 | As-built Call 1 → Call 2 process (FR-PDH-001…011) |
+| 1.1.0 | 2026-08-27 | OpenSPDD `design.md`; ADR-0003; FR-P-013/014 pointers |
+| 1.2.0 | 2026-08-28 | **FR-PDH-010 / ADR-0012:** academy/paid deploy vendors pack `postgres-haystack-sync` + `neo4j-populate` scripts; FastAPI still does not run ETL. Archive `changes/archive/2026-08-28-hr-244-deploy-pipeline-sync-workers/`. |

@@ -299,3 +299,36 @@ def test_is_asset_available_true_when_no_holds() -> None:
         )
         is True
     )
+
+
+def test_is_asset_available_true_when_return_ends_hold_before_window() -> None:
+    """Returned machine is free even if bookings.end_date still overlaps."""
+    session = _session_returning(
+        [(date(2026, 8, 1), date(2026, 8, 31), date(2026, 8, 10))]
+    )
+    assert (
+        FleetRepository().is_asset_available(
+            session,
+            27,
+            start_date=date(2026, 8, 13),
+            end_date=date(2026, 8, 20),
+            resolution=PRIMARY,
+        )
+        is True
+    )
+
+
+def test_is_asset_available_false_when_return_still_overlaps_window() -> None:
+    session = _session_returning(
+        [(date(2026, 8, 1), date(2026, 8, 31), date(2026, 8, 15))]
+    )
+    assert (
+        FleetRepository().is_asset_available(
+            session,
+            27,
+            start_date=date(2026, 8, 13),
+            end_date=date(2026, 8, 20),
+            resolution=PRIMARY,
+        )
+        is False
+    )

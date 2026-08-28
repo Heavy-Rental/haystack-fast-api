@@ -3,16 +3,24 @@
 # =============================================================================
 # Stages (priority order — Integration is highest priority):
 #   1. Integration           (HIGHEST) checkout, Python 3.12 + uv, Haystack smoke
+#      On pull_request: reuse a successful Fast Feedback CI run for the PR head
+#      SHA instead of repeating those steps. Fast Feedback owns the Integration
+#      stage on feature-branch pushes; this job must not invoke that workflow.
+#      Push to develop / workflow_dispatch / missing Fast Feedback → run fully.
 #   2. Quality Control       needs Integration — Ruff + pytest (CI-safe backends)
-#   3. Security Testing      needs Integration — SAST (Semgrep p/python) + pip-audit
-#                            report + SCA/FS (Trivy)
+#   3. Security Testing      needs Integration — SAST (Semgrep app + GHA) +
+#                            pip-audit report + SCA/FS (Trivy)
 #   4. CodeQL Analysis       needs Integration — GitHub CodeQL (Python)
 #   5. GitHub Flow CI Gate   aggregate: Integration first, then QC + Security + CodeQL
 #
 # Security report format (standard): SARIF 2.1.0
-#   - Semgrep → semgrep.sarif
+#   - Semgrep app → semgrep.sarif
+#   - Semgrep GHA → semgrep-gha.sarif
 #   - Trivy FS → trivy-fs.sarif
 #   - CodeQL → GitHub Code Scanning (native SARIF via analyze)
+# Human-readable combined report: security-reports/combined-security-report.pdf
+#   Artifact: security-combined-report-pdf
+#   PR Checks tab: open this workflow → Summary → Artifacts, or Security Testing job summary.
 # Human-readable console output is for gates/logs only, not the report standard.
 # pip-audit JSON is a Python-specific extra report (does not fail the job).
 #
@@ -22,16 +30,20 @@
 # run uv build or publish artifacts to GHCR.
 #
 #   1. Branch from develop
-#   2. Open PR → develop (or push to develop) → haystack-ci-caller → this workflow
-#   3. Branch protection on develop should require:
+#   2. Push feature branch → haystack-fast-feedback-caller (Integration stage once)
+#   3. Open PR → develop (or push to develop) → haystack-ci-caller → this workflow
+#      PR Integration reuses Fast Feedback for the head SHA; do not call
+#      fast-feedback-pipeline.yml from haystack-ci-caller.yml (that would run it twice).
+#   4. Branch protection on develop should require:
 #        - "Integration"              ← highest priority / must pass first
 #        - "Quality Control"
 #        - "Security Testing"
 #        - "CodeQL Analysis"
 #        - "GitHub Flow CI Gate"       ← optional single aggregate check
-#   4. Merge when green → develop is integration-tested, not production-deployed
-#   5. Wheel packaging lives only in release-pipeline.yml
-#   6. This family does not provision infrastructure, deploy, or operate.
+#   5. Merge when green → develop is integration-tested, not production-deployed
+#   6. Wheel packaging, DAST, GHCR, and GitHub Release live only in
+#      release-pipeline.yml (workflow_dispatch; SAST/CodeQL stay here)
+#   7. This family does not provision infrastructure, deploy, or operate.
 #      Those concerns belong to another project.
 #
 # Application:
@@ -84,6 +96,8 @@ permissions:
   pull-requests: read
   security-events: write
   actions: read
+  # Publish a Checks-tab download link for the combined security PDF
+  checks: write
 
 env:
   PYTHON_VERSION: "3.12"
@@ -148,7 +162,12 @@ jobs:
           esac
 
   # ---------------------------------------------------------------------------
-  # 1. Integration — HIGHEST PRIORITY
+  # 1. Integration — HIGHEST PRIORITY (GitHub Flow PR gate starts here)
+  #    Always run this job (never if: skip it) so QC / Security / CodeQL keep
+  #    their needs: and branch protection still sees the check.
+  #    On pull_request, skip uv/layout when Fast Feedback already passed for
+  #    the PR head SHA. Do not uses: fast-feedback-pipeline.yml from the CI caller.
+  #    Job id stays `integration` (Haystack has no environment: integration).
   # ---------------------------------------------------------------------------
   integration:
     name: Integration
@@ -200,6 +219,117 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "Integrating application: $APP_REPO @ $APP_REF (mode=$MODE)"
 
+      - name: Reuse Fast Feedback Integration when it already passed
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_REPOSITORY: ${{ github.repository }}
+          FF_WORKFLOW_FILE: haystack-fast-feedback-caller.yml
+        run: |
+          set -euo pipefail
+          REUSE=false
+
+          finish() {
+            echo "reuse=${REUSE}" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Fast Feedback reuse"
+              echo ""
+              echo "$1"
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          if [ "${EVENT_NAME}" != "pull_request" ]; then
+            echo "Event is ${EVENT_NAME} (not pull_request) — run Integration."
+            finish "Event \`${EVENT_NAME}\` — ran Integration locally (Fast Feedback is feature-branch push only)."
+            exit 0
+          fi
+
+          COMMIT="${HEAD_SHA}"
+          if [ -z "${COMMIT}" ]; then
+            echo "PR head SHA is empty — run Integration."
+            finish "PR head SHA empty — ran Integration locally."
+            exit 0
+          fi
+
+          echo "Looking up Fast Feedback (${FF_WORKFLOW_FILE}) for commit ${COMMIT}"
+
+          list_runs() {
+            gh run list \
+              --repo "${GH_REPOSITORY}" \
+              --workflow "${FF_WORKFLOW_FILE}" \
+              --commit "${COMMIT}" \
+              --json databaseId,status,conclusion,url \
+              --limit 20 \
+              2>/dev/null || echo "[]"
+          }
+
+          run_count() {
+            echo "${1}" | jq 'length' 2>/dev/null || echo 0
+          }
+
+          jq_field() {
+            echo "${1}" | jq -r "${2}" 2>/dev/null || true
+          }
+
+          # PR opened in the same moment as the push: the Fast Feedback run may
+          # not exist yet. Retry briefly before falling back to local checks.
+          ATTEMPT=1
+          MAX_APPEAR=12
+          RUNS="[]"
+          while [ "${ATTEMPT}" -le "${MAX_APPEAR}" ]; do
+            RUNS="$(list_runs)"
+            [ -n "${RUNS}" ] || RUNS="[]"
+            if [ "$(run_count "${RUNS}")" -gt 0 ]; then
+              break
+            fi
+            echo "No Fast Feedback run for ${COMMIT} yet (attempt ${ATTEMPT}/${MAX_APPEAR})"
+            sleep 5
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+          [ -n "${RUNS}" ] || RUNS="[]"
+          if [ "$(run_count "${RUNS}")" -eq 0 ]; then
+            echo "No Fast Feedback run for ${COMMIT} — run Integration."
+            finish "No Fast Feedback run for \`${COMMIT}\` — ran Integration locally."
+            exit 0
+          fi
+
+          jq_field "${RUNS}" '.[] | "id=\(.databaseId) status=\(.status) conclusion=\(.conclusion // "null") url=\(.url)"'
+
+          SUCCESS_ID="$(jq_field "${RUNS}" '[.[] | select(.conclusion == "success")] | .[0].databaseId // empty')"
+          SUCCESS_URL="$(jq_field "${RUNS}" '[.[] | select(.conclusion == "success")] | .[0].url // empty')"
+          if [ -n "${SUCCESS_ID}" ]; then
+            REUSE=true
+            echo "Reusing successful Fast Feedback run ${SUCCESS_ID}: ${SUCCESS_URL}"
+            finish "Reused Fast Feedback run [${SUCCESS_ID}](${SUCCESS_URL}) for \`${COMMIT}\`. uv/layout steps skipped."
+            exit 0
+          fi
+
+          PENDING_ID="$(jq_field "${RUNS}" '[.[] | select(.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "pending" or .status == "requested")] | .[0].databaseId // empty')"
+          PENDING_URL="$(jq_field "${RUNS}" '[.[] | select(.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "pending" or .status == "requested")] | .[0].url // empty')"
+          if [ -z "${PENDING_ID}" ]; then
+            echo "Fast Feedback finished without success for ${COMMIT} — run Integration."
+            finish "Fast Feedback did not succeed for \`${COMMIT}\` — ran Integration locally."
+            exit 0
+          fi
+
+          echo "Waiting for in-flight Fast Feedback run ${PENDING_ID}: ${PENDING_URL}"
+          set +e
+          timeout 600 gh run watch "${PENDING_ID}" --repo "${GH_REPOSITORY}" --exit-status --interval 10
+          WATCH_RC=$?
+          set -e
+          if [ "${WATCH_RC}" -eq 0 ]; then
+            REUSE=true
+            echo "Fast Feedback run ${PENDING_ID} succeeded — skip uv/layout."
+            finish "Waited for Fast Feedback run [${PENDING_ID}](${PENDING_URL}) (success). uv/layout steps skipped."
+            exit 0
+          fi
+
+          echo "Fast Feedback run ${PENDING_ID} did not succeed (watch exit=${WATCH_RC}) — run Integration."
+          finish "Fast Feedback run [${PENDING_ID}](${PENDING_URL}) did not succeed (watch exit=${WATCH_RC}) — ran Integration locally."
+
       - name: Checkout calling repository (PR / push head)
         if: steps.meta.outputs.checkout_mode == 'caller'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -228,6 +358,7 @@ jobs:
           cache-dependency-glob: ${{ env.APP_PATH }}/uv.lock
 
       - name: Require uv.lock and sync frozen environment
+        if: steps.reuse.outputs.reuse != 'true'
         working-directory: ${{ env.APP_PATH }}
         run: |
           set -euo pipefail
@@ -244,6 +375,7 @@ jobs:
           uv sync --frozen --all-groups
 
       - name: Verify project layout and Haystack / FastAPI smoke
+        if: steps.reuse.outputs.reuse != 'true'
         working-directory: ${{ env.APP_PATH }}
         env:
           PYTHON_VERSION_VALUE: ${{ env.PYTHON_VERSION }}
@@ -383,13 +515,13 @@ jobs:
           if-no-files-found: warn
 
   # ---------------------------------------------------------------------------
-  # 3. Security testing — Semgrep (Python) + pip-audit + Trivy
+  # 3. Security testing — Semgrep (Python app + GitHub Actions) + pip-audit + Trivy
   # ---------------------------------------------------------------------------
   security-testing:
     name: Security Testing
     runs-on: ubuntu-latest
     needs: [integration]
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - name: Checkout calling repository (PR / push head)
         if: needs.integration.outputs.checkout_mode == 'caller'
@@ -429,46 +561,281 @@ jobs:
         run: |
           set -euo pipefail
           REPORT_DIR="${GITHUB_WORKSPACE}/security-reports"
-          SEMGREP_COMMON=(
+          # Community packs plus custom ERROR rules for plaintext credentials
+          # that p/secrets and p/gitleaks miss (generic passwords, not tokens).
+          RULES_FILE="${REPORT_DIR}/semgrep-custom-rules.yml"
+          cat > "${RULES_FILE}" << 'SEMGREP_CUSTOM_RULES'
+          rules:
+            - id: heavy-rental.haystack.hardcoded-credential-in-properties
+              languages: [regex]
+              severity: ERROR
+              message: >
+                Hard-coded credential in a properties/env file (CWE-798). Use
+                an environment variable or secrets manager. A plaintext
+                password, secret, token, or API key in config is a shipping secret.
+              metadata:
+                category: security
+                cwe: ["CWE-798: Use of Hard-coded Credentials"]
+                owasp: ["A07:2021 - Identification and Authentication Failures"]
+                confidence: HIGH
+                subcategory: [vuln]
+                likelihood: HIGH
+                impact: HIGH
+                technology: [secrets]
+              paths:
+                include:
+                  - "*.properties"
+                  - "*.env"
+                  - "*.ini"
+                  - ".env"
+                  - ".env.*"
+                exclude:
+                  - "**/src/test/**"
+                  - "**/*example*"
+                  - "**/*sample*"
+                  - "**/node_modules/**"
+              pattern-regex: >-
+                (?i)^[ \t]*[A-Za-z0-9._-]*(?:password|passwd|pwd|secret|secret[-_]?key|api[-._]?key|access[-._]?key|private[-._]?key|auth[-._]?token|credentials?)[ \t]*=[ \t]*(?!\$\{)(?!ENC\()(?!\{cipher\})(?![ \t]*(?:#|$))[^\s#]+
+            - id: heavy-rental.haystack.hardcoded-credential-in-yaml
+              languages: [regex]
+              severity: ERROR
+              message: >
+                Hard-coded credential in YAML config (CWE-798). Use an
+                environment variable or secrets manager instead of plaintext.
+              metadata:
+                category: security
+                cwe: ["CWE-798: Use of Hard-coded Credentials"]
+                owasp: ["A07:2021 - Identification and Authentication Failures"]
+                confidence: HIGH
+                subcategory: [vuln]
+                likelihood: HIGH
+                impact: HIGH
+                technology: [secrets]
+              paths:
+                include:
+                  - "*.yml"
+                  - "*.yaml"
+                exclude:
+                  - "**/src/test/**"
+                  - "**/*example*"
+                  - "**/*sample*"
+                  - "**/.github/**"
+                  - "**/node_modules/**"
+              # persist-credentials is filtered with pattern-not-regex; a key
+              # lookahead still matches because credentials? is a suffix.
+              patterns:
+                - pattern-regex: |-
+                    (?i)^[ \t-]*["']?(?:[A-Za-z0-9._-]*[\._-])?(password|passwd|pwd|secret|secret[-_]?key|api[-._]?key|access[-._]?key|private[-._]?key|auth[-._]?token|credentials?)["']?[ \t]*:[ \t]*(?!\$\{)(?!~)(?!null\b)(?!ENC\()(?!\{cipher\})(?!["']?[ \t]*(?:#|$))["']?[^\s#"']+
+                - pattern-not-regex: '(?i)persist[-_]credentials\s*:'
+            - id: heavy-rental.haystack.env-placeholder-plaintext-default
+              languages: [regex]
+              severity: ERROR
+              message: >
+                Placeholder ${VAR:default} embeds a plaintext credential
+                default (CWE-798). Empty defaults (${VAR:} or ${VAR}) are OK.
+              metadata:
+                category: security
+                cwe: ["CWE-798: Use of Hard-coded Credentials"]
+                owasp: ["A07:2021 - Identification and Authentication Failures"]
+                confidence: HIGH
+                subcategory: [vuln]
+                likelihood: HIGH
+                impact: HIGH
+                technology: [secrets]
+              paths:
+                include:
+                  - "*.properties"
+                  - "*.yml"
+                  - "*.yaml"
+                  - "*.env"
+                  - ".env"
+                  - ".env.*"
+                exclude:
+                  - "**/src/test/**"
+                  - "**/*example*"
+                  - "**/*sample*"
+              pattern-regex: >-
+                (?i)^[ \t]*[A-Za-z0-9._-]*(?:password|passwd|pwd|secret|secret[-_]?key|api[-._]?key|access[-._]?key|private[-._]?key|auth[-._]?token|credentials?)[ \t]*[=:][ \t]*\$\{[^}:]+:(?![ \t]*\})[^}]+\}
+            - id: heavy-rental.haystack.python-hardcoded-secret-assignment
+              languages: [python]
+              severity: ERROR
+              message: >
+                Hard-coded credential assigned in Python source (CWE-798). Inject
+                the value from the environment or a secrets manager.
+              metadata:
+                category: security
+                cwe: ["CWE-798: Use of Hard-coded Credentials"]
+                owasp: ["A07:2021 - Identification and Authentication Failures"]
+                confidence: HIGH
+                subcategory: [vuln]
+                likelihood: HIGH
+                impact: HIGH
+                technology: [python, secrets]
+              paths:
+                exclude:
+                  - "**/tests/**"
+                  - "**/test_*.py"
+                  - "**/*_test.py"
+              patterns:
+                - pattern-either:
+                    - pattern: $VAR = "$VAL"
+                    - pattern: $VAR = '$VAL'
+                - metavariable-regex:
+                    metavariable: $VAR
+                    regex: (?i).*(password|passwd|secret|api[_]?key|token|credential).*
+                - metavariable-regex:
+                    metavariable: $VAL
+                    regex: (?!\$\{|os\.environ).{3,}
+            # Reusable-workflow / composite-action secret wiring:
+            #   secrets: inherit                         → ERROR (over-privilege)
+            #   KEY: GitHub secrets context (explicit)   → allowed (least-privilege map)
+            #   KEY: literal-password                    → ERROR (CWE-798)
+            #   persist-credentials: true|false          → allowed (checkout boolean)
+            # p/secrets and p/gitleaks are not applied to .github (they treat
+            # a secrets-context password mapping as a leaked credential).
+            - id: heavy-rental.gha.secrets-inherit-forbidden
+              languages: [yaml]
+              severity: ERROR
+              message: >
+                secrets: inherit passes every secret the caller can read to the
+                reusable workflow (CWE-200). That is over-privilege, not required
+                wiring. Pass only the secrets the callee declares via an explicit
+                secrets: map. An explicit secrets-context map is least privilege
+                and is not a leaked credential. Paid CD is the exception (OIDC).
+              metadata:
+                category: security
+                cwe: ["CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"]
+                owasp: ["A05:2021 - Security Misconfiguration"]
+                technology: [github-actions, secrets]
+                confidence: HIGH
+                subcategory: [vuln]
+                likelihood: HIGH
+                impact: HIGH
+              paths:
+                include:
+                  - "**/.github/workflows/**"
+                  - "**/.github/actions/**"
+                exclude:
+                  - "**/haystack-cd-paid-caller.yml"
+              patterns:
+                - pattern: |
+                    secrets: inherit
+            - id: heavy-rental.gha.hardcoded-workflow-secret
+              languages: [regex]
+              severity: ERROR
+              message: >
+                Hard-coded credential in a GitHub Actions workflow or composite
+                action (CWE-798). Use an explicit secrets: map with the GitHub
+                secrets context when calling a reusable workflow. Passing
+                secrets-context (or inputs-context into a composite action) is
+                required wiring, not a vulnerability. A literal password in YAML is.
+              metadata:
+                category: security
+                cwe: ["CWE-798: Use of Hard-coded Credentials"]
+                owasp: ["A07:2021 - Identification and Authentication Failures"]
+                technology: [github-actions, secrets]
+                confidence: HIGH
+                subcategory: [vuln]
+                likelihood: HIGH
+                impact: HIGH
+              paths:
+                include:
+                  - "**/.github/workflows/**"
+                  - "**/.github/actions/**"
+              patterns:
+                - pattern-regex: |-
+                    (?i)^[ \t-]*["']?(?:[A-Za-z0-9._-]*[\._-])?(password|passwd|pwd|secret|secret[-_]?key|api[-._]?key|access[-._]?key|private[-._]?key|auth[-._]?token|credentials?)["']?[ \t]*:[ \t]*(?!\$\{\{)(?!~)(?!null\b)(?!inherit\b)(?!["']?[ \t]*(?:#|$))["']?[^\s#"']+
+                - pattern-not-regex: '(?i)persist[-_]credentials\s*:'
+          SEMGREP_CUSTOM_RULES
+          # run: | already strips this step's indent from the heredoc. A second
+          # de-indent (sed) would pull nested list items to column 1 and break YAML.
+          echo "==> Validating custom Semgrep rules"
+          semgrep --validate --config="${RULES_FILE}" --metrics=off
+          # App SAST: Python/FastAPI/OWASP/secrets packs. Skip .github so p/secrets
+          # and p/gitleaks do not flag reusable-workflow secrets: maps.
+          SEMGREP_APP=(
             --config=p/python
+            --config=p/fastapi
             --config=p/owasp-top-ten
             --config=p/security-audit
             --config=p/secrets
+            --config=p/cwe-top-25
+            --config=p/gitleaks
+            --config=p/sql-injection
+            --config=p/jwt
+            --config=p/insecure-transport
+            --config="${RULES_FILE}"
+            --exclude='.github/**'
+            --metrics=off
+          )
+          # Workflow SAST: GitHub Actions pack + custom GHA rules.
+          # Explicit secrets-context maps are not findings. secrets: inherit is.
+          # Drop the community inherit rule so the custom one (with paid-CD
+          # path exclude) is the only inherit check.
+          SEMGREP_GHA=(
+            --config=p/github-actions
+            --config="${RULES_FILE}"
+            --exclude-rule=yaml.github-actions.security.secrets-inherit.secrets-inherit
+            --include='.github/**'
             --metrics=off
           )
 
-          echo "==> Semgrep report (SARIF 2.1.0)"
+          echo "==> Semgrep report (SARIF 2.1.0) — application"
           set +e
-          semgrep scan "${SEMGREP_COMMON[@]}" \
+          semgrep scan "${SEMGREP_APP[@]}" \
             --sarif \
             --output="${REPORT_DIR}/semgrep.sarif" \
             .
           SARIF_RC=$?
+          echo "==> Semgrep report (SARIF 2.1.0) — GitHub Actions"
+          semgrep scan "${SEMGREP_GHA[@]}" \
+            --sarif \
+            --output="${REPORT_DIR}/semgrep-gha.sarif" \
+            .
+          GHA_SARIF_RC=$?
           set -e
           if [ -f "${REPORT_DIR}/semgrep.sarif" ]; then
             echo "SARIF written: ${REPORT_DIR}/semgrep.sarif (semgrep exit=${SARIF_RC}; non-zero is OK for report pass)"
           else
             echo "::warning::semgrep.sarif was not produced (exit=${SARIF_RC})"
           fi
+          if [ -f "${REPORT_DIR}/semgrep-gha.sarif" ]; then
+            echo "SARIF written: ${REPORT_DIR}/semgrep-gha.sarif (semgrep exit=${GHA_SARIF_RC}; non-zero is OK for report pass)"
+          else
+            echo "::warning::semgrep-gha.sarif was not produced (exit=${GHA_SARIF_RC})"
+          fi
 
-          echo "==> SAST gate (ERROR severity only; exit 1 if findings)"
+          echo "==> SAST gate — application (ERROR severity only)"
           set +e
-          semgrep scan "${SEMGREP_COMMON[@]}" \
+          semgrep scan "${SEMGREP_APP[@]}" \
             --severity=ERROR \
             --error \
             --text \
             .
-          GATE_RC=$?
+          APP_GATE_RC=$?
+          echo "==> SAST gate — GitHub Actions (ERROR severity only)"
+          semgrep scan "${SEMGREP_GHA[@]}" \
+            --severity=ERROR \
+            --error \
+            --text \
+            .
+          GHA_GATE_RC=$?
           set -e
-          if [ "${GATE_RC}" -ne 0 ]; then
-            echo "::error::Semgrep SAST gate failed (exit=${GATE_RC})."
+          if [ "${APP_GATE_RC}" -ne 0 ] || [ "${GHA_GATE_RC}" -ne 0 ]; then
+            echo "::error::Semgrep SAST gate failed (app exit=${APP_GATE_RC}, gha exit=${GHA_GATE_RC})."
             echo "The SARIF report may still have been written successfully."
             echo "This step fails because --severity=ERROR --error found ERROR-level issues"
             echo "(or Semgrep could not complete the gate scan)."
-            echo "Open security-reports/semgrep.sarif or the text findings above."
-            exit "${GATE_RC}"
+            echo "Application: security-reports/semgrep.sarif"
+            echo "GitHub Actions: security-reports/semgrep-gha.sarif"
+            echo "Explicit reusable-workflow secrets-context maps are allowed."
+            echo "secrets: inherit is an ERROR (least privilege) except haystack-cd-paid-caller.yml."
+            if [ "${APP_GATE_RC}" -ne 0 ]; then
+              exit "${APP_GATE_RC}"
+            fi
+            exit "${GHA_GATE_RC}"
           fi
-          echo "SAST (Semgrep) gate passed — no ERROR-level findings. SARIF: security-reports/semgrep.sarif"
+          echo "SAST (Semgrep) gate passed — no ERROR-level findings. SARIF: security-reports/semgrep.sarif + semgrep-gha.sarif"
 
       - name: Python SCA report — pip-audit (does not fail the job)
         working-directory: ${{ env.APP_PATH }}
@@ -542,21 +909,504 @@ jobs:
 
       - name: Upload Semgrep SARIF to Code Scanning
         if: always() && hashFiles('security-reports/semgrep.sarif') != ''
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           sarif_file: security-reports/semgrep.sarif
           checkout_path: ${{ env.APP_PATH }}
           category: haystack-ci-semgrep
         continue-on-error: true
 
+      - name: Upload Semgrep GHA SARIF to Code Scanning
+        if: always() && hashFiles('security-reports/semgrep-gha.sarif') != ''
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        with:
+          sarif_file: security-reports/semgrep-gha.sarif
+          checkout_path: ${{ env.APP_PATH }}
+          category: haystack-ci-semgrep-gha
+        continue-on-error: true
+
       - name: Upload Trivy SARIF to Code Scanning
         if: always() && hashFiles('security-reports/trivy-fs.sarif') != ''
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           sarif_file: security-reports/trivy-fs.sarif
           checkout_path: ${{ env.APP_PATH }}
           category: haystack-ci-trivy-fs
         continue-on-error: true
+
+      # Combined human-readable PDF. Keep in sync with
+      # heavy-rental-project-pipeline-development/scripts/combine-security-report.py
+      # Download on a pull request: Checks → this workflow → Summary → Artifacts
+      # (`security-combined-report-pdf`), or the Security Testing job summary link.
+      - name: Install reportlab (combined security PDF)
+        if: always()
+        run: pip install --quiet reportlab
+
+      - name: Combine security reports into PDF
+        if: always()
+        env:
+          COMBINED_PDF_TITLE: Heavy Rental Haystack — Combined security report
+        run: |
+          set -euo pipefail
+          REPORT_DIR="${GITHUB_WORKSPACE}/security-reports"
+          mkdir -p "${REPORT_DIR}"
+          cat > "${REPORT_DIR}/combine-security-report.py" << 'COMBINE_SECURITY_REPORT_PY'
+          #!/usr/bin/env python3
+          """Combine SARIF 2.1.0 files (and optional pip-audit JSON) into one PDF.
+
+          Keep this file in sync with the heredoc in each Integration CI
+          ``integration-pipeline.yml`` Security Testing job.
+
+          Code snippets from SARIF regions are never copied into the PDF (secret-scanner
+          hits can echo credentials).
+          """
+
+          from __future__ import annotations
+
+          import argparse
+          import json
+          import sys
+          from collections import Counter
+          from dataclasses import dataclass, field
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from xml.sax.saxutils import escape as xml_escape
+
+          from reportlab.lib import colors
+          from reportlab.lib.pagesizes import letter
+          from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+          from reportlab.lib.units import inch
+          from reportlab.platypus import (
+              PageBreak,
+              Paragraph,
+              SimpleDocTemplate,
+              Spacer,
+              Table,
+              TableStyle,
+          )
+
+          MAX_MESSAGE = 400
+          MAX_FINDINGS_PER_TOOL = 200
+          SKIP_NAMES = {
+              "combined-security-report.pdf",
+              "combine-security-report.py",
+          }
+
+
+          @dataclass
+          class Finding:
+              rule_id: str
+              level: str
+              location: str
+              message: str
+
+
+          @dataclass
+          class ToolReport:
+              name: str
+              source_file: str
+              present: bool
+              findings: list[Finding] = field(default_factory=list)
+              note: str = ""
+
+
+          def pdf_safe(text: str) -> str:
+              raw = "" if text is None else str(text)
+              raw = raw.replace("\r\n", "\n").replace("\r", "\n")
+              raw = raw.encode("latin-1", "replace").decode("latin-1")
+              return xml_escape(raw)
+
+
+          def truncate(text: str, limit: int = MAX_MESSAGE) -> str:
+              text = " ".join((text or "").split())
+              if len(text) <= limit:
+                  return text
+              return text[: limit - 1] + "…"
+
+
+          def result_level(result: dict, rules_by_id: dict) -> str:
+              level = (result.get("level") or "").strip().lower()
+              if level:
+                  return level
+              rule_id = result.get("ruleId") or ""
+              rule = rules_by_id.get(rule_id) or {}
+              default = (rule.get("defaultConfiguration") or {}).get("level") or ""
+              return (default or "warning").strip().lower()
+
+
+          def result_location(result: dict) -> str:
+              locations = result.get("locations") or []
+              if not locations or not isinstance(locations[0], dict):
+                  return "—"
+              phys = locations[0].get("physicalLocation") or {}
+              uri = ((phys.get("artifactLocation") or {}).get("uri")) or "—"
+              region = phys.get("region") or {}
+              line = region.get("startLine")
+              if line:
+                  return f"{uri}:{line}"
+              return str(uri)
+
+
+          def result_message(result: dict) -> str:
+              message = result.get("message") or {}
+              if isinstance(message, dict):
+                  return truncate(message.get("text") or message.get("markdown") or "")
+              return truncate(str(message))
+
+
+          def parse_sarif(path: Path) -> ToolReport:
+              try:
+                  data = json.loads(path.read_text(encoding="utf-8") or "{}")
+              except (OSError, json.JSONDecodeError) as exc:
+                  return ToolReport(
+                      name=path.stem,
+                      source_file=path.name,
+                      present=True,
+                      note=f"Could not parse SARIF: {exc}",
+                  )
+              findings: list[Finding] = []
+              tool_names: list[str] = []
+              for run in data.get("runs") or []:
+                  if not isinstance(run, dict):
+                      continue
+                  driver = ((run.get("tool") or {}).get("driver")) or {}
+                  name = driver.get("name") or path.stem
+                  tool_names.append(str(name))
+                  rules_by_id = {}
+                  for rule in driver.get("rules") or []:
+                      if isinstance(rule, dict) and rule.get("id"):
+                          rules_by_id[rule["id"]] = rule
+                  for result in run.get("results") or []:
+                      if not isinstance(result, dict):
+                          continue
+                      findings.append(
+                          Finding(
+                              rule_id=str(result.get("ruleId") or "—"),
+                              level=result_level(result, rules_by_id),
+                              location=result_location(result),
+                              message=result_message(result),
+                          )
+                      )
+              display = tool_names[0] if len(set(tool_names)) == 1 else (tool_names[0] if tool_names else path.stem)
+              if len(set(tool_names)) > 1:
+                  display = f"{display} (+{len(set(tool_names)) - 1} tools)"
+              return ToolReport(name=str(display), source_file=path.name, present=True, findings=findings)
+
+
+          def _pip_audit_rows(data: object) -> list[dict]:
+              if isinstance(data, list):
+                  return [row for row in data if isinstance(row, dict)]
+              if isinstance(data, dict):
+                  deps = data.get("dependencies")
+                  if isinstance(deps, list):
+                      return [row for row in deps if isinstance(row, dict)]
+              return []
+
+
+          def parse_pip_audit(path: Path) -> ToolReport:
+              try:
+                  data = json.loads(path.read_text(encoding="utf-8") or "{}")
+              except (OSError, json.JSONDecodeError) as exc:
+                  return ToolReport(
+                      name="pip-audit",
+                      source_file=path.name,
+                      present=True,
+                      note=f"Could not parse pip-audit JSON: {exc}",
+                  )
+              findings: list[Finding] = []
+              for dep in _pip_audit_rows(data):
+                  pkg = dep.get("name") or "package"
+                  version = dep.get("version") or "?"
+                  for vuln in dep.get("vulns") or []:
+                      if not isinstance(vuln, dict):
+                          continue
+                      vuln_id = vuln.get("id") or "unspecified"
+                      fixes = vuln.get("fix_versions") or []
+                      if isinstance(fixes, list):
+                          fix_txt = ", ".join(str(v) for v in fixes) or "none listed"
+                      else:
+                          fix_txt = str(fixes)
+                      desc = truncate(vuln.get("description") or "")
+                      msg = f"{pkg} {version}; fix: {fix_txt}"
+                      if desc:
+                          msg = f"{msg}. {desc}"
+                      findings.append(
+                          Finding(
+                              rule_id=str(vuln_id),
+                              level="warning",
+                              location=f"{pkg}=={version}",
+                              message=truncate(msg),
+                          )
+                      )
+              return ToolReport(name="pip-audit", source_file=path.name, present=True, findings=findings)
+
+
+          def collect_reports(input_dir: Path) -> list[ToolReport]:
+              reports: list[ToolReport] = []
+              if not input_dir.is_dir():
+                  return reports
+              for path in sorted(input_dir.glob("*.sarif")):
+                  if path.name in SKIP_NAMES:
+                      continue
+                  reports.append(parse_sarif(path))
+              pip_audit = input_dir / "pip-audit.json"
+              if pip_audit.is_file():
+                  reports.append(parse_pip_audit(pip_audit))
+              return reports
+
+
+          def level_counts(findings: list[Finding]) -> str:
+              counts = Counter(f.level for f in findings)
+              if not findings:
+                  return "0"
+              order = ["error", "warning", "note", "none"]
+              parts = [f"{lvl}={counts[lvl]}" for lvl in order if counts.get(lvl)]
+              extra = sorted(k for k in counts if k not in order)
+              parts.extend(f"{lvl}={counts[lvl]}" for lvl in extra)
+              return f"{len(findings)} ({', '.join(parts)})"
+
+
+          def _styles() -> dict:
+              styles = getSampleStyleSheet()
+              styles.add(
+                  ParagraphStyle(
+                      name="Meta",
+                      parent=styles["Normal"],
+                      fontName="Helvetica",
+                      fontSize=9,
+                      leading=12,
+                      textColor=colors.HexColor("#333333"),
+                  )
+              )
+              styles.add(
+                  ParagraphStyle(
+                      name="Cell",
+                      parent=styles["Normal"],
+                      fontName="Helvetica",
+                      fontSize=8,
+                      leading=10,
+                  )
+              )
+              styles.add(
+                  ParagraphStyle(
+                      name="CellHead",
+                      parent=styles["Normal"],
+                      fontName="Helvetica-Bold",
+                      fontSize=8,
+                      leading=10,
+                  )
+              )
+              return styles
+
+
+          def _table(rows: list[list], col_widths: list[float]) -> Table:
+              table = Table(rows, colWidths=col_widths, repeatRows=1)
+              table.setStyle(
+                  TableStyle(
+                      [
+                          ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+                          ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8eef4")),
+                          ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                          ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                          ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                          ("TOPPADDING", (0, 0), (-1, -1), 3),
+                          ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                      ]
+                  )
+              )
+              return table
+
+
+          def build_story(reports: list[ToolReport], args: argparse.Namespace) -> list:
+              styles = _styles()
+              cell, head = styles["Cell"], styles["CellHead"]
+              story: list = [
+                  Paragraph(pdf_safe(args.title), styles["Title"]),
+                  Spacer(1, 8),
+                  Paragraph(f"<b>Repository:</b> {pdf_safe(args.repo)}", styles["Meta"]),
+                  Paragraph(f"<b>Commit:</b> {pdf_safe(args.sha)}", styles["Meta"]),
+                  Paragraph(f"<b>Workflow run:</b> {pdf_safe(args.run_url)}", styles["Meta"]),
+                  Paragraph(
+                      f"<b>Generated (UTC):</b> {pdf_safe(datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%SZ'))}",
+                      styles["Meta"],
+                  ),
+                  Paragraph(
+                      "Machine-readable reports remain SARIF 2.1.0. This PDF is a human download. "
+                      "Source snippets are omitted so secret-scanner matches are not echoed.",
+                      styles["Meta"],
+                  ),
+                  Spacer(1, 14),
+                  Paragraph("Summary", styles["Heading1"]),
+              ]
+              usable = 7.5 * inch
+              if not reports:
+                  story.append(Paragraph("No scanner outputs were produced in security-reports/.", styles["Normal"]))
+                  return story
+
+              summary_rows = [[
+                  Paragraph("Tool", head),
+                  Paragraph("File", head),
+                  Paragraph("Present", head),
+                  Paragraph("Findings", head),
+              ]]
+              for report in reports:
+                  summary_rows.append([
+                      Paragraph(pdf_safe(report.name), cell),
+                      Paragraph(pdf_safe(report.source_file), cell),
+                      Paragraph("yes" if report.present else "no", cell),
+                      Paragraph(pdf_safe(level_counts(report.findings)), cell),
+                  ])
+              story.append(_table(summary_rows, [1.6 * inch, 2.0 * inch, 0.8 * inch, usable - 4.4 * inch]))
+              story.append(Spacer(1, 12))
+
+              for index, report in enumerate(reports):
+                  if index:
+                      story.append(PageBreak())
+                  story.append(Paragraph(pdf_safe(f"{report.name} ({report.source_file})"), styles["Heading1"]))
+                  if report.note:
+                      story.append(Paragraph(pdf_safe(report.note), styles["Normal"]))
+                  if not report.findings:
+                      story.append(Paragraph("No findings in this report.", styles["Normal"]))
+                      continue
+                  shown = report.findings[:MAX_FINDINGS_PER_TOOL]
+                  omitted = len(report.findings) - len(shown)
+                  rows = [[
+                      Paragraph("Level", head),
+                      Paragraph("Rule", head),
+                      Paragraph("Location", head),
+                      Paragraph("Message", head),
+                  ]]
+                  for finding in shown:
+                      rows.append([
+                          Paragraph(pdf_safe(finding.level), cell),
+                          Paragraph(pdf_safe(finding.rule_id), cell),
+                          Paragraph(pdf_safe(finding.location), cell),
+                          Paragraph(pdf_safe(finding.message).replace("\n", "<br/>"), cell),
+                      ])
+                  story.append(
+                      _table(rows, [0.8 * inch, 1.6 * inch, 2.0 * inch, usable - 4.4 * inch])
+                  )
+                  if omitted > 0:
+                      story.append(Spacer(1, 6))
+                      story.append(
+                          Paragraph(pdf_safe(f"… and {omitted} more finding(s) not listed."), styles["Meta"])
+                      )
+              return story
+
+
+          def add_page_number(canvas, doc) -> None:
+              canvas.saveState()
+              canvas.setFont("Helvetica", 8)
+              canvas.setFillColor(colors.HexColor("#555555"))
+              canvas.drawString(0.75 * inch, 0.45 * inch, "Combined security report")
+              canvas.drawRightString(letter[0] - 0.75 * inch, 0.45 * inch, f"Page {doc.page}")
+              canvas.restoreState()
+
+
+          def write_pdf(reports: list[ToolReport], args: argparse.Namespace) -> None:
+              output = Path(args.output)
+              output.parent.mkdir(parents=True, exist_ok=True)
+              doc = SimpleDocTemplate(
+                  str(output),
+                  pagesize=letter,
+                  leftMargin=0.75 * inch,
+                  rightMargin=0.75 * inch,
+                  topMargin=0.7 * inch,
+                  bottomMargin=0.7 * inch,
+                  title=args.title,
+                  author="Heavy Rental Integration CI",
+              )
+              doc.build(build_story(reports, args), onFirstPage=add_page_number, onLaterPages=add_page_number)
+
+
+          def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+              parser = argparse.ArgumentParser(description=__doc__)
+              parser.add_argument("--input-dir", required=True)
+              parser.add_argument("--output", required=True)
+              parser.add_argument("--title", default="Combined security report")
+              parser.add_argument("--repo", default="")
+              parser.add_argument("--sha", default="")
+              parser.add_argument("--run-url", default="")
+              return parser.parse_args(argv)
+
+
+          def main(argv: list[str] | None = None) -> int:
+              args = parse_args(argv)
+              reports = collect_reports(Path(args.input_dir))
+              write_pdf(reports, args)
+              output = Path(args.output)
+              if not output.is_file() or output.stat().st_size == 0:
+                  print(f"error: PDF was not written: {output}", file=sys.stderr)
+                  return 1
+              print(f"Wrote {output} ({output.stat().st_size} bytes, {len(reports)} report(s))")
+              return 0
+
+
+          if __name__ == "__main__":
+              raise SystemExit(main())
+          COMBINE_SECURITY_REPORT_PY
+          python3 "${REPORT_DIR}/combine-security-report.py" \
+            --input-dir "${REPORT_DIR}" \
+            --output "${REPORT_DIR}/combined-security-report.pdf" \
+            --title "${COMBINED_PDF_TITLE}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --sha "${GITHUB_SHA}" \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          test -s "${REPORT_DIR}/combined-security-report.pdf"
+
+      - name: Upload combined security report (PDF)
+        if: always() && hashFiles('security-reports/combined-security-report.pdf') != ''
+        id: upload-security-pdf
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: security-combined-report-pdf
+          path: security-reports/combined-security-report.pdf
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Publish PDF download on Checks
+        if: always() && steps.upload-security-pdf.outputs.artifact-url != ''
+        env:
+          PDF_URL: ${{ steps.upload-security-pdf.outputs.artifact-url }}
+        run: |
+          {
+            echo "### Combined security report (PDF)"
+            echo ""
+            echo "Download from this check: [combined-security-report.pdf](${PDF_URL})"
+            echo ""
+            echo "Artifact: \`security-combined-report-pdf\`."
+            echo "On a pull request: Checks → this workflow run → Artifacts, or this job summary."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish PDF check on pull request
+        if: always() && github.event_name == 'pull_request' && steps.upload-security-pdf.outputs.artifact-url != ''
+        continue-on-error: true
+        env:
+          PDF_URL: ${{ steps.upload-security-pdf.outputs.artifact-url }}
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const url = process.env.PDF_URL;
+            const sha = context.payload.pull_request.head.sha;
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'Security combined report (PDF)',
+              head_sha: sha,
+              status: 'completed',
+              conclusion: 'neutral',
+              details_url: url,
+              output: {
+                title: 'Download combined security report PDF',
+                summary: [
+                  'Combined SAST/SCA report for this pull request.',
+                  '',
+                  '[Download combined-security-report.pdf](' + url + ')',
+                  '',
+                  'Also on this workflow run: Checks → Summary → Artifacts → `security-combined-report-pdf`.',
+                ].join('\n'),
+              },
+            });
 
       - name: Upload security reports (SARIF + pip-audit)
         if: always()
@@ -565,6 +1415,7 @@ jobs:
           name: security-reports-sarif
           path: |
             security-reports/*.sarif
+            security-reports/combined-security-report.pdf
             security-reports/pip-audit.json
             security-reports/requirements-frozen.txt
           retention-days: 30
@@ -600,14 +1451,14 @@ jobs:
           path: ${{ env.APP_PATH }}
 
       - name: Initialize CodeQL (Python)
-        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           languages: python
           source-root: ${{ env.APP_PATH }}
           queries: security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           category: "haystack-ci-codeql-python"
 

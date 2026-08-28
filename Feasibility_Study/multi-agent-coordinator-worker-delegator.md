@@ -10,7 +10,7 @@
 | **Document type** | Architecture vocabulary / agent role mapping (study only) |
 | **Status** | Complete (docs only — no runtime rename required) |
 | **Date** | 2026-08-11 |
-| **Version** | 2.1.10 |
+| **Version** | 2.1.11 |
 | **Application** | `haystack-fast-api` Multi-Agent Orchestrator (LangGraph) |
 | **Question** | How do **Coordinator**, **Worker**, and **Delegator** map onto the existing Orchestrator + domain agents + in-process tools design? |
 | **Authority** | **Authoritative for role vocabulary.** Dual-plane study remains authoritative for data planes, tool catalog, and sync. Implementation plan Phase 7 is authoritative for rollout steps. |
@@ -2839,8 +2839,8 @@ Indexing gate checklist: validate `user_id` + sources + MIME → run index servi
 | **S4** live SQL fleet | `FLEET_BACKEND=sql` reads `postgres_haystack` via allowlisted ORM | **As-built** (app + config T0–T2) |
 | **S7.2** Neo4j tools | Optional graph templates; K-3 skip; populate no-op | **As-built** (`neo4j_tools.py`; live **S8.3**) |
 | **S8.3** live Neo4j client | Bolt read + populate HTTP; default fake | **As-built** (`NEO4J_BACKEND=bolt`; K-3 on unavailable) |
-| **S8.1 T3** Neo4j populate | Config `neo4j-populate` SQL → Cypher MERGE; fleet labels isolated | **As-built** (config pack `develop`) |
-| **S8.2 T4** populate trigger | Post-sync HTTP + admin `POST /v1/populate` :8089; scoped delete; never drop KG-1 | **As-built** (config pack `develop`) |
+| **S8.1 T3** Neo4j populate | Ops `neo4j-populate` SQL → Cypher MERGE; fleet labels isolated | **As-built** (pack locally; this repo deploy-pipeline copies — **ADR-0012**) |
+| **S8.2 T4** populate trigger | Post-sync HTTP + admin `POST /v1/populate` :8089; scoped delete; never drop KG-1 | **As-built** (pack + deploy-pipeline copies) |
 | **S7.3** recommend LangGraph | DAG §10.0.10–§10.0.11: **seq** gate→[5]→plan; **par** across needs (capped); **seq** [6]→[7] within need; barrier [8] | **As-built** |
 | **S7.4** tool-free synthesis | Coordinator **[8]** sequential barrier — A–L; merge tool-backed partitions only | **As-built** (stub merge; A–L prompts **as-built S7.7**) |
 | **S7.5** HTTP Call 2 enrich | Same quote DTO; multi-agent behind `RECOMMEND_VIA_AGENT_GRAPH` (default off) | **As-built** |
@@ -2913,6 +2913,7 @@ Indexing gate checklist: validate `user_id` + sources + MIME → run index servi
 | **1.8.0** | 2026-08-11 | **§10 I Context management** (hierarchy global/session/task + switching preserve/restore/merge); §10.0.8 |
 | **1.9.0** | 2026-08-11 | **§10 J Decision integration** (retrieval + patterns + optimization); §10.0.9; role decision authority |
 | **2.0.0** | 2026-08-11 | **§10 K Workflow optimization** (DAG, fan-out caps, resources, dynamic adjustment); §10.0.10 |
+| **2.1.11** | 2026-08-28 | **ADR-0012:** S8.1/S8.2 jobs also run from this repo’s deploy-pipeline copies on academy/paid |
 | **2.1.10** | 2026-08-13 | Call 2 quote remaps `equipment.id`=`assets.id`; internal DTO `asset_id` stays `assets.name` (do not invent) |
 | **2.1.9** | 2026-08-13 | **S7.8 as-built:** Worker [5] live KG-1 `project_vector_search` + `project_kg_query` |
 | **2.1.8** | 2026-08-13 | **S8.3 as-built:** live Bolt Neo4j tools + populate HTTP; default fake; K-3 on unavailable |

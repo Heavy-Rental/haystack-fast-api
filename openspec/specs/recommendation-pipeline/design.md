@@ -2,8 +2,12 @@
 
 ## R — Requirements
 
-See [`spec.md`](./spec.md) Purpose, Outcomes, FR-010.1–8, and FR-P-001..012.  
-Service-level recommend graph; not default HTTP (live path is indexing).
+See [`spec.md`](./spec.md) Purpose, Outcomes, FR-010.1–8, and FR-P-001..014.  
+Call 1 live path is indexing. Call 2 quote HTTP is as-built (`getassetrecommendations`).
+Call 2 quote collapse of unit-need siblings that share `equipment.id` is
+**FR-P-013** (quote envelope only; [ADR-0010](../../adrs/0010-call2-quote-quantity-collapse.md)).
+Merged `quantity` is the duplicate count (3 copies → `quantity: 3`).
+LLM timeout recovery is **FR-P-014** ([ADR-0011](../../adrs/0011-llm-need-decompose-timeout-retry.md)).
 
 ## E — Entities
 
@@ -16,6 +20,8 @@ Service-level recommend graph; not default HTTP (live path is indexing).
 | Priced candidate | Candidate + pricing payload |
 | NeedResult | `{ need_id, item, warnings }` |
 | RecommendationItem | Singular ranked choice (or null) |
+| RecommendQuoteItem | Portal quote line (`quantity`, `needId`, `equipment`) |
+| Parent need id | `{base}` extracted from `{base}__u{i}` |
 
 ## A — Approach
 
@@ -55,6 +61,11 @@ RecommendationService.recommend_from_project_spec(...)   # service / tests / fut
                     │
                     ▼
               results_by_need[{ need_id, item, warnings }]
+
+map_recommend_to_quote (Call 2 only)
+  → RecommendQuoteItem per NeedResult (quantity=1)
+  → collapse_duplicate_equipment_quotes by (parent_need_id, equipment.id)
+  → confidenceScore on collapsed items
 ```
 
 **Pricing payload (when selected + `include_pricing`):** FR-P-011 — `daily_rate` + `total_price`, not `weekly_rate`.
@@ -138,6 +149,9 @@ Pipeline-first Haystack for steps 1–3; service loop for steps 4–8 (testable,
 | `tests/test_pipeline_intake_front.py` | Steps 1–3 |
 | `tests/test_recommendations_intake.py` | **HTTP ingest** e2e (indexing) |
 | `tests/test_llm_need_decomposer.py` | LLM parse/mock |
+| `app/services/session_recommend.py` | Call 2 quote map + FR-P-013 collapse |
+| `app/schemas/recommend_quote.py` | Quote envelope (`quantity`, `needId`) |
+| `tests/test_quote_duplicate_collapse.py` | FR-P-013 merge / non-merge |
 
 ## O — Operations
 
@@ -149,6 +163,8 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 Optional LLM: `NEED_DECOMPOSER=llm` (+ provider env). Default CI stays on stub.
+LLM timeouts: connect 10s, read `LLM_TIMEOUT_SECONDS` (default 120); one retry
+then keyword fallback (**FR-P-014**).
 
 ## N — Norms
 
@@ -156,6 +172,10 @@ Optional LLM: `NEED_DECOMPOSER=llm` (+ provider env). Default CI stays on stub.
 - Seed fleet OK until Spring ORM; preserve component sockets on swap.
 - Pricing always via `pricing_client`; never invent rates in the ranker.
 - Singular `item` per unit-need; no `quantity` on RecommendationItem.
+- Call 2 MAY raise `quantity` on the quote envelope by collapsing unit-need
+  siblings that share `equipment.id` (FR-P-013). Merged `quantity` equals the
+  number of grouped duplicates (3 copies → `quantity: 3`). Parent extraction
+  is `{base}__u{i}`, not `split("_")`.
 - Live HTTP conflict: indexing wins over this capability’s deferred envelope.
 
 ## S — Safeguards
@@ -165,6 +185,10 @@ Optional LLM: `NEED_DECOMPOSER=llm` (+ provider env). Default CI stays on stub.
 - Do not block ASGI with sync LLM/pipeline work (FR-P-012).
 - Do not require Bedrock or model.pkl for CI green.
 - Do not put SQL/rank logic in routers.
+- Do not merge quote lines across different parent needs or distinct equipment ids.
+- Do not collapse on empty/missing `equipment.id`.
+- Do not mark quantity > 1 of one `assets.id` as available.
+- Quantity-1 availability uses `bookings` + `return_records.returned_at`.
 
 ## Key decisions
 
@@ -177,6 +201,7 @@ Optional LLM: `NEED_DECOMPOSER=llm` (+ provider env). Default CI stays on stub.
 | Rank MVP | Deterministic + template | CI without LLM |
 | Unit loop for 4–8 | Service loop | Easier testing |
 | Production pricing swap | `pricing_client` only | FR-022 |
+| Call 2 duplicate equipment | Collapse by parent need + `equipment.id` | FR-P-013; commercial quote, not ranking |
 
 ## Open questions
 

@@ -243,6 +243,43 @@ def test_quote_available_false_when_live_hold_overlaps() -> None:
     assert equipment.desc == "4.2t counterbalance"
 
 
+def test_quote_available_true_when_return_record_ends_hold() -> None:
+    db = _db_for_asset(
+        (
+            27,
+            "Hyster H4.2FT Forklift",
+            "Fork Lift",
+            "GOOD",
+            4200,
+            None,
+            100.0,
+            240.0,
+            "4.2t counterbalance",
+            2021,
+            None,
+        ),
+        bookings=[(date(2026, 9, 1), date(2026, 9, 30), date(2026, 8, 20))],
+    )
+    quote = map_recommend_to_quote(
+        user_id="u1",
+        ingest_id="ing_1",
+        query=None,
+        recommend=_recommend_with(
+            RecommendationItem(
+                equipment_type="Fork Lift",
+                asset_id="Hyster H4.2FT Forklift",
+                fleet_id=27,
+                rank=1,
+                pricing=PricingPayload(daily_rate=175.0, total_price=1225.0),
+            )
+        ),
+        session=_session(),
+        db=db,
+    )
+    assert quote.items[0].equipment.available is True
+    assert quote.items[0].quantity == 1
+
+
 def test_quote_uses_fleet_id_without_db_when_already_known() -> None:
     quote = map_recommend_to_quote(
         user_id="u1",

@@ -2,14 +2,14 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | As-built MVP — full FR-010.1–8 **service-level** orchestration; **NOT** default HTTP for `/submitprojectspecification` |
+| **Status** | as-built — FR-010.1–8 **service-level** + **Call 2 quote HTTP**; Call 1 `/submitprojectspecification` remains indexing |
 | **Feature id** | `recommendation-pipeline-mvp` |
 | **Tracking** | HR-65 (pipeline structure completion) |
 | **Standards** | OpenSpec · Spec-kit user stories · OpenSPDD (see [`design.md`](./design.md)) |
 | **Parent** | [`../equipment-recommendation/spec.md`](../equipment-recommendation/spec.md) |
-| **Reading map** | [`../../AGENTS.md`](../../AGENTS.md) Path C (deferred recommend) |
+| **Reading map** | [`../../AGENTS.md`](../../AGENTS.md) Path C (Call 2 recommend; deferred intake envelope) |
 | **Related** | [`../indexing/spec.md`](../indexing/spec.md) (**live HTTP**); [`../knowledge-graph/spec.md`](../knowledge-graph/spec.md); [`../recommendation-intake/spec.md`](../recommendation-intake/spec.md); [`../dynamic-pricing/spec.md`](../dynamic-pricing/spec.md) |
-| **Tests** | `tests/test_pipeline_intake_front.py`, `tests/test_recommend_pipeline_mvp.py` (service e2e), `tests/test_llm_need_decomposer.py`; HTTP ingest: `tests/test_recommendations_intake.py` (indexing, not this graph) |
+| **Tests** | `tests/test_pipeline_intake_front.py`, `tests/test_recommend_pipeline_mvp.py` (service e2e), `tests/test_llm_need_decomposer.py`, `tests/test_quote_duplicate_collapse.py` (FR-P-013); HTTP ingest: `tests/test_recommendations_intake.py` (indexing, not this graph) |
 | **Testing guide** | [`../../../docs/testing/recommendation-pipeline-testing-guide.md`](../../../docs/testing/recommendation-pipeline-testing-guide.md) |
 | **Legacy source** | `specification/SPEC-recommendation-pipeline.md` (removed 2026-08-13; see [`../../TRACEABILITY.md`](../../TRACEABILITY.md)) |
 
@@ -17,7 +17,7 @@
 
 **Conflict rule:** Pipeline step behaviour and component contracts for FR-010 → **this capability**. **Live** HTTP response for `/submitprojectspecification` → **indexing**. Broader product policy (catalog of four types, deposit 30%, SGD) → parent + this restatement.
 
-**As-built note (2026-08-07):** `app/api/recommendations.py` calls `IndexingIngestService`, not `RecommendationService`. FR-010 remains callable via `RecommendationService.recommend_from_project_spec` in tests and for future reattach.
+**As-built note:** Call 1 (`POST .../submitprojectspecification`) still calls `IndexingIngestService`. Call 2 (`POST .../getassetrecommendations`) uses `SessionRecommendService` → `RecommendationService` (quote envelope, FR-P-013). FR-010 remains callable via `recommend_from_project_spec` in tests.
 
 ---
 
@@ -157,6 +157,11 @@ Decompose → internal needs (+ quantity). As-built: `NeedDecomposerComponent` +
 #### Scenario: Stub one need
 - **WHEN** stub decomposer runs on non-empty source
 - **THEN** one internal need is emitted with quantity ≥ 1
+
+#### Scenario: LLM timeout is recoverable
+- **GIVEN** `NEED_DECOMPOSER=llm` and `/chat/completions` times out twice
+- **WHEN** decompose runs
+- **THEN** keyword-split needs are returned (no exception); see **FR-P-014**
 
 ### Requirement: FR-010 step 3 — Expand quantity
 
@@ -325,6 +330,86 @@ Async HTTP handlers (`async def`) MUST NOT run the full sync service path on the
 - **WHEN** recommend is reattached on an async route
 - **THEN** `RecommendationService` is offloaded the same way
 
+### Requirement: Collapse duplicate Call 2 equipment quotes (FR-P-013)
+
+Call 2 quote `items[]` SHALL fold unit-need siblings that share parent need id
+and catalog `equipment.id` into one commercial line. Parent need id is the
+`{base}` of a `{base}__u{i}` unit-need id. Internal `results_by_need` and
+`RecommendationItem` MUST remain expanded and MUST NOT gain a `quantity` field.
+
+A merged line SHALL set `needId` to `{base}`, `quantity` to the number of
+grouped duplicates (sum of grouped line quantities; Call 2 emits `quantity=1`
+per unit-need, so 3 copies → `quantity: 3`), and `lineTotal` to the sum of
+non-null grouped totals; it SHALL keep the first item's `equipment` / daily
+rate / `matchScore` / `reason`; and it SHALL re-number `rankOrder` 1..n in
+first-seen group order. Lines MUST NOT merge when equipment ids differ, parent
+needs differ, the need id is not a unit-need, or `equipment.id` is missing.
+`estimatedTotal` SHALL remain the pre-collapse sum of per-unit totals.
+`confidenceScore` SHALL use the collapsed list.
+
+A merged line with `quantity > 1` SHALL set `equipment.available` to false:
+`equipment.id` is one physical `assets.id` and cannot fulfill N concurrent
+units. Quantity-1 availability SHALL use live-hold `bookings` (via
+`booking_items`) and `return_records.returned_at` to end the hold
+(`PRICING_SCHEMA=public` → `heavy_rental.public`).
+
+#### Scenario: Same parent and same equipment collapse
+- **GIVEN** quote lines `need_1__u1` and `need_1__u2` with the same `equipment.id`
+- **WHEN** Call 2 maps `results_by_need` to the quote envelope
+- **THEN** `items[]` contains one line with `needId` `need_1`, `quantity` 2, and summed `lineTotal`
+
+#### Scenario: Three duplicates collapse to quantity 3
+- **GIVEN** quote lines `need_1__u1`, `need_1__u2`, and `need_1__u3` with the same `equipment.id`
+- **WHEN** Call 2 maps `results_by_need` to the quote envelope
+- **THEN** `items[]` contains one line with `needId` `need_1`, `quantity` 3, and summed `lineTotal`
+- **AND** `equipment.available` is false (one machine cannot fulfill 3 units)
+
+#### Scenario: Quantity-one availability uses bookings and return_records
+- **GIVEN** a quantity-1 quote line for `assets.id` 27
+- **AND** a live-hold booking overlaps the rental window
+- **AND** `return_records.returned_at` is on or before the window start
+- **WHEN** Call 2 hydrates availability
+- **THEN** `equipment.available` is true
+
+#### Scenario: Distinct equipment under the same parent stay separate
+- **GIVEN** quote lines `need_1__u1` and `need_1__u2` with different `equipment.id`
+- **WHEN** Call 2 maps to the quote envelope
+- **THEN** both lines remain with `quantity` 1 and their original `needId`
+
+#### Scenario: Same equipment on different parent needs does not merge
+- **GIVEN** quote lines `need_access` and `need_earthwork` with the same `equipment.id`
+- **WHEN** Call 2 maps to the quote envelope
+- **THEN** both lines remain with `quantity` 1
+
+#### Scenario: Quantity-one need is unchanged
+- **GIVEN** a single quote line `need_1` with `quantity` 1
+- **WHEN** Call 2 maps to the quote envelope
+- **THEN** the line is unchanged except `rankOrder` re-numbering
+
+### Requirement: LLM need-decompose timeouts are recoverable (FR-P-014)
+
+When `NEED_DECOMPOSER=llm`, `LlmNeedDecomposer` SHALL call `/chat/completions`
+with connect timeout 10s and read timeout `LLM_TIMEOUT_SECONDS` (default 120).
+On connect or read timeout it SHALL retry once. After two timeouts, or on any
+other HTTP error, it SHALL return `split_needs_from_text` and MUST NOT raise.
+Timeouts SHALL be logged at warning without a traceback. CI MUST keep
+`NEED_DECOMPOSER=stub`.
+
+#### Scenario: Read timeout then success
+- **GIVEN** the first `/chat/completions` read times out
+- **WHEN** the decomposer runs
+- **THEN** it retries once and parses a successful second response
+
+#### Scenario: Persistent timeout falls back to keyword split
+- **GIVEN** both attempts time out and the text names an approved type
+- **WHEN** the decomposer runs
+- **THEN** keyword-split needs are returned and ingest can still succeed
+
+#### Scenario: Non-timeout HTTP error does not retry
+- **GIVEN** `/chat/completions` raises a connect error
+- **WHEN** the decomposer runs
+- **THEN** it does not retry and returns the keyword fallback
+
 ---
 
 ## API behaviour (pipeline outcomes)
@@ -407,11 +492,13 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | Agent fleet tools (S7.1) | In-process allowlist via `fleet_tools` + `tool_factory` | Fake seed default; SQL DTO backend; free-form SQL rejected; invoked from S7.3 graph |
 | Live SQL fleet (S4 app) | `FLEET_BACKEND=sql` → `FleetRepository` | DTO `asset_id` = `assets.name`; quote `equipment.id` = `assets.id`; live-hold bookings; fake remains CI default |
 | Fleet/pricing schema | `PRICING_SCHEMA` | `primary_snapshot` default / CI; `public` live via `schema_translate_map` (not KG-1 / pgvector) |
-| Agent Neo4j tools (S7.2 + S8.3) | Templates + `NEO4J_BACKEND=fake\|bolt`; populate HTTP | Empty/unavailable → []; K-3 skip; live POST `NEO4J_POPULATE_URL` |
+| Agent Neo4j tools (S7.2 + S8.3) | Templates + `NEO4J_BACKEND=fake\|bolt`; populate HTTP | Empty/unavailable → []; K-3 skip; live POST `NEO4J_POPULATE_URL` (ops sidecar; **ADR-0012**) |
 | Recommend agent state (S7.0) | `RecommendAgentState` + F-2 validation | Partition ownership used by S7.3 nodes |
 | Recommend LangGraph + stub synthesis (S7.3/S7.4) | Isolated DAG + tool-free [8] | Invoked from Call 2 when `RECOMMEND_VIA_AGENT_GRAPH` (S7.5) |
 | Call 2 multi-agent enrich (S7.5) | Same quote DTO; flag default off | Gate refuse → 400; traces stay off the body (S7.6) |
 | Call 2 predicted price | `items[].mlPredictedPrice` + `equipment.baseDailyRate` | Production `predict_price` daily rate; never invent |
+| Call 2 duplicate equipment (FR-P-013) | Collapse unit-need siblings that share `equipment.id` | Quote-layer only; keep FR-006 / FR-P-005 / FR-P-010 on `results_by_need` |
+| LLM decompose timeout (FR-P-014) | Retry once; then keyword fallback; default read 120s | Call 1 `needs_summary` and FR-010.2 stay available |
 
 ---
 
@@ -437,6 +524,10 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | **1.2.1** | 2026-08-07 | Sequential README; live path notes user_id + mandatory KG |
 | **2.0.0** | 2026-08-10 | Migrated to OpenSpec Requirement/Scenario + design REASONS under `openspec/specs/recommendation-pipeline/` |
 | **2.7.0** | 2026-08-13 | Call 2 quote: `equipment.id` = `assets.id` (live SQL); extra catalog fields; `PRICING_SCHEMA`; seed remains CI only |
+| **2.8.0** | 2026-08-20 | **FR-P-013:** collapse Call 2 unit-need siblings that share parent need + `equipment.id` into one quote line; merged `quantity` is the duplicate count (3 copies → `quantity: 3`); `quantity > 1` → `available=false`; qty-1 availability from `bookings` + `return_records`. **ADR-0010.** |
+| **2.9.0** | 2026-08-20 | **FR-P-014:** LLM need-decompose retries once on read/connect timeout then keyword-fallback; default `LLM_TIMEOUT_SECONDS` 120. **ADR-0011.** |
+| **2.11.0** | 2026-08-28 | Neo4j populate HTTP target is the ops sidecar (pack locally; deploy-pipeline vendors copies — **ADR-0012**). App tools unchanged. |
+| **2.10.0** | 2026-08-27 | Status: Call 2 quote HTTP as-built (Call 1 remains indexing). Path C heading no longer “deferred recommend”. |
 | **2.6.0** | 2026-08-13 | Call 2 quote: `items[].mlPredictedPrice` as-built (same daily rate as `equipment.baseDailyRate`) |
 | **2.5.0** | 2026-08-13 | S4 app: live SQL fleet backend (`FLEET_BACKEND=sql`); DTO sql path unchanged |
 | **2.4.0** | 2026-08-13 | S7.2 as-built: Neo4j template tools + populate no-op; recommend not blocked when graph empty |

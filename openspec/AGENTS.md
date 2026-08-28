@@ -7,6 +7,7 @@ This folder is the **SDD source of truth**. Standards:
 | **OpenSpec** | Capability behaviour in `specs/<cap>/spec.md` |
 | **GitHub Spec-kit** | Constitution (`.specify/memory/constitution.md`), user stories, contracts, tasks, converge |
 | **OpenSPDD** | REASONS Canvas in `design.md`; structured prompts; **fix prompt/spec first, then code** |
+| **MADR** | Numbered architectural choices in [`adrs/`](./adrs/) |
 
 **Start here**, then follow a path. Do not treat all capabilities as equally “live.”
 
@@ -70,6 +71,7 @@ Spring Boot (RestClient / WebClient saga)
          optional S7.5: RECOMMEND_VIA_AGENT_GRAPH=true
            → run_recommend_graph → same quote DTO (gate refuse → 400)
        → quote envelope: quoteRef, items[].equipment, rates, estimatedTotal
+       → FR-P-013: collapse unit-need siblings that share equipment.id (quantity summed)
        → Spring maps Call 2 body back to React as primary response
        → S2b as-built (Spring): HaystackRecommenderClient + Resilience4j + saga
          (no re-ingest on Call 2 fail)
@@ -87,7 +89,7 @@ Spring Boot (RestClient / WebClient saga)
 S7.0 as-built: RecommendAgentState + F-2 partition validation
 S7.1 as-built: fleet/needs allowlisted tools + DI factory (fake/SQL)
 S4 as-built (app): FLEET_BACKEND=sql → LiveSqlFleetBackend / FleetRepository (D0); fake default
-S4 as-built (config): T0–T2 60s postgres-haystack-sync + SYNC_TABLE_ALLOWLIST + METRICS (pack develop)
+S4 as-built (config): T0–T2 60s postgres-haystack-sync + SYNC_TABLE_ALLOWLIST + METRICS (pack locally; this repo deploy-pipeline vendors copies — ADR-0012)
 S7.2 as-built: neo4j_cypher_read (templates) + trigger_neo4j_populate (fake / no-op); K-3 skip
 S7.3 as-built: recommend LangGraph DAG (gate → [5] → Delegator → ([6]→[7])×N)
 S7.4 as-built: tool-free stub Coordinator synthesis [8]
@@ -95,10 +97,11 @@ S7.5 as-built: Call 2 HTTP enrich behind RECOMMEND_VIA_AGENT_GRAPH (default off)
 S7.6 as-built: tool_traces role / need_id / duration_ms (not on quote DTO)
 S7.7 as-built: A–L recommend prompts (`app/agents/recommend_prompts.py`) + tool DI / Delegator allowlist
 S7.8 as-built: Worker [5] live project_vector_search + project_kg_query (session KG-1) then decompose
-S8.1 T3 as-built (config): neo4j-populate SQL→Cypher MERGE; fleet labels isolated
-S8.2 T4 as-built (config): post-sync POST + admin HTTP :8089; scoped delete; KG-1 preserved
+S8.1 T3 as-built (ops): neo4j-populate SQL→Cypher MERGE; fleet labels isolated (pack locally; deploy-pipeline copies — ADR-0012)
+S8.2 T4 as-built (ops): post-sync POST + admin HTTP :8089; scoped delete; KG-1 preserved
 S8.3 as-built: live neo4j_cypher_read + trigger_neo4j_populate (NEO4J_BACKEND=bolt; default fake)
-KG-2 FR-KG-011 as-built: persist = pack T3/T4; load = app S8.3
+KG-2 FR-KG-011 as-built: persist = ops T3/T4 (pack + deploy-pipeline copies); load = app S8.3
+Dynamic pricing Phase 3a–3d as-built: real-data blend + gated promotion + default-disabled monthly APScheduler; no retrain HTTP route
 ```
 
 **Portal mapping (Spring handoff):** `Feasibility_Study_Spring/portal-to-haystack-mapping.md`  
@@ -117,7 +120,7 @@ KG-2 FR-KG-011 as-built: persist = pack T3/T4; load = app S8.3
 | **4** | [`specs/project-setup/spec.md`](./specs/project-setup/spec.md) | Stack, env, layering (behaviour); **default pytest isolation** |
 | **5** | [`specs/project-setup/design.md`](./specs/project-setup/design.md) | Layout, uv runbooks, `conftest` isolation table |
 
-**Pytest (as-built):** `uv run pytest` / `uv run pytest tests/ -q` is the full default suite — **no** optional markers or external prereqs. `tests/conftest.py` forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `INDEXING_DOCUMENT_STORE=memory`, `RECOMMEND_VIA_AGENT_GRAPH=false`, `FLEET_BACKEND=fake`, `NEED_DECOMPOSER=stub`, `PRICING_SCHEMA=primary_snapshot`, `PROJECT_AGENT_MODE=stub`, `NEO4J_BACKEND=fake`, and a temp `KG_ARTIFACT_DIR`. Query embedders for vector tools must match the session store dimension (see knowledge-graph + indexing specs).
+**Pytest (as-built):** `uv run pytest` / `uv run pytest tests/ -q` is the full default suite — **no** optional markers or external prereqs. `tests/conftest.py` forces `INDEXING_EMBEDDER=mock`, `INDEXING_EMBEDDING_DIM=384`, `INDEXING_DOCUMENT_STORE=memory`, `RECOMMEND_VIA_AGENT_GRAPH=false`, `FLEET_BACKEND=fake`, `NEED_DECOMPOSER=stub`, `PRICING_SCHEMA=primary_snapshot`, `PRICING_RETRAIN_ENABLED=false`, `PROJECT_AGENT_MODE=stub`, `NEO4J_BACKEND=fake`, and a temp `KG_ARTIFACT_DIR`. Query embedders for vector tools must match the session store dimension (see knowledge-graph + indexing specs).
 
 ---
 
@@ -137,14 +140,16 @@ KG-2 FR-KG-011 as-built: persist = pack T3/T4; load = app S8.3
 
 ---
 
-## Path C — Deferred recommend (service / reattach)
+## Path C — Call 2 recommend (live HTTP + service) and deferred intake envelope
+
+Call 2 quote HTTP is **as-built**. What remains deferred is the old `results_by_need` envelope on `/submitprojectspecification` (that route stays indexing).
 
 | Step | Document | Status |
 |------|----------|--------|
-| **11** | [`specs/recommendation-intake/spec.md`](./specs/recommendation-intake/spec.md) | Deferred `results_by_need` envelope |
-| **12** | [`specs/recommendation-pipeline/spec.md`](./specs/recommendation-pipeline/spec.md) | FR-010.1–8 **service-level** |
-| **13** | [`specs/dynamic-pricing/spec.md`](./specs/dynamic-pricing/spec.md) | `predict_price` for recommend; S6 tool `predict_asset_price` (US-5) |
-| **13.5** | [`specs/domain-seed-data/spec.md`](./specs/domain-seed-data/spec.md) | Seed-data richness required for §13 to be verifiable — executed on the Spring Boot side, not this repo |
+| **11** | [`specs/recommendation-intake/spec.md`](./specs/recommendation-intake/spec.md) | Deferred `results_by_need` on Call 1; live ingest is indexing |
+| **12** | [`specs/recommendation-pipeline/spec.md`](./specs/recommendation-pipeline/spec.md) | FR-010.1–8 service + **Call 2 quote** (`getassetrecommendations`, FR-P-013/014) |
+| **13** | [`specs/dynamic-pricing/spec.md`](./specs/dynamic-pricing/spec.md) | Production `predict_price`; S6 tool; Phase 3a–3d scheduler (default off) |
+| **13.5** | [`specs/domain-seed-data/spec.md`](./specs/domain-seed-data/spec.md) | Seed-data richness — executed on the Spring Boot side, not this repo |
 
 ---
 
@@ -154,7 +159,7 @@ KG-2 FR-KG-011 as-built: persist = pack T3/T4; load = app S8.3
 |------|----------|------|
 | **14** | [`specs/equipment-recommendation/spec.md`](./specs/equipment-recommendation/spec.md) | Full product SDD |
 | **15** | [`../docs/testing/recommendation-pipeline-testing-guide.md`](../docs/testing/recommendation-pipeline-testing-guide.md) | Pytest / curl (live = ingest + `user_id`) |
-| **16** | [`../docs/testing/recommendation-postman-testing-guide.md`](../docs/testing/recommendation-postman-testing-guide.md) | **Deferred** recommend Postman |
+| **16** | [`../docs/testing/recommendation-postman-testing-guide.md`](../docs/testing/recommendation-postman-testing-guide.md) | Historical `results_by_need` Postman (**deferred**; live HTTP uses [`../postman/README.md`](../postman/README.md)) |
 
 ---
 
@@ -163,9 +168,12 @@ KG-2 FR-KG-011 as-built: persist = pack T3/T4; load = app S8.3
 | Concern | Wins |
 |---------|------|
 | Live `POST .../submitprojectspecification` fields & index graph | **`specs/indexing/`** |
-| Mandatory KG after joiner / multi-agent Stage 1 | **`specs/knowledge-graph/`** |
-| FR-010 components / seed fleet | **`specs/recommendation-pipeline/`** (service) |
-| Deferred recommend JSON envelope | **`specs/recommendation-intake/`** (deferred) |
+| Mandatory KG after joiner / multi-agent Stage 1 / Call 3 Q&A | **`specs/knowledge-graph/`** |
+| Call 1 → Call 2 saga / dual-plane order | **`specs/portal-dual-hop/`** |
+| Call 2 quote DTO, FR-010, FR-P-013/014 | **`specs/recommendation-pipeline/`** |
+| Deferred `results_by_need` on Call 1 | **`specs/recommendation-intake/`** (deferred) |
+| Architectural choice among alternatives | **`adrs/`** (MADR) |
+| Academy/paid compose sync workers | **`adrs/0012-deploy-pipeline-vendors-pack-sync-workers.md`** + **`specs/project-setup/`** |
 
 ---
 
@@ -177,6 +185,7 @@ KG-2 FR-KG-011 as-built: persist = pack T3/T4; load = app S8.3
    - `specs/<cap>/spec.md` deltas (`## ADDED|MODIFIED|REMOVED Requirements`)
    - `design.md` as **REASONS Canvas** (Requirements, Entities, Approach, Structure, Operations, Norms, Safeguards)
    - `tasks.md` checkbox list
+   - `adr.md` when the change chooses among architectural alternatives; add a numbered file under [`adrs/`](./adrs/)
 3. **Structured prompts:** if agents change, edit `app/agents/prompts.py` (or `openspec/spdd/prompts/`) **before** or **with** code — never only in chat.
 4. **Implement** tasks; keep specs/prompts/code in the same change set.
 5. **Converge:** verify tests + scenarios; on mismatch, fix spec/prompt first.

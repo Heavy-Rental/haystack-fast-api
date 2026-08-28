@@ -40,7 +40,9 @@ POST /submitprojectspecification (user_id required)
   → IndexingIngestService
   → dual-branch index → final_doc_joiner → embed → write
   → mandatory KG after post-join chunks
-  → IngestFromProjectSpecResponse (user_*, ingest_id, data_kind, documents_written, kg_*)
+  → IngestFromProjectSpecResponse (lean FR-IX-023:
+       ingest_id, user_id, user_requirement_summary,
+       tentative_start/end_date, needs_summary[], expected_budget | null, warnings[])
 ```
 
 **Normative live contract:** [`../indexing/spec.md`](../indexing/spec.md) · KG: [`../knowledge-graph/spec.md`](../knowledge-graph/spec.md) · Map: [`../../AGENTS.md`](../../AGENTS.md).  
@@ -56,7 +58,7 @@ Deferred API tables below that show `recommendation_id` / `results_by_need` appl
 
 1. Accept project input: free-text and/or file (+ optional dates).
 2. Classify structured vs unstructured; convert; vectorize; write to DocumentStore.
-3. Return **ingest** metadata (`ingest_id`, `data_kind`, chunk/write counts, previews).
+3. Return the **lean FR-IX-023** ingest summary (`ingest_id`, `user_id`, `user_requirement_summary`, dates, `needs_summary[]`, `expected_budget`, `warnings[]`). Technical `documents[]` / `kg_*` stay internal.
 
 ### Deferred (recommend reattach)
 
@@ -78,7 +80,7 @@ Historical / target intake for equipment recommendation:
 
 - Client can submit free-text and/or file (+ optional ISO dates).
 - Empty / unsupported / unclassifiable input → **400** shared error JSON.
-- Success → **`ingest_id`**, `data_kind`, `documents_written`, chunk previews with `has_embedding` (see indexing capability).
+- Success → lean FR-IX-023 body (see indexing capability). Technical `documents[]` / `kg_*` stay internal.
 - Routers stay thin; orchestration in services / pipelines.
 
 ### Deferred (recommend)

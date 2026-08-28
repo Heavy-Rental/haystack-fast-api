@@ -179,13 +179,14 @@ KG build or save failure MUST fail the ingest request. There is no soft-fail pat
 - **WHEN** ingest is processed
 - **THEN** the HTTP request fails (not 200 with warnings only)
 
-### Requirement: FR-KG-007 Ingest response exposes kg_* fields
-The ingest response SHALL include: `kg_built`, `kg_node_count`, `kg_relationship_count`, `kg_artifact_path`, `kg_transform_applied`. On success `kg_built` is always `true`.  
-(Trace: source FR-KG-007; field list shared with indexing SPEC)
+### Requirement: FR-KG-007 KG metadata is session-internal (not public Call 1)
+Call 1's **public** lean body (FR-IX-023) MUST NOT include `kg_built`, `kg_node_count`, `kg_relationship_count`, `kg_artifact_path`, or `kg_transform_applied`. Those fields SHALL exist on the internal ingest/session meta after a successful KG build (`kg_built` true).  
+(Trace: source FR-KG-007; superseded public-body wording 2026-08-27 — lean FR-IX-023 wins)
 
-#### Scenario: Success response kg fields
+#### Scenario: Success keeps kg_* off the public body
 - **WHEN** ingest and KG succeed
-- **THEN** `kg_built` is `true`, `kg_node_count` and `kg_relationship_count` are present, `kg_artifact_path` is non-empty, and `kg_transform_applied` reflects config
+- **THEN** the HTTP Call 1 body matches FR-IX-023 (no public `kg_*`)
+- **AND** session/internal meta still records `kg_built=true` with node/relationship counts and artifact path
 
 ### Requirement: FR-KG-008 Sanitize user_id for filesystem paths
 `user_id` SHALL be sanitized for filesystem paths when writing user-scoped KG artifacts.  
@@ -216,7 +217,7 @@ Project-spec indexing + KG assembly SHALL follow Part A. The project knowledge s
 ### Requirement: FR-KG-011 Equipment stockpile knowledge KG-2
 Equipment stockpile knowledge (**KG-2**) SHALL be derived from Postgres (or an approved source) and persisted independently of user sessions.  
 (Trace: source FR-KG-011; was FR-KG-02)  
-**Status:** **as-built**. Persist = config pack **S8.1–S8.2** (`neo4j-populate` MERGE + post-sync/admin HTTP; `:Document` never dropped). Load = app **S8.3** `neo4j_cypher_read` against Bolt (`NEO4J_BACKEND=bolt`); templates only; empty/unavailable → `[]` / K-3 skip. See [`../equipment-recommendation/spec.md`](../equipment-recommendation/spec.md).
+**Status:** **as-built**. Persist = ops **S8.1–S8.2** (`neo4j-populate` MERGE + post-sync/admin HTTP; `:Document` never dropped). Job origin is the **config pack**; academy/paid deploy vendors copies in this repo’s Ansible role (**ADR-0012**). Load = app **S8.3** `neo4j_cypher_read` against Bolt (`NEO4J_BACKEND=bolt`); templates only; empty/unavailable → `[]` / K-3 skip. See [`../equipment-recommendation/spec.md`](../equipment-recommendation/spec.md).
 
 #### Scenario: Persistent load without per-request Postgres
 - **WHEN** KG-2 is required online and `NEO4J_BACKEND=bolt`
@@ -325,6 +326,7 @@ The following product targets are **not** Stage-1 acceptance criteria. They rema
 
 | Version | Date | Notes |
 |---------|------|--------|
+| **1.5.0** | 2026-08-28 | FR-KG-011 persist: pack locally + this repo’s deploy-pipeline copies (**ADR-0012**). Load still app S8.3. |
 | **1.4.0** | 2026-08-13 | FR-KG-011 **as-built:** persist S8.1–S8.2 (pack); load S8.3 live Bolt + populate HTTP |
 | **1.3.2** | 2026-08-13 | FR-KG-011: config **S8.2 T4** post-sync + admin HTTP as-built; app tools still S8.3 |
 | **1.3.1** | 2026-08-13 | FR-KG-011: config **S8.1 T3** `neo4j-populate` as-built; in-app persist/tools still Stage 2 / S8.3 |

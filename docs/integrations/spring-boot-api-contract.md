@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|--------|
 | **Document type** | External integration contract (caller-facing — written for the Spring Boot team, not internal reasoning) |
-| **Status** | Draft — pending Spring Boot review, see "Open items" below |
+| **Status** | As-built wire notes — prefer [`Feasibility_Study_Spring/wire-contract-call1-call2.md`](../../Feasibility_Study_Spring/wire-contract-call1-call2.md) |
 | **Audience** | Spring Boot backend engineers integrating against `haystack-fast-api` |
 | **Caller** | Spring Boot only. No route below is called directly by a browser/mobile client. |
 | **Base URL (local dev)** | `http://localhost:8000` |
@@ -12,7 +12,7 @@
 | **Portal → haystack mapping** | [`Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../../Feasibility_Study_Spring/portal-to-haystack-mapping.md) |
 | **Internal reasoning (Haystack maintainers only, not required reading for integration)** | [`openspec/specs/dynamic-pricing/`](../../openspec/specs/dynamic-pricing/), [`openspec/specs/recommendation-intake/`](../../openspec/specs/recommendation-intake/), [`openspec/project.md`](../../openspec/project.md) |
 
-> **Path note:** Live Call 1 / Call 2 / Call 3 routes are under **`/internal/v1/recommendations/`** (see OpenSpec + Spring pack). Sections below that still show `/api/v1/...` are historical draft text — prefer [`Feasibility_Study_Spring/wire-contract-call1-call2.md`](../../Feasibility_Study_Spring/wire-contract-call1-call2.md) for Spring integration.
+> **Path note:** Live Call 1 / Call 2 / Call 3 routes are under **`/internal/v1/recommendations/`**. Quote collapse: [ADR-0010](../../openspec/adrs/0010-call2-quote-quantity-collapse.md) (FR-P-013). Dual-hop: [ADR-0003](../../openspec/adrs/0003-dual-hop-call1-ingest-call2-recommend-call3-qa.md).
 
 ### Portal project-spec submit saga (normative)
 
@@ -197,8 +197,8 @@ Not on this response: ranked assets, ML daily rates, `results_by_need` — those
 | `items[].matchScore` | float \| null | Per-item match confidence |
 | `items[].reason` | string \| null | Why this item was picked |
 | `items[].lineTotal` | float \| null | Price for this line item |
-| `items[].quantity` | int | Default `1` |
-| `items[].needId` | string \| null | Correlates to a Call 1 `needs_summary[].need_id` |
+| `items[].quantity` | int | Default `1`. After FR-P-013, unit-need siblings that share `equipment.id` are collapsed and this equals the duplicate count (3 copies → `quantity: 3`) |
+| `items[].needId` | string \| null | Correlates to a Call 1 `needs_summary[].need_id`. Merged unit-need lines use the parent `{base}` (`need_1__u1` + `need_1__u2` → `need_1`) |
 | `items[].equipment.id` | string \| null | `asset_id` from catalog/fleet — tool-backed, never invented |
 | `items[].equipment.name` | string \| null | Display name or equipment_type |
 | `items[].equipment.category` | string \| null | |
