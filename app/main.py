@@ -72,6 +72,9 @@ async def lifespan(_app: FastAPI):
         if decomposer is not None and hasattr(decomposer, "close"):
             decomposer.close()
 
+    if decomposer is not None and hasattr(decomposer, "close"):
+        decomposer.close()
+
 
 def create_app() -> FastAPI:
     """Application factory used by Uvicorn and tests."""
