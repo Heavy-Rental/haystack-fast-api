@@ -37,6 +37,7 @@ haystack-fast-api/                         # application module (uv root)
 ├── tests/
 ├── postman/
 ├── ml-experiments/
+├── deploy-pipeline/  # Ansible: academy/paid compose + vendored pack workers (ADR-0012)
 └── docs/testing/
 ```
 
@@ -146,6 +147,7 @@ Forbidden without dedicated SDD + constitution update:
 - Cookie-session primary auth; second API style (GraphQL); secrets in VCS
 - Silent async driver switch; mandatory Alembic without feature SDD
 - Requiring `psycopg2` for bare `postgresql://` `DATABASE_URL` values (normalize to `+psycopg` instead)
+- Running `python -m postgres_haystack_sync` / `python -m neo4j_populate` from the uvicorn image; starting Neo4j from haystack compose (ADR-0012)
 
 ## Key decisions
 

@@ -11,9 +11,9 @@ This is the **versioned D0 map** from Spring tables on **Postgres-Haystack** to 
 
 **Schema (`PRICING_SCHEMA`):** ORM models stay mapped to `primary_snapshot`. Live may set `PRICING_SCHEMA=public`; that value is applied with SQLAlchemy `schema_translate_map` for **fleet + pricing reads only**. It does **not** remap KG-1 / pgvector. Pytest forces `primary_snapshot`. Default in `app/config.py` is `primary_snapshot`.
 
-**Config T0–T2 (as-built):** [Haystack-Fast-API pack](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API) — 60s `postgres-haystack-sync`, `SYNC_TABLE_ALLOWLIST`, per-cycle METRICS. Consumer contract: `specs/001-haystack-postgres-merge-sync/contracts/schema-contract.md` (pack v1.0).
+**Config T0–T2 (as-built):** 60s `postgres-haystack-sync`, `SYNC_TABLE_ALLOWLIST`, per-cycle METRICS. Local/devcontainer: [Haystack-Fast-API pack](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API). Academy/paid: this repo vendors `sync-from-primary.sh` in `deploy-pipeline/ansible/roles/haystack/files/` (**ADR-0012**). Consumer contract: pack `specs/001-haystack-postgres-merge-sync/contracts/schema-contract.md` (v1.0).
 
-**Alignment:** pack D0 v1.0 allowlist is singular `asset,booking,category`. This contract (and `FleetRepository`) reads plural `assets`, `asset_categories`, `bookings`, `booking_items` (Spring JPA `spec.md`). Resolve in the **config** pack if merge does not land those physical names.
+**Alignment:** pack D0 v1.0 allowlist is singular `asset,booking,category`. This contract (and `FleetRepository`) reads plural `assets`, `asset_categories`, `bookings`, `booking_items` (Spring JPA `spec.md`). Resolve in the **config pack / vendored sync script** if merge does not land those physical names.
 
 ## Table allowlist
 

@@ -73,3 +73,5 @@ Live smoke: [`../../../QUICKSTART.md`](../../../QUICKSTART.md). Process checklis
 - Do not invent `equipment.id` or rates.
 - Do not put `tool_traces` on the Call 2 quote body.
 - Do not use hostname `db` for haystack Postgres (ADR-0002).
+- Do not run `python -m postgres_haystack_sync` / `python -m neo4j_populate` from the uvicorn image (ADR-0012).
+- Do not start Neo4j from haystack compose.

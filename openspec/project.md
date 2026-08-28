@@ -54,7 +54,7 @@ The industry is capital-intensive. Success depends on:
 
 **As-built DocumentStore (S5-I0 + S5-I1):** `INDEXING_DOCUMENT_STORE` + `build_document_store()` / `create_session_document_store()` (`memory` default = fresh InMemory per ingest \| `pgvector` = shared table). Call 1 wires factory into writer + session registry. Retrieval tools filter `user_id` + `ingest_id`. Optional `INDEXING_CHUNK_TTL_SECONDS` + delete helpers. Dual-mode tests: default CI memory; optional `@pytest.mark.pgvector` (FR-IX-027/028).
 
-**Target (later):** I2 production default `pgvector`; production default `RECOMMEND_VIA_AGENT_GRAPH`; align config sync table names with haystack ORM; Naive/hybrid RAG over manuals; async ML training. Phase 7 **S7.0–S7.8 as-built**. **S4 as-built.** **S8.1–S8.2 as-built (config):** `neo4j-populate` + post-sync/admin trigger. **S8.3 as-built (app):** live Neo4j tools behind `NEO4J_BACKEND=bolt` (default fake). Normative detail lives in capability specs—not here.
+**Target (later):** I2 production default `pgvector`; production default `RECOMMEND_VIA_AGENT_GRAPH`; align config sync table names with haystack ORM; Naive/hybrid RAG over manuals; async ML training. Phase 7 **S7.0–S7.8 as-built**. **S4 as-built.** **S8.1–S8.2 as-built (ops):** `neo4j-populate` + post-sync/admin trigger (config pack locally; this repo’s deploy-pipeline vendors copies — **ADR-0012**). **S8.3 as-built (app):** live Neo4j tools behind `NEO4J_BACKEND=bolt` (default fake). Normative detail lives in capability specs—not here.
 
 ---
 
@@ -127,3 +127,4 @@ Treat these as **authoritative industry context** when present. Product behaviou
 | 1.0.0 | 2026-08-10 | Migrated from `specification/00-overview.md` + `SPEC-project.md` into OpenSpec project context |
 | 1.1.0 | 2026-08-19 | Dynamic-pricing Phase 3d added default-disabled in-process APScheduler 3.x monthly retraining with restart-aware timing and FastAPI lifespan ownership; no retrain HTTP route was added. |
 | 1.2.0 | 2026-08-27 | Host `postgres-haystack` (not `db`); Call 2 recommend is live HTTP; MADR log under `openspec/adrs/`; FR-P-013/014 + Phase 3b–3d folded into live specs. |
+| 1.3.0 | 2026-08-28 | **ADR-0012:** academy/paid compose vendors pack sync/populate workers; FastAPI still does not run ETL. |

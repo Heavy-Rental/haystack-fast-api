@@ -27,6 +27,7 @@ Format: [Markdown Architectural Decision Records](https://adr.github.io/madr/) (
 | [ADR-0009](./0009-neo4j-fake-default-kg1-kg2-isolation.md) | `NEO4J_BACKEND` fake default vs bolt; KG-1 ≠ KG-2 | Accepted | 2026-08-13 | FR-KG-011 / S8.3 |
 | [ADR-0010](./0010-call2-quote-quantity-collapse.md) | Collapse Call 2 unit-need siblings that share `equipment.id` | Accepted | 2026-08-20 | FR-P-013 |
 | [ADR-0011](./0011-llm-need-decompose-timeout-retry.md) | LLM need-decompose: retry once on timeout, then keyword fallback | Accepted | 2026-08-20 | FR-P-014 |
+| [ADR-0012](./0012-deploy-pipeline-vendors-pack-sync-workers.md) | Academy/paid compose vendors pack sync and Neo4j populate workers | Accepted | 2026-08-28 | HR-244 / FR-PDH-010 |
 
 ## When to write an ADR
 

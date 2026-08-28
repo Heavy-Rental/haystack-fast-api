@@ -363,7 +363,7 @@ Outputs: `project.needs`, `research_notes` / `graph_notes`, optional hits.
 | Tool | Behaviour |
 |------|-----------|
 | `neo4j_cypher_read` | Allowlisted templates only (`asset_neighbors`, `assets_by_category`, `compatible_attachments`) |
-| `trigger_neo4j_populate` | Non-blocking HTTP enqueue to pack admin URL; **not** on recommend hot path |
+| `trigger_neo4j_populate` | Non-blocking HTTP enqueue to ops admin URL (`NEO4J_POPULATE_URL`); **not** on recommend hot path |
 
 - Labels: fleet only (`Asset`, `Booking`, `Category`, `Attachment`) — never `:Document` (KG-1)  
 - `NEO4J_BACKEND=fake` (default) vs `bolt`  

@@ -4,9 +4,9 @@
 |-------|--------|
 | **Status** | As-built (haystack-fast-api) |
 | **Audience** | Engineers, Spring integrators, operators |
-| **Date** | 2026-08-27 |
+| **Date** | 2026-08-28 |
 | **OpenSpec twin** | [`../openspec/specs/portal-dual-hop/spec.md`](../openspec/specs/portal-dual-hop/spec.md) |
-| **ADRs** | [ADR-0003](../openspec/adrs/0003-dual-hop-call1-ingest-call2-recommend-call3-qa.md) dual-hop · [ADR-0010](../openspec/adrs/0010-call2-quote-quantity-collapse.md) quote collapse |
+| **ADRs** | [ADR-0003](../openspec/adrs/0003-dual-hop-call1-ingest-call2-recommend-call3-qa.md) dual-hop · [ADR-0010](../openspec/adrs/0010-call2-quote-quantity-collapse.md) quote collapse · [ADR-0012](../openspec/adrs/0012-deploy-pipeline-vendors-pack-sync-workers.md) deploy workers |
 | **Call 1 contract** | [`../openspec/specs/indexing/contracts/ingest-from-project-spec.md`](../openspec/specs/indexing/contracts/ingest-from-project-spec.md) |
 | **Call 2 contract** | [`../openspec/specs/recommendation-pipeline/contracts/get-asset-recommendations.md`](../openspec/specs/recommendation-pipeline/contracts/get-asset-recommendations.md) |
 | **Spring mapping** | [`../Feasibility_Study_Spring/portal-to-haystack-mapping.md`](../Feasibility_Study_Spring/portal-to-haystack-mapping.md) |
@@ -100,7 +100,7 @@ Plane A — fleet (Call 2 reads; not from Call 1)
 | DocumentStore / pgvector | **Project-spec** embeddings only | Call 1 | Yes (`project_vector_search`) |
 | KG-1 JSON | **Project** knowledge graph | Call 1 | Yes (`project_kg_query`) |
 | Postgres fleet tables | Assets, bookings, categories | Spring / domain | Yes (`FLEET_BACKEND=sql`) |
-| Neo4j KG-2 | Fleet graph projection | Config pack `neo4j-populate` | Optional (`NEO4J_BACKEND=bolt`) |
+| Neo4j KG-2 | Fleet graph projection | Ops `neo4j-populate` (pack locally; this repo’s deploy-pipeline on academy/paid) | Optional (`NEO4J_BACKEND=bolt`) |
 
 **Important:** pgvector does **not** store vectorized fleet rows from Postgres. It stores project-spec chunks from Call 1 only (when `INDEXING_DOCUMENT_STORE=pgvector`).
 
@@ -563,11 +563,11 @@ postgres-haystack fleet tables
     → Neo4j :Asset / :Booking / :Category (+ IN_CATEGORY, FOR_ASSET)
 ```
 
-- Implemented in the **config pack**, not in this app’s request handlers.  
+- Implemented as an **ops sidecar**, not in this app’s request handlers. Local/devcontainer: config pack. Academy/paid: Ansible copies pack scripts to `{{ compose_dir }}/workers/` (**ADR-0012**). Do **not** run `python -m neo4j_populate` from the uvicorn image.  
 - App may `POST` `NEO4J_POPULATE_URL` via `trigger_neo4j_populate` (non-blocking).  
 - If Neo4j is empty, Call 2 still quotes from **SQL**; graph tools are skipped.
 
-**Pack table-name note:** populate defaults to singular SQL names `asset`, `booking`, `category`. Live Spring tables are often plural (`assets`, `bookings`, `asset_categories`). Compatibility views or `FLEET_TABLE_ALLOWLIST` alignment may be required for `tables_ok > 0`.
+**Table-name note:** populate defaults to singular SQL names `asset`, `booking`, `category`. Live Spring tables are often plural (`assets`, `bookings`, `asset_categories`). Compatibility views or `FLEET_TABLE_ALLOWLIST` alignment may be required for `tables_ok > 0`.
 
 ---
 
@@ -664,6 +664,7 @@ curl -sS http://neo4j-populate:8089/v1/status
 | Doc | When |
 |-----|------|
 | [`../openspec/specs/portal-dual-hop/spec.md`](../openspec/specs/portal-dual-hop/spec.md) | OpenSpec FR-PDH requirements + scenarios |
+| [`../openspec/adrs/0012-deploy-pipeline-vendors-pack-sync-workers.md`](../openspec/adrs/0012-deploy-pipeline-vendors-pack-sync-workers.md) | Academy/paid compose vendors pack sync/populate workers |
 | [`../openspec/AGENTS.md`](../openspec/AGENTS.md) | Runtime map Paths A–D |
 | [`../openspec/specs/indexing/contracts/ingest-from-project-spec.md`](../openspec/specs/indexing/contracts/ingest-from-project-spec.md) | Call 1 fields |
 | [`../openspec/specs/recommendation-pipeline/contracts/get-asset-recommendations.md`](../openspec/specs/recommendation-pipeline/contracts/get-asset-recommendations.md) | Call 2 quote + identity |

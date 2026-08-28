@@ -26,6 +26,7 @@ React  POST /api/recommendations/project-spec     (Spring public API)
 - Haystack 2.0 pipelines, LangGraph agents
 - PostgreSQL host **`postgres-haystack`** (DB `heavy_rental`) — not `db`
 - Production pricing in `app/services/pricing/` (no public renter `/predict-price`; no retrain HTTP)
+- Academy/paid compose vendors pack `postgres-haystack-sync` and `neo4j-populate` workers (`deploy-pipeline/`; **ADR-0012**). FastAPI does not run those jobs.
 
 ## Spec standards
 

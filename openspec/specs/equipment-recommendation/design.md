@@ -201,7 +201,7 @@ See [`../recommendation-pipeline/design.md`](../recommendation-pipeline/design.m
 | `app/agents/recommend_traces.py` | **S7.6** G-1 `append_tool_trace` / `duration_ms` |
 | Tests | `tests/test_recommend_agent_state.py`, `test_fleet_tools.py`, `test_tool_factory.py`, `test_neo4j_tools.py`, `test_neo4j_tools_integration.py` (optional), `test_recommend_graph_order.py`, `test_recommend_fanout.py`, `test_recommend_synthesis.py`, `test_recommend_http_call2.py`, `test_tool_traces.py`, `test_recommend_prompts.py`, `test_agent_tool_di.py`, `test_recommend_project_worker.py` |
 
-Live Neo4j **job + T4 triggers** are as-built in the config pack (`neo4j-populate`, post-sync HTTP, admin `:8089`). App **S8.3** wires `NEO4J_BACKEND=bolt` (`BoltNeo4jBackend`) and `trigger_neo4j_populate` → `NEO4J_POPULATE_URL`. Default CI stays fake.
+Live Neo4j **job + T4 triggers** are as-built as ops sidecars: config pack for local/devcontainer; this repo’s `deploy-pipeline/ansible/roles/haystack` vendors copies for academy/paid (**ADR-0012**). App **S8.3** wires `NEO4J_BACKEND=bolt` (`BoltNeo4jBackend`) and `trigger_neo4j_populate` → `NEO4J_POPULATE_URL`. Default CI stays fake.
 
 ## O — Operations
 

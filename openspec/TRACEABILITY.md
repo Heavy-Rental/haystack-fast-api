@@ -50,7 +50,8 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | — (Call 2/3 numbering) | `openspec/changes/archive/2026-08-12-call2-recommend-call3-qa/` | Call 2 = recommend, Call 3 = Q&A; **ADR-0003** |
 | — (superseded dual-hop docs) | `openspec/changes/archive/2026-08-12-portal-dual-hop-docs/` | Superseded (Call 2 was Q&A) |
 | — (Call 1 lean summary) | `openspec/changes/archive/2026-08-10-call1-project-spec-summary/` | FR-IX-023 S1a–S1e shipped |
-| — (MADR log) | `openspec/adrs/` | Numbered ADRs 0001–0011 |
+| — (MADR log) | `openspec/adrs/` | Numbered ADRs 0001–0012 |
+| — (HR-244 / ADR-0012) | `openspec/changes/archive/2026-08-28-hr-244-deploy-pipeline-sync-workers/` | Academy/paid deploy vendors pack postgres-haystack-sync + neo4j-populate scripts |
 
 ## FR / requirement ID map
 
@@ -108,11 +109,12 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | S7.2 (as-built) | Equipment recommendation — KG-2 tools `neo4j_cypher_read` (templates) + `trigger_neo4j_populate` (non-blocking no-op); K-3 skip when empty | `specs/equipment-recommendation/spec.md` + design; `app/agents/neo4j_tools.py` · `tool_factory.py`; `tests/test_neo4j_tools.py`; impl-plan **Phase 7 / S7.2** · archive `changes/archive/2026-08-13-s7-2-neo4j-tools/` |
 | S7.2 change archive | Neo4j tool catalog tasks | `changes/archive/2026-08-13-s7-2-neo4j-tools/` |
 | S4 (as-built app) | Fleet LTM read — `FLEET_BACKEND=sql` + `FleetRepository`; D0 map | `specs/spring-entity-repository/fleet-read-contract.md`; `app/repositories/fleet_repository.py`; `tests/test_fleet_repository.py`; impl-plan **Phase 4 / S4 app**; archive `changes/archive/2026-08-13-s4-live-sql-fleet-backend/` |
-| S4 (as-built config T0–T2) | Pack `develop`: 60s poll, `SYNC_TABLE_ALLOWLIST`, METRICS; table-name alignment follow-up | Config repo `Haystack-Fast-API/`; impl-plan **3.12.0**; dual-plane **2.8.0** |
-| S8.1 T3 (as-built config) | `neo4j-populate` SQL→Cypher MERGE; `:Asset`/`:Booking`/`:Category` isolated from `:Document` | Pack spec `005-haystack-neo4j-populate`; impl-plan **3.13.0**; archive `changes/archive/2026-08-13-s8-1-t3-neo4j-populate/` |
-| S8.2 T4 (as-built config) | Post-sync populate trigger + admin HTTP `:8089`; scoped delete; never drop KG-1 | Pack spec 005 T4; impl-plan **3.15.0**; archive `changes/archive/2026-08-13-s8-2-t4-neo4j-populate-trigger/` |
+| S4 (as-built config T0–T2) | 60s poll, `SYNC_TABLE_ALLOWLIST`, METRICS; table-name alignment follow-up | Pack `Haystack-Fast-API/` locally; this repo `deploy-pipeline/` vendors `sync-from-primary.sh` (**ADR-0012**); impl-plan **3.20.0**; dual-plane **2.8.5** |
+| S8.1 T3 (as-built ops) | `neo4j-populate` SQL→Cypher MERGE; `:Asset`/`:Booking`/`:Category` isolated from `:Document` | Pack spec `005-haystack-neo4j-populate`; this repo vendors `populate_neo4j.py` (**ADR-0012**); impl-plan **3.20.0**; archive `changes/archive/2026-08-13-s8-1-t3-neo4j-populate/` |
+| S8.2 T4 (as-built ops) | Post-sync populate trigger + admin HTTP `:8089`; scoped delete; never drop KG-1 | Pack spec 005 T4 + deploy-pipeline copies; impl-plan **3.20.0**; archive `changes/archive/2026-08-13-s8-2-t4-neo4j-populate-trigger/` |
+| HR-244 / ADR-0012 | Academy/paid compose vendors pack workers; no `python -m` from uvicorn image | `deploy-pipeline/ansible/roles/haystack/`; archive `changes/archive/2026-08-28-hr-244-deploy-pipeline-sync-workers/` |
 | S8.3 (as-built app) | Live `neo4j_cypher_read` / `trigger_neo4j_populate` (`NEO4J_BACKEND=bolt`; default fake); FR-KG-011 load | `app/agents/neo4j_tools.py`; `tests/test_neo4j_tools.py` · `test_neo4j_tools_integration.py`; impl-plan **3.16.0**; archive `changes/archive/2026-08-13-s8-3-live-neo4j-tools/` |
-| FR-KG-011 (as-built) | KG-2 persist (pack S8.1–S8.2) + load (app S8.3) | `specs/knowledge-graph/spec.md` |
+| FR-KG-011 (as-built) | KG-2 persist (ops S8.1–S8.2: pack + deploy-pipeline copies) + load (app S8.3) | `specs/knowledge-graph/spec.md`; **ADR-0012** |
 | FR-001 … FR-053 (+ NFR, demo) | Equipment recommendation parent | `specs/equipment-recommendation/spec.md` |
 | Domain invariants | Domain | `specs/domain/spec.md` |
 | Setup / layering / stack | Project setup | `specs/project-setup/spec.md` |
@@ -126,11 +128,11 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | OpenSpec `openspec/specs/<cap>/spec.md` for all capabilities | Yes |
 | `### Requirement:` + `#### Scenario:` with WHEN/THEN | Yes (~172 unique req, ~270 unique scenarios; spring-entity-repository is a schema catalog, not FR format) |
 | Design as REASONS Canvas (OpenSPDD) for major caps | Yes (incl. portal-dual-hop; index `spdd/README.md`) |
-| Spec-kit constitution | Yes (`.specify/memory/constitution.md` 1.1.0) |
+| Spec-kit constitution | Yes (`.specify/memory/constitution.md` 1.1.1) |
 | User stories on product-facing caps | Yes |
 | Contracts for live HTTP | Yes (ingest + Call 2 get-asset-recommendations + Call 3 project-knowledge query) |
 | Structured agent prompts indexed (OpenSPDD) | Yes |
-| MADR numbered ADR log | Yes (`openspec/adrs/` ADR-0001…0011) |
+| MADR numbered ADR log | Yes (`openspec/adrs/` ADR-0001…0012) |
 | Completed changes archived | Yes (no live `openspec/changes/` except `archive/`) |
 | Testing guides not mislabeled as behaviour SoT | Yes (`docs/testing/`) |
 | Historical HR-65 archived | Yes |
