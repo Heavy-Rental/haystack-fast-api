@@ -623,8 +623,8 @@ def _make_handler(cfg: PopulateConfig) -> type[BaseHTTPRequestHandler]:
                     body = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
                     if isinstance(body, dict) and body.get("mode"):
                         mode = str(body["mode"])
-                except json.JSONDecodeError:
-                    pass
+                except json.JSONDecodeError as exc:
+                    print(f"Invalid JSON body for populate trigger: {exc}", file=sys.stderr)
 
             # Non-blocking: run cycle in background so sync curl can return quickly
             def _bg() -> None:
