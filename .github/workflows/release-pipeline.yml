@@ -1058,6 +1058,18 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+      - name: Upload release packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: haystack-fast-api-release-packages
+          path: |
+            ${{ github.workspace }}/${{ steps.package.outputs.versioned_wheel }}
+            ${{ github.workspace }}/${{ steps.package.outputs.stable_wheel }}
+            ${{ github.workspace }}/${{ steps.package.outputs.versioned_sdist }}
+            ${{ github.workspace }}/${{ steps.package.outputs.stable_sdist }}
+          retention-days: 14
+          if-no-files-found: error
+
       - name: Packaging summary
         env:
           IMAGE_LOCAL: ${{ steps.package.outputs.image_local }}
