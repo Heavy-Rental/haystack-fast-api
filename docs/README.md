@@ -58,7 +58,7 @@ Also: [`../postman/README.md`](../postman/README.md) · [`../QUICKSTART.md`](../
 | Path | Role |
 |------|------|
 | [`../openspec/AGENTS.md`](../openspec/AGENTS.md) | SDD reading order + runtime flow |
-| [`../openspec/adrs/`](../openspec/adrs/) | MADR decision log |
+| [`../openspec/adrs/`](../openspec/adrs/) | MADR decision log (ADR-0012: deploy-pipeline vendors pack sync workers) |
 | [`../openspec/specs/portal-dual-hop/spec.md`](../openspec/specs/portal-dual-hop/spec.md) | Call 1→2 process requirements |
 | [`../openspec/specs/knowledge-graph/spec.md`](../openspec/specs/knowledge-graph/spec.md) | KG-1 + Stage-1 agents |
 | [`../openspec/specs/equipment-recommendation/spec.md`](../openspec/specs/equipment-recommendation/spec.md) | Parent product + Phase 7 |

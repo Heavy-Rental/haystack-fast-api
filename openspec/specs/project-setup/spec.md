@@ -104,6 +104,16 @@ The normative stack SHALL include: FastAPI, Uvicorn, haystack-ai, langgraph, SQL
 - **WHEN** a dependency or primary DB strategy changes intentionally
 - **THEN** this capability and change-control are updated in the same change set
 
+### Requirement: Academy/paid deploy vendors pack sync workers
+Academy/paid Haystack compose SHALL run `postgres-haystack-sync` and `neo4j-populate` from scripts copied by Ansible (`deploy-pipeline/ansible/roles/haystack/files/`) onto `{{ compose_dir }}/workers/`. Those services SHALL NOT invoke `python -m postgres_haystack_sync` or `python -m neo4j_populate` from the FastAPI uvicorn image. Compose SHALL NOT start a `neo4j:` service on the Haystack host. Local/devcontainer compose remains the config pack. FastAPI request handlers SHALL NOT run merge-sync or SQL→Cypher ETL. **ADR-0012.**
+
+#### Scenario: Sidecars use vendored pack scripts
+- **WHEN** the Ansible haystack role is applied
+- **THEN** `sync-from-primary.sh`, `populate_neo4j.py`, and `populate-neo4j-from-haystack.sh` exist under `{{ compose_dir }}/workers/`
+- **AND** `postgres-haystack-sync` uses a Postgres image + bash entrypoint
+- **AND** `neo4j-populate` uses a Python image + the populate wrapper
+- **AND** `GET :8000/health` remains the ALB gate; worker `ps` does not fail the play
+
 ### Requirement: Default pytest suite is CI-safe and env-isolated
 Default automated tests SHALL run with `uv run pytest` (or `uv run pytest tests/`) without requiring live LLM keys, external embedder APIs, or a live Pgvector connection. Shared fixtures in `tests/conftest.py` SHALL isolate host/`.env` overrides that would otherwise make the suite host-dependent. Optional `@pytest.mark.pgvector` tests MAY exist but MUST skip unless `RUN_PGVECTOR_TESTS=1` (and Postgres is available). Optional `@pytest.mark.neo4j` tests MAY exist but MUST skip unless `RUN_NEO4J_TESTS=1`.
 
@@ -168,3 +178,4 @@ As-built isolation (autouse fixture):
 | 2.4.0 | 2026-08-13 | **S8.3:** conftest forces `NEO4J_BACKEND=fake`; optional `@pytest.mark.neo4j` (`RUN_NEO4J_TESTS=1`) |
 | 2.3.0 | 2026-08-12 | **S5-I1:** optional `@pytest.mark.pgvector` + `INDEXING_CHUNK_TTL_SECONDS`; default suite still no live Pgvector |
 | 2.6.0 | 2026-08-19 | **Dynamic-pricing Phase 3d:** APScheduler 3.x added to the runtime stack; `PRICING_RETRAIN_*` env controls documented; pytest forces the default-disabled scheduler off so host settings cannot start background training. |
+| 2.7.0 | 2026-08-28 | **ADR-0012:** academy/paid compose vendors pack `postgres-haystack-sync` and `neo4j-populate` scripts; not `python -m` from the uvicorn image. |

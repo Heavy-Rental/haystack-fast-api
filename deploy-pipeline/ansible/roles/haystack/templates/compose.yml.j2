@@ -9,20 +9,29 @@ services:
     cpus: "1.0"
     restart: unless-stopped
 
+  # Devcontainer workers (not python -m in the uvicorn image).
+  # Scripts: {{ compose_dir }}/workers/ (Ansible copy).
   postgres-haystack-sync:
-    image: {{ haystack_image }}
+    image: postgres:17
     env_file:
       - .env
+    volumes:
+      - {{ compose_dir }}/workers/sync-from-primary.sh:/usr/local/bin/sync-from-primary.sh:ro
+    entrypoint: ["/bin/bash", "/usr/local/bin/sync-from-primary.sh"]
     mem_limit: 256m
     cpus: "0.25"
-    restart: on-failure
-    command: ["uv", "run", "python", "-m", "postgres_haystack_sync"]
+    restart: unless-stopped
 
   neo4j-populate:
-    image: {{ haystack_image }}
+    image: python:3.12-slim
     env_file:
       - .env
+    volumes:
+      - {{ compose_dir }}/workers/populate_neo4j.py:/usr/local/bin/populate_neo4j.py:ro
+      - {{ compose_dir }}/workers/populate-neo4j-from-haystack.sh:/usr/local/bin/populate-neo4j-from-haystack.sh:ro
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - pip install --no-cache-dir 'psycopg[binary]==3.2.9' 'neo4j==5.28.1' && exec bash /usr/local/bin/populate-neo4j-from-haystack.sh
     mem_limit: 256m
     cpus: "0.25"
-    restart: on-failure
-    command: ["uv", "run", "python", "-m", "neo4j_populate"]
+    restart: unless-stopped

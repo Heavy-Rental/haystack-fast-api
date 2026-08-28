@@ -89,7 +89,7 @@ Spring Boot (RestClient / WebClient saga)
 S7.0 as-built: RecommendAgentState + F-2 partition validation
 S7.1 as-built: fleet/needs allowlisted tools + DI factory (fake/SQL)
 S4 as-built (app): FLEET_BACKEND=sql → LiveSqlFleetBackend / FleetRepository (D0); fake default
-S4 as-built (config): T0–T2 60s postgres-haystack-sync + SYNC_TABLE_ALLOWLIST + METRICS (pack develop)
+S4 as-built (config): T0–T2 60s postgres-haystack-sync + SYNC_TABLE_ALLOWLIST + METRICS (pack locally; this repo deploy-pipeline vendors copies — ADR-0012)
 S7.2 as-built: neo4j_cypher_read (templates) + trigger_neo4j_populate (fake / no-op); K-3 skip
 S7.3 as-built: recommend LangGraph DAG (gate → [5] → Delegator → ([6]→[7])×N)
 S7.4 as-built: tool-free stub Coordinator synthesis [8]
@@ -97,10 +97,10 @@ S7.5 as-built: Call 2 HTTP enrich behind RECOMMEND_VIA_AGENT_GRAPH (default off)
 S7.6 as-built: tool_traces role / need_id / duration_ms (not on quote DTO)
 S7.7 as-built: A–L recommend prompts (`app/agents/recommend_prompts.py`) + tool DI / Delegator allowlist
 S7.8 as-built: Worker [5] live project_vector_search + project_kg_query (session KG-1) then decompose
-S8.1 T3 as-built (config): neo4j-populate SQL→Cypher MERGE; fleet labels isolated
-S8.2 T4 as-built (config): post-sync POST + admin HTTP :8089; scoped delete; KG-1 preserved
+S8.1 T3 as-built (ops): neo4j-populate SQL→Cypher MERGE; fleet labels isolated (pack locally; deploy-pipeline copies — ADR-0012)
+S8.2 T4 as-built (ops): post-sync POST + admin HTTP :8089; scoped delete; KG-1 preserved
 S8.3 as-built: live neo4j_cypher_read + trigger_neo4j_populate (NEO4J_BACKEND=bolt; default fake)
-KG-2 FR-KG-011 as-built: persist = pack T3/T4; load = app S8.3
+KG-2 FR-KG-011 as-built: persist = ops T3/T4 (pack + deploy-pipeline copies); load = app S8.3
 Dynamic pricing Phase 3a–3d as-built: real-data blend + gated promotion + default-disabled monthly APScheduler; no retrain HTTP route
 ```
 
@@ -173,6 +173,7 @@ Call 2 quote HTTP is **as-built**. What remains deferred is the old `results_by_
 | Call 2 quote DTO, FR-010, FR-P-013/014 | **`specs/recommendation-pipeline/`** |
 | Deferred `results_by_need` on Call 1 | **`specs/recommendation-intake/`** (deferred) |
 | Architectural choice among alternatives | **`adrs/`** (MADR) |
+| Academy/paid compose sync workers | **`adrs/0012-deploy-pipeline-vendors-pack-sync-workers.md`** + **`specs/project-setup/`** |
 
 ---
 

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Changed (docs — HR-244 / ADR-0012 deploy workers, 2026-08-28)
+
+- Academy/paid compose vendors pack `postgres-haystack-sync` and `neo4j-populate` scripts (`deploy-pipeline/ansible/roles/haystack/files/`). Sidecars use `postgres:17` and `python:3.12-slim`, not `python -m` from the uvicorn image.
+- OpenSpec: FR-PDH-010, project-setup, FR-KG-011, equipment-recommendation, fleet-read-contract; **ADR-0012**. Archive `openspec/changes/archive/2026-08-28-hr-244-deploy-pipeline-sync-workers/`.
+- FastAPI `app/` is still a client: `trigger_neo4j_populate` POSTs `NEO4J_POPULATE_URL`; request handlers do not run ETL. Local/devcontainer compose remains the config pack.
+- Feasibility_Study implementation-plan **3.20.0**; dual-plane **2.8.5**.
+
 ### Changed (docs — OpenSpec / OpenSPDD / MADR sync, 2026-08-27)
 
 - Added MADR log `openspec/adrs/` (ADR-0001…0011) and OpenSPDD canvas index `openspec/spdd/README.md`.
@@ -87,7 +94,7 @@
 ### Added (S8.3 / Phase 8 app — 2026-08-13)
 
 - Live KG-2 tools behind `NEO4J_BACKEND=bolt` (default **fake**): `BoltNeo4jBackend` reads fleet labels only (`:Asset` / `:Booking` / `:Category` / `:Attachment`); never `:Document`.
-- `trigger_neo4j_populate` POSTs `NEO4J_POPULATE_URL` (pack admin `:8089`) and returns immediately; transport errors → `status=unavailable`. Fake path stays `noop` / `queued`.
+- `trigger_neo4j_populate` POSTs `NEO4J_POPULATE_URL` (ops admin `:8089`) and returns immediately; transport errors → `status=unavailable`. Fake path stays `noop` / `queued`.
 - K-3: empty **or** Bolt-unavailable backends skip `neo4j_cypher_read`; SQL fleet tools still run.
 - Optional `@pytest.mark.neo4j` (`RUN_NEO4J_TESTS=1`); extra `uv sync --extra neo4j`.
 - FR-KG-011 marked as-built (persist = pack S8.1–S8.2; load = app S8.3).

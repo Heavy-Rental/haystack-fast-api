@@ -4,11 +4,11 @@
 |-------|--------|
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
-| **Date** | 2026-08-27 |
-| **Version** | 3.19.0 |
+| **Date** | 2026-08-28 |
+| **Version** | 3.20.0 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.19.0** FR-P-013 quote collapse + FR-P-014 LLM timeout + Phase 3a–3d scheduler as-built + MADR ADRs; **3.18.0** Call 2 quote `equipment.id`=`assets.id` + scores + `PRICING_SCHEMA` + Call 1 extract expansions; **3.17.1** Call 2 `items[].mlPredictedPrice` as-built; **3.17.0** S7.8; **3.16.0** S8.3 live Neo4j; **3.15.0** S8.2 T4 config; **3.14.0** S2b Spring; **3.13.0** S8.1 T3; **3.12.0** S4 T0–T2 config; **3.11.0** S4 app live SQL; **3.10.0** S7.2; **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
+| **Revision notes** | **3.20.0** HR-244 / ADR-0012: academy/paid deploy vendors pack sync/populate workers; **3.19.0** FR-P-013 quote collapse + FR-P-014 LLM timeout + Phase 3a–3d scheduler as-built + MADR ADRs; **3.18.0** Call 2 quote `equipment.id`=`assets.id` + scores + `PRICING_SCHEMA` + Call 1 extract expansions; **3.17.1** Call 2 `items[].mlPredictedPrice` as-built; **3.17.0** S7.8; **3.16.0** S8.3 live Neo4j; **3.15.0** S8.2 T4 config; **3.14.0** S2b Spring; **3.13.0** S8.1 T3; **3.12.0** S4 T0–T2 config; **3.11.0** S4 app live SQL; **3.10.0** S7.2; **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -77,8 +77,8 @@ DocumentStore: InMemory per-ingest session (default)
   S5-I1 as-built: create_session_document_store wire + tenant filters + TTL
     (memory default | pgvector flag; I2 production default TARGET)
 Fleet: seed in app (default); **S4 app as-built:** `FLEET_BACKEND=sql` → LiveSqlFleetBackend
-  D1 merge-sync in devcontainer config (postgres_haystack_sync, ~60s poll on develop)
-Neo4j: compose + **S8.1 T3** `neo4j-populate` (config pack as-built); agent Neo4j tools **as-built S7.2 + S8.3** (`NEO4J_BACKEND=fake` default \| `bolt`)
+  D1 merge-sync: config pack locally (~60s poll); academy/paid: this repo’s deploy-pipeline vendors `sync-from-primary.sh` (**ADR-0012**)
+Neo4j: **S8.1 T3** `neo4j-populate` (pack locally; deploy-pipeline copies on academy/paid); agent Neo4j tools **as-built S7.2 + S8.3** (`NEO4J_BACKEND=fake` default \| `bolt`)
 Pricing: pricing_client → app.services.pricing.model.predict_price (production)
   Phase 1e (repository util/lead-time + adapter wiring) — **as-built**
   Phase 2a (app/services/pricing/ + per-asset clamp) — **as-built**
@@ -195,7 +195,8 @@ React portal project-spec submit:
 | Concern | Repository / owner |
 |---------|-------------------|
 | Pipelines, agents, schemas, tools, Pgvector wiring | **haystack-fast-api** (this repo) |
-| Compose, postgres_haystack_sync interval, neo4j-populate container, pgvector image | **heavy-rental-devcontainer-configuration** |
+| Local/devcontainer compose, pack scripts, pgvector image | **heavy-rental-devcontainer-configuration** |
+| Academy/paid compose sidecars (`postgres-haystack-sync`, `neo4j-populate`) | **this repo** `deploy-pipeline/ansible/roles/haystack` (vendored pack scripts; **ADR-0012**) |
 | Primary OLTP, outbox, Spring WebClient saga | **Spring / REST API** stack |
 | Schema contract Asset/Booking enums | Shared contract (Spring + D0 doc) |
 
@@ -611,7 +612,7 @@ Maps to dual-plane §10 Track D + §11 T-phases. **Primary work in config repo.*
 
 **App (as-built 2026-08-13):** `FleetRepository` + `LiveSqlFleetBackend` behind `FLEET_BACKEND=sql` (default **fake**). D0: `openspec/specs/spring-entity-repository/fleet-read-contract.md`. DTO `asset_id` = `assets.name`. Call 2 quote `equipment.id` = `assets.id`. `PRICING_SCHEMA=primary_snapshot` (CI default) \| `public` (live translate; fleet + pricing only).
 
-**Config (as-built on pack `develop`):** [Haystack-Fast-API devcontainer pack](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API) — T0 skip/sleep when primary down; T1 `SYNC_INTERVAL_SECONDS=60` + `postgres-haystack-sync` `unless-stopped` + per-cycle `METRICS`/`duration_ms`; T2 `SYNC_TABLE_ALLOWLIST` (default `asset,booking,category`). **Alignment follow-up (config):** pack D0 uses singular table names; haystack ORM reads plural `assets` / `bookings` / `booking_items` / `asset_categories`.
+**Config (as-built on pack `develop`):** [Haystack-Fast-API devcontainer pack](https://github.com/Heavy-Rental/heavy-rental-devcontainer-configuration/tree/develop/Haystack-Fast-API) — T0 skip/sleep when primary down; T1 `SYNC_INTERVAL_SECONDS=60` + `postgres-haystack-sync` `unless-stopped` + per-cycle `METRICS`/`duration_ms`; T2 `SYNC_TABLE_ALLOWLIST` (default `asset,booking,category`). **Academy/paid (HR-244 / ADR-0012):** this repo vendors `sync-from-primary.sh` in `deploy-pipeline/ansible/roles/haystack/files/` and runs it in a `postgres:17` sidecar. **Alignment follow-up (config):** pack D0 uses singular table names; haystack ORM reads plural `assets` / `bookings` / `booking_items` / `asset_categories`.
 
 #### Test implementation — Stage S4
 
@@ -874,8 +875,8 @@ Can partially overlap Phase 7 (SQL fleet tools first; Neo4j tools after populate
 
 | Step | Work | Where | Exit criteria |
 |------|------|-------|---------------|
-| **8.1 T3** | Job/script `populate-neo4j-from-haystack` — SQL → Cypher MERGE; label namespace vs DocumentStore | Config | **As-built** on pack `develop`: Compose `neo4j-populate` + `populate_neo4j.py`; MERGE by `id`; `:Asset`/`:Booking`/`:Category` isolated from `:Document` |
-| **8.2 T4** | Trigger on successful merge or admin HTTP; never drop DocumentStore labels | Config | **As-built:** post-sync POST to populate URL; admin `POST /v1/populate` on host **8089**; scoped fleet delete; `:Document` never dropped. 60s poll remains T3 safety-net |
+| **8.1 T3** | Job/script `populate-neo4j-from-haystack` — SQL → Cypher MERGE; label namespace vs DocumentStore | Ops | **As-built** pack `develop` (local) + this repo `deploy-pipeline` copies (academy/paid, **ADR-0012**): Compose `neo4j-populate` + `populate_neo4j.py`; MERGE by `id`; `:Asset`/`:Booking`/`:Category` isolated from `:Document` |
+| **8.2 T4** | Trigger on successful merge or admin HTTP; never drop DocumentStore labels | Ops | **As-built:** post-sync POST to populate URL; admin `POST /v1/populate` on host **8089**; scoped fleet delete; `:Document` never dropped. 60s poll remains T3 safety-net. Same pack/deploy split as 8.1 |
 | **8.3** | Wire real `neo4j_cypher_read` + populate trigger into tool module | App | **As-built:** `NEO4J_BACKEND=bolt` → `BoltNeo4jBackend`; populate POST `NEO4J_POPULATE_URL`; default fake; K-3 on unavailable |
 
 #### Test implementation — Stage S8
@@ -986,8 +987,8 @@ Every code-bearing PR **must** use the **PR description template** below (bare m
 | **PR-J** | S7.2 | Neo4j tools (fake / no-op) | **Shipped** — templates only; free-form Cypher reject; populate non-blocking; K-3 skip; **BDD** recommend not blocked |
 | **PR-K** | S4 | Live SQL fleet backend (app) | **Shipped** — D0 map; `FLEET_BACKEND=sql`; DTO `asset_id`=`assets.name`; quote `equipment.id`=`assets.id`; `PRICING_SCHEMA`; fake default; **BDD** empty / live-hold |
 | **PR-K2** | S4 | Config T0–T2 as-built stamp | **Docs** — pack already ships 60s sync + allowlist + METRICS; alignment note on table names |
-| **PR-L** | S8.1 T3 | Config `neo4j-populate` | **As-built (config pack)** — SQL→Cypher MERGE; fleet labels isolated; this repo docs stamp only |
-| **PR-M** | S8.2 T4 | Config populate trigger | **As-built (config pack)** — post-sync HTTP + admin `POST /v1/populate` :8089; scoped delete; KG-1 preserved |
+| **PR-L** | S8.1 T3 | Ops `neo4j-populate` | **As-built (config pack locally; this repo deploy-pipeline copies — ADR-0012)** — SQL→Cypher MERGE; fleet labels isolated |
+| **PR-M** | S8.2 T4 | Ops populate trigger | **As-built (pack + deploy-pipeline copies)** — post-sync HTTP + admin `POST /v1/populate` :8089; scoped delete; KG-1 preserved |
 | **PR-N** | S8.3 | App live Neo4j tools | **As-built** — `BoltNeo4jBackend` + populate HTTP; default `NEO4J_BACKEND=fake`; K-3 unavailable; `@pytest.mark.neo4j`; FR-KG-011 load |
 | **PR-O** | S7.8 | Worker [5] live KG-1 tools | **As-built** — session vector + KG-1 before decompose; soft-fail notes; no invent |
 
@@ -1198,18 +1199,18 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | Phase 7 / S7.0 `RecommendAgentState` | **As-built** — F-2 partition validation; illegal writes rejected |
 | Phase 7 / S7.1 fleet tool catalog | **As-built** — allowlisted in-process tools + fake/SQL DI factory |
 | Phase 4 / S4 app live SQL fleet | **As-built** — `FleetRepository` + `FLEET_BACKEND=sql` |
-| Phase 4 / S4 config T0–T2 | **As-built** — pack `develop` 60s poll + allowlist + METRICS; table-name alignment follow-up |
+| Phase 4 / S4 config T0–T2 | **As-built** — pack `develop` 60s poll + allowlist + METRICS; academy/paid vendors `sync-from-primary.sh` (**ADR-0012**); table-name alignment follow-up |
 | Phase 7 / S7.2 Neo4j tools | **As-built** — templates + populate no-op; K-3 skip; live client **S8.3** |
 | Phase 7 / S7.3 recommend LangGraph DAG | **As-built** — gate → [5] → Delegator → ([6]→[7])×N; `RECOMMEND_FANOUT_CAP` |
 | Phase 7 / S7.4 tool-free synthesis | **As-built** — stub Coordinator [8]; empty fleet → `item: null`; no invent |
 | FR-010 service recommend (seed) | **As-built Call 2 MVP** via SessionRecommendService; S7.5 wires graph behind same DTO (`RECOMMEND_VIA_AGENT_GRAPH`) |
 | Phase 7 / S7.7 prompts A–L + tool DI | **As-built** — isolated recommend prompts; Delegator `worker_kind` allowlist; fake catalog inject |
 | Phase 7 / S7.8 Worker [5] KG-1 | **As-built** — live `project_vector_search` + `project_kg_query` then decompose |
-| Full recommend multi-agent path | S7.0–S7.8 **as-built**; S8.1–S8.2 **as-built (config)**; **S8.3 as-built** (`NEO4J_BACKEND=bolt`; default fake) |
-| Phase 8 / S8.2 T4 populate trigger | **As-built (config pack)** — post-sync HTTP + admin `:8089`; scoped delete; KG-1 preserved |
+| Full recommend multi-agent path | S7.0–S7.8 **as-built**; S8.1–S8.2 **as-built (ops)**; **S8.3 as-built** (`NEO4J_BACKEND=bolt`; default fake) |
+| Phase 8 / S8.2 T4 populate trigger | **As-built (ops)** — post-sync HTTP + admin `:8089`; scoped delete; KG-1 preserved; **ADR-0012** |
 | Phase 8 / S8.3 live Neo4j tools | **As-built** — `BoltNeo4jBackend` + populate HTTP; FR-KG-011 load; default fake |
-| Phase 8 / S8.1 T3 Neo4j populate | **As-built (config pack)** — `neo4j-populate` SQL→Cypher MERGE; fleet labels isolated |
-| Pgvector / Neo4j populate | Not in app path |
+| Phase 8 / S8.1 T3 Neo4j populate | **As-built (ops)** — `neo4j-populate` SQL→Cypher MERGE; fleet labels isolated; **ADR-0012** |
+| Pgvector / Neo4j populate | Not in FastAPI request path. Academy/paid sidecars in `deploy-pipeline/` |
 | Idempotency-Key on ingest | **As-built S2a** (process-local; multi-replica later) |
 | Phase 2 / S2b Spring client | **As-built** — [heavy-rental-spring-rest-api](https://github.com/Heavy-Rental/heavy-rental-spring-rest-api) client + Resilience4j + saga; plan v2.1.1 |
 | Stage catalog | **Specified** (§3.1) |
@@ -1220,4 +1221,4 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | BDD process (P10) | **Specified** (§2.2 Given/When/Then; stage PR workflow §2.3) |
 | PR description template | **Specified** (§6 — What & Why + Key Changes required; optional details) |
 | Accuracy validation | **3.2.1** cross-checked against app + OpenSpec |
-| Ready to implement | **As-built through S8.3 / Call 2 quote / Phase 3a–3d.** Remaining targets: I2 pgvector default, production-default `RECOMMEND_VIA_AGENT_GRAPH`, table-name pack alignment. New work follows OpenSpec change + MADR when choosing alternatives. |
+| Ready to implement | **As-built through S8.3 / Call 2 quote / Phase 3a–3d / HR-244 deploy workers.** Remaining targets: I2 pgvector default, production-default `RECOMMEND_VIA_AGENT_GRAPH`, table-name pack alignment. New work follows OpenSpec change + MADR when choosing alternatives. |

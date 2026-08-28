@@ -492,7 +492,7 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | Agent fleet tools (S7.1) | In-process allowlist via `fleet_tools` + `tool_factory` | Fake seed default; SQL DTO backend; free-form SQL rejected; invoked from S7.3 graph |
 | Live SQL fleet (S4 app) | `FLEET_BACKEND=sql` → `FleetRepository` | DTO `asset_id` = `assets.name`; quote `equipment.id` = `assets.id`; live-hold bookings; fake remains CI default |
 | Fleet/pricing schema | `PRICING_SCHEMA` | `primary_snapshot` default / CI; `public` live via `schema_translate_map` (not KG-1 / pgvector) |
-| Agent Neo4j tools (S7.2 + S8.3) | Templates + `NEO4J_BACKEND=fake\|bolt`; populate HTTP | Empty/unavailable → []; K-3 skip; live POST `NEO4J_POPULATE_URL` |
+| Agent Neo4j tools (S7.2 + S8.3) | Templates + `NEO4J_BACKEND=fake\|bolt`; populate HTTP | Empty/unavailable → []; K-3 skip; live POST `NEO4J_POPULATE_URL` (ops sidecar; **ADR-0012**) |
 | Recommend agent state (S7.0) | `RecommendAgentState` + F-2 validation | Partition ownership used by S7.3 nodes |
 | Recommend LangGraph + stub synthesis (S7.3/S7.4) | Isolated DAG + tool-free [8] | Invoked from Call 2 when `RECOMMEND_VIA_AGENT_GRAPH` (S7.5) |
 | Call 2 multi-agent enrich (S7.5) | Same quote DTO; flag default off | Gate refuse → 400; traces stay off the body (S7.6) |
@@ -526,6 +526,7 @@ See testing guide and historical HR-65 archive for DigitalOcean LLM notes.
 | **2.7.0** | 2026-08-13 | Call 2 quote: `equipment.id` = `assets.id` (live SQL); extra catalog fields; `PRICING_SCHEMA`; seed remains CI only |
 | **2.8.0** | 2026-08-20 | **FR-P-013:** collapse Call 2 unit-need siblings that share parent need + `equipment.id` into one quote line; merged `quantity` is the duplicate count (3 copies → `quantity: 3`); `quantity > 1` → `available=false`; qty-1 availability from `bookings` + `return_records`. **ADR-0010.** |
 | **2.9.0** | 2026-08-20 | **FR-P-014:** LLM need-decompose retries once on read/connect timeout then keyword-fallback; default `LLM_TIMEOUT_SECONDS` 120. **ADR-0011.** |
+| **2.11.0** | 2026-08-28 | Neo4j populate HTTP target is the ops sidecar (pack locally; deploy-pipeline vendors copies — **ADR-0012**). App tools unchanged. |
 | **2.10.0** | 2026-08-27 | Status: Call 2 quote HTTP as-built (Call 1 remains indexing). Path C heading no longer “deferred recommend”. |
 | **2.6.0** | 2026-08-13 | Call 2 quote: `items[].mlPredictedPrice` as-built (same daily rate as `equipment.baseDailyRate`) |
 | **2.5.0** | 2026-08-13 | S4 app: live SQL fleet backend (`FLEET_BACKEND=sql`); DTO sql path unchanged |

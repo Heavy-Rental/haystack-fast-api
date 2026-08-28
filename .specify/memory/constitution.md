@@ -52,6 +52,7 @@ When documents disagree on live behaviour:
 | Deferred `results_by_need` on Call 1 | `openspec/specs/recommendation-intake/` (Status: deferred) |
 | Domain catalog / unit-need product rules | `openspec/specs/domain/` + `equipment-recommendation/` |
 | Architectural choice among alternatives | `openspec/adrs/` |
+| Academy/paid compose sync workers | `openspec/adrs/0012-deploy-pipeline-vendors-pack-sync-workers.md` + `specs/project-setup/` |
 
 ## Article VII — OpenSPDD Norms & Safeguards
 
@@ -88,3 +89,4 @@ Changes to this constitution require explicit rationale, maintainer review, and 
 |---------|------|--------|
 | 1.0.0 | 2026-08-10 | Initial constitution from SPEC-project-setup + Spec-kit/OpenSpec/OpenSPDD alignment |
 | 1.1.0 | 2026-08-27 | Host `postgres-haystack`; Call 2 quote is live HTTP; MADR ADRs in Article II/VI/IX |
+| 1.1.1 | 2026-08-28 | Article VI: academy/paid compose workers → ADR-0012 + project-setup |

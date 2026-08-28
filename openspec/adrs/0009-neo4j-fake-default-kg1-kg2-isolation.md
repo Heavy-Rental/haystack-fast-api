@@ -19,7 +19,7 @@ Agents need optional fleet graph context (KG-2) without mixing it into project D
 
 ## Decision Outcome
 
-Chosen option: **`NEO4J_BACKEND=fake` default; `bolt` live**. `neo4j_cypher_read` is template-only (no free-form Cypher). `trigger_neo4j_populate` is non-blocking HTTP to pack admin `:8089`. K-3: empty or Bolt-unavailable backends skip Neo4j so recommend is not blocked. Persist = pack S8.1–S8.2; load = app S8.3. Fleet labels (`:Asset` / `:Booking` / `:Category`) MUST NOT drop KG-1 `:Document`.
+Chosen option: **`NEO4J_BACKEND=fake` default; `bolt` live**. `neo4j_cypher_read` is template-only (no free-form Cypher). `trigger_neo4j_populate` is non-blocking HTTP to admin `:8089` (`NEO4J_POPULATE_URL`). K-3: empty or Bolt-unavailable backends skip Neo4j so recommend is not blocked. Persist = S8.1–S8.2 ops job (config pack locally; this repo’s deploy-pipeline vendors copies for academy/paid — **ADR-0012**); load = app S8.3. Fleet labels (`:Asset` / `:Booking` / `:Category`) MUST NOT drop KG-1 `:Document`.
 
 ### Consequences
 
