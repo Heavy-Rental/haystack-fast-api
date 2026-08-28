@@ -2,7 +2,7 @@
 
 FastAPI service that turns a project specification into a **lean ingest summary** (Call 1) and an **equipment quote** (Call 2). Optional Call 3 is chatbot Q&A on the same session.
 
-This file is the short path: install → configure `.env` → start → test. Contracts live under [`openspec/`](./openspec/).
+This file is the short path: install → configure `.env` → start → test. Contracts live under [`openspec/`](./openspec/). Decisions: [`openspec/adrs/`](./openspec/adrs/).
 
 Run every command from this directory (the uv project root: `pyproject.toml`, `.env`, `app/`).
 
@@ -79,7 +79,7 @@ Requires `postgres-haystack` on the Docker network. Quote `equipment.id` is `ass
 | `NEO4J_BACKEND` | `bolt` | Optional KG-2 fleet graph |
 | `NEO4J_URI` | `bolt://neo4j:7687` | Compose service name |
 | `NEO4J_USER` / `NEO4J_PASSWORD` | from compose | Defaults in the example are `neo4j` / `neo4j` |
-| `NEO4J_POPULATE_URL` | `http://neo4j-populate:8089/v1/populate` | Pack admin trigger |
+| `NEO4J_POPULATE_URL` | `http://neo4j-populate:8089/v1/populate` | Ops admin trigger (`neo4j-populate` sidecar; pack locally or deploy-pipeline on academy/paid) |
 | `RECOMMEND_VIA_AGENT_GRAPH` | `true` | Same quote DTO via the recommend graph; `false` stays on the service MVP |
 
 Optional live indexing (not required for a first quote):
@@ -99,7 +99,7 @@ Optional live indexing (not required for a first quote):
 | Needs | `NEED_DECOMPOSER`, `LLM_*` | Call 1 `needs_summary[]` |
 | Indexing | `INDEXING_*` | File/text → chunks → DocumentStore |
 | Fleet | `FLEET_BACKEND`, `PRICING_SCHEMA` | Call 2 candidates + price reads |
-| Neo4j | `NEO4J_*` | KG-2 tools (`:Asset` / `:Booking` only; never `:Document`) |
+| Neo4j | `NEO4J_*` | KG-2 tools (`:Asset` / `:Booking` only; never `:Document`). `NEO4J_POPULATE_URL` hits the ops sidecar, not this API |
 | Recommend graph | `RECOMMEND_VIA_AGENT_GRAPH` | Call 2 path (same HTTP body) |
 | KG-1 files | `KG_ARTIFACT_DIR`, `KG_APPLY_TRANSFORMS` | Mandatory after ingest |
 

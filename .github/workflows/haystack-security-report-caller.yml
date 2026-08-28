@@ -1,0 +1,56 @@
+# =============================================================================
+# Install into: haystack-fast-api
+# Path:         .github/workflows/haystack-security-report-caller.yml
+# =============================================================================
+# Security Report caller — summarizes existing Code Scanning alerts
+# (Semgrep, Trivy, CodeQL) into a Job Summary + downloadable markdown artifact.
+# Reads only; does not run any scanners itself.
+#
+# Place both files in the FastAPI / Haystack application repository:
+#
+#   .github/workflows/haystack-security-report-caller.yml  ← this file (triggers)
+#   .github/workflows/security-report-pipeline.yml         ← reusable pipeline
+#
+# When this runs
+# --------------
+#   Scheduled weekly, Monday 06:00 UTC
+#   Manual workflow_dispatch (use this to test immediately)
+#
+#   Does NOT run on push or pull_request — it never interferes with branch
+#   protection checks.
+#
+# Reusable workflow (same repository):
+#   ./.github/workflows/security-report-pipeline.yml
+#
+# Job
+# ---
+#   1. Generate security report (read Code Scanning alerts, write summary + artifact)
+#
+# Setup
+# -----
+# 1. Copy into the haystack-fast-api repo:
+#      .github/workflows/haystack-security-report-caller.yml
+#      .github/workflows/security-report-pipeline.yml
+# 2. No secrets required — reads via the default GITHUB_TOKEN with
+#    security-events: read.
+# =============================================================================
+
+name: Haystack Security Report Invoke
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch: {}
+
+concurrency:
+  group: haystack-security-report-${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  security-events: read
+
+jobs:
+  security-report-pipeline:
+    name: Security report pipeline
+    uses: ./.github/workflows/security-report-pipeline.yml

@@ -40,6 +40,19 @@ from app.services.pricing import category_mapping
 from app.services.pricing import feature_schema as fs
 from app.services.pricing import pricing_tables as pt
 from app.services.pricing.read_resilience import PricingSchemaResolution
+from app.services.pricing.real_training import (
+    REAL_TRAINING_COLUMNS,
+    REALIZED_PRICE_STATUSES,
+    fetch_real_training_rows,
+    sample_distance_km,
+)
+
+__all__ = [
+    "REALIZED_PRICE_STATUSES",
+    "REAL_TRAINING_COLUMNS",
+    "fetch_real_training_rows",
+    "sample_distance_km",
+]
 
 # period_utilization's live-hold status filter: equipment is held for the
 # customer from PENDING_DEPOSIT onward; COMPLETED (returned) and CANCELLED

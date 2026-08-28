@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     llm_api_key: str | None = Field(default=None, alias="LLM_API_KEY")
     # Model id or Inference Router: router:<router-name>
     llm_model: str = Field(default="router:default", alias="LLM_MODEL")
-    llm_timeout_seconds: float = Field(default=60.0, alias="LLM_TIMEOUT_SECONDS")
+    llm_timeout_seconds: float = Field(default=120.0, alias="LLM_TIMEOUT_SECONDS")
     llm_temperature: float = Field(default=0.0, alias="LLM_TEMPERATURE")
 
     # Indexing pipeline: Packt Ch.4 dual-branch → embed → write
@@ -138,6 +138,32 @@ class Settings(BaseSettings):
     # Fleet + pricing SQL schema. Models are mapped to primary_snapshot;
     # ``public`` is applied via schema_translate_map (same tables).
     pricing_schema: str = Field(default="primary_snapshot", alias="PRICING_SCHEMA")
+
+    # Phase 3d: monthly, default-disabled dynamic-pricing retrain scheduler.
+    pricing_retrain_enabled: bool = Field(
+        default=False,
+        alias="PRICING_RETRAIN_ENABLED",
+    )
+    pricing_retrain_interval_days: int = Field(
+        default=30,
+        alias="PRICING_RETRAIN_INTERVAL_DAYS",
+        ge=1,
+    )
+    pricing_retrain_misfire_grace_seconds: int = Field(
+        default=6 * 3600,
+        alias="PRICING_RETRAIN_MISFIRE_GRACE_SECONDS",
+        ge=1,
+    )
+    pricing_retrain_min_real_rows_per_category: int = Field(
+        default=125,
+        alias="PRICING_RETRAIN_MIN_REAL_ROWS_PER_CATEGORY",
+        ge=1,
+    )
+    pricing_retrain_real_sample_weight: float = Field(
+        default=10.0,
+        alias="PRICING_RETRAIN_REAL_SAMPLE_WEIGHT",
+        ge=0,
+    )
 
     @field_validator("pricing_schema", mode="before")
     @classmethod

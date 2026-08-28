@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Changed (docs — HR-244 / ADR-0012 deploy workers, 2026-08-28)
+
+- Academy/paid compose vendors pack `postgres-haystack-sync` and `neo4j-populate` scripts (`deploy-pipeline/ansible/roles/haystack/files/`). Sidecars use `postgres:17` and `python:3.12-slim`, not `python -m` from the uvicorn image.
+- OpenSpec: FR-PDH-010, project-setup, FR-KG-011, equipment-recommendation, fleet-read-contract; **ADR-0012**. Archive `openspec/changes/archive/2026-08-28-hr-244-deploy-pipeline-sync-workers/`.
+- FastAPI `app/` is still a client: `trigger_neo4j_populate` POSTs `NEO4J_POPULATE_URL`; request handlers do not run ETL. Local/devcontainer compose remains the config pack.
+- Feasibility_Study implementation-plan **3.20.0**; dual-plane **2.8.5**.
+
+### Changed (docs — OpenSpec / OpenSPDD / MADR sync, 2026-08-27)
+
+- Added MADR log `openspec/adrs/` (ADR-0001…0011) and OpenSPDD canvas index `openspec/spdd/README.md`.
+- Folded Phase 3b–3d into live `openspec/specs/dynamic-pricing/` **3.1.0** (ADR-0005); archived `2026-08-15-scheduled-model-retrain`.
+- Archived shipped OpenSpec changes (Call 1 summary, Call 2/3 numbering, superseded dual-hop docs, FR-P-013, FR-P-014).
+- Constitution / `project.md` / `AGENTS.md` Path C: Call 2 quote is live HTTP; host is `postgres-haystack` (not `db`).
+- Replaced template root `README.md` with product + spec-standard entry points.
+- Portal dual-hop OpenSPDD `design.md`; removed duplicate indexing FR-IX-024/025; intake live pointer matches lean FR-IX-023.
+
 ### Added (docs)
 
 - `QUICKSTART.md` at the uv project root: install, two `.env` profiles (fake vs live compose), pytest, Call 1 → Call 2 curl smoke.
@@ -78,7 +94,7 @@
 ### Added (S8.3 / Phase 8 app — 2026-08-13)
 
 - Live KG-2 tools behind `NEO4J_BACKEND=bolt` (default **fake**): `BoltNeo4jBackend` reads fleet labels only (`:Asset` / `:Booking` / `:Category` / `:Attachment`); never `:Document`.
-- `trigger_neo4j_populate` POSTs `NEO4J_POPULATE_URL` (pack admin `:8089`) and returns immediately; transport errors → `status=unavailable`. Fake path stays `noop` / `queued`.
+- `trigger_neo4j_populate` POSTs `NEO4J_POPULATE_URL` (ops admin `:8089`) and returns immediately; transport errors → `status=unavailable`. Fake path stays `noop` / `queued`.
 - K-3: empty **or** Bolt-unavailable backends skip `neo4j_cypher_read`; SQL fleet tools still run.
 - Optional `@pytest.mark.neo4j` (`RUN_NEO4J_TESTS=1`); extra `uv sync --extra neo4j`.
 - FR-KG-011 marked as-built (persist = pack S8.1–S8.2; load = app S8.3).

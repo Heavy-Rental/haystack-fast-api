@@ -8,6 +8,7 @@ from app.models.asset import Asset
 from app.models.asset_category import AssetCategory
 from app.models.booking import Booking
 from app.models.booking_item import BookingItem
+from app.models.return_record import ReturnRecord
 
 __all__ = [
     "Asset",
@@ -15,4 +16,5 @@ __all__ = [
     "Base",
     "Booking",
     "BookingItem",
+    "ReturnRecord",
 ]

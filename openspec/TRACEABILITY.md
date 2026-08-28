@@ -1,6 +1,6 @@
 # Traceability matrix — legacy `specification/` → OpenSpec
 
-Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** · **OpenSPDD**.
+Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** · **OpenSPDD** · **MADR**.
 
 ## File map
 
@@ -16,7 +16,7 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | `specification/SPEC-knowledge-graph.md` | `openspec/specs/knowledge-graph/spec.md` + `design.md` + `contracts/project-knowledge-query.md` | FR-KG-001…014 |
 | `specification/SPEC-knowledge-graph.md` §10 | `docs/testing/knowledge-graph-testing-guide.md` | Verification only |
 | `specification/SPEC-recommendation-intake.md` | `openspec/specs/recommendation-intake/spec.md` | FR-I-001…015 live/deferred |
-| `specification/SPEC-recommendation-pipeline.md` | `openspec/specs/recommendation-pipeline/spec.md` + `design.md` | FR-010.1–8 + FR-P-001…012 |
+| `specification/SPEC-recommendation-pipeline.md` | `openspec/specs/recommendation-pipeline/spec.md` + `design.md` | FR-010.1–8 + FR-P-001…014 |
 | `specification/SPEC-dynamic-pricing.md` | `openspec/specs/dynamic-pricing/spec.md` + `design.md` | US-1…3 + feature schema in design |
 | `specification/SPEC-agentic-equipment-recommendation-and-pricing.md` | `openspec/specs/equipment-recommendation/spec.md` + `design.md` | Parent FR-001…053 + design REASONS |
 | `specification/SPEC-recommendation-intake-and-pipeline-front.md` | `openspec/changes/archive/2026-08-07-hr-65-intake-front/` | Historical full capture |
@@ -38,12 +38,20 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | — (S4 new) | `openspec/changes/archive/2026-08-13-s4-live-sql-fleet-backend/` | Phase 4 app: D0 fleet-read contract + live SQL fleet backend |
 | — (S8.1 new) | `openspec/changes/archive/2026-08-13-s8-1-t3-neo4j-populate/` | Phase 8.1 T3 config pack neo4j-populate as-built stamp |
 | — (S2b new) | `openspec/changes/archive/2026-08-13-s2b-spring-resilience-stamp/` | Phase 2 S2b Spring client/saga as-built stamp |
-| — (process doc) | `openspec/specs/portal-dual-hop/spec.md` | Call 1 → Call 2 dual-hop process (FR-PDH-001…011); links indexing + recommend contracts |
+| — (process doc) | `openspec/specs/portal-dual-hop/spec.md` + `design.md` | Call 1 → Call 2 dual-hop process (FR-PDH-001…011); OpenSPDD REASONS; ADR-0003 |
 | — (S8.2 new) | `openspec/changes/archive/2026-08-13-s8-2-t4-neo4j-populate-trigger/` | Phase 8.2 T4 config post-sync + admin HTTP as-built stamp |
 | — (S8.3 new) | `openspec/changes/archive/2026-08-13-s8-3-live-neo4j-tools/` | Phase 8.3 app live Neo4j Bolt client + populate HTTP |
 | — (S7.8 new) | `openspec/changes/archive/2026-08-13-s7-8-worker5-kg1-live/` | Worker [5] live KG-1 vector + project KG query |
 | `app/agents/prompts.py` | `openspec/spdd/prompts/project-knowledge-agents.md` (index) | OpenSPDD first-class Stage-1 Q&A prompts |
 | `app/agents/recommend_prompts.py` | `openspec/spdd/prompts/recommend-agents.md` (index) | OpenSPDD first-class recommend A–L prompts (S7.7) |
+| — (HR-206 / FR-P-013) | `openspec/changes/archive/2026-08-20-call2-quote-quantity-collapse/` | Call 2 quote collapse; **ADR-0010** |
+| — (FR-P-014) | `openspec/changes/archive/2026-08-20-llm-need-decompose-timeout/` | LLM need-decompose timeout retry; **ADR-0011** |
+| — (Phase 3a–3d) | `openspec/changes/archive/2026-08-15-scheduled-model-retrain/` | Scheduled retrain; **ADR-0005**; live spec 3.1.0 |
+| — (Call 2/3 numbering) | `openspec/changes/archive/2026-08-12-call2-recommend-call3-qa/` | Call 2 = recommend, Call 3 = Q&A; **ADR-0003** |
+| — (superseded dual-hop docs) | `openspec/changes/archive/2026-08-12-portal-dual-hop-docs/` | Superseded (Call 2 was Q&A) |
+| — (Call 1 lean summary) | `openspec/changes/archive/2026-08-10-call1-project-spec-summary/` | FR-IX-023 S1a–S1e shipped |
+| — (MADR log) | `openspec/adrs/` | Numbered ADRs 0001–0012 |
+| — (HR-244 / ADR-0012) | `openspec/changes/archive/2026-08-28-hr-244-deploy-pipeline-sync-workers/` | Academy/paid deploy vendors pack postgres-haystack-sync + neo4j-populate scripts |
 
 ## FR / requirement ID map
 
@@ -66,19 +74,22 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | S5-I1 pipeline wire (as-built) | Same as FR-IX-028 | `changes/archive/2026-08-12-s5-i1-document-store-pipeline-wire/` |
 | Portal dual-hop (docs) | React project-spec → Call 1 → **Call 2 recommend quote** → React; Call 3 = chatbot Q&A | `AGENTS.md` · recommend + KG contracts · `portal-to-haystack-mapping.md` v2.1 · impl-plan §1.2.0 |
 | Call 2 quote hydration (as-built) | Quote `equipment.id` = `assets.id` (live SQL); DTO `asset_id` = `assets.name`; extra catalog fields; evidence scores; `PRICING_SCHEMA` | `specs/recommendation-pipeline/contracts/get-asset-recommendations.md` · `fleet-read-contract.md` · impl-plan **3.18.0** |
+| Call 2 quote quantity collapse (FR-P-013) | Fold unit-need siblings that share parent `{base}` + `equipment.id` into one quote line (`quantity` = duplicate count; `quantity > 1` → `available=false`; qty-1 availability from `bookings` + `return_records`) | `specs/recommendation-pipeline/spec.md` + contract; ADR-0010; `session_recommend.py`; `tests/test_quote_duplicate_collapse.py`; archive `changes/archive/2026-08-20-call2-quote-quantity-collapse/` |
 | Call 1 extract expansions (as-built) | File-before-text + ignore caption; multi-need hint split; expanded date/budget patterns | `specs/indexing/spec.md` + ingest contract; impl-plan **3.18.0** |
 | S2a change archive | Idempotency + correlation tasks | `changes/archive/2026-08-12-s2a-ingest-idempotency-correlation/` |
 | S2b (as-built Spring) | Resilience C1 client + saga in heavy-rental-spring-rest-api | Spring plan v2.1.1; impl-plan **3.14.0**; archive `changes/archive/2026-08-13-s2b-spring-resilience-stamp/` |
 | S3 change archive | Agent indexing tool + Coordinator gate | `changes/archive/2026-08-12-s3-agent-indexing-coordinator-gate/` |
-| Portal dual-hop (superseded) | Earlier Call 2 = Q&A wording | `changes/2026-08-12-portal-dual-hop-docs/` (**superseded**) |
-| Call 2 recommend + Call 3 Q&A | Breaking renumber | `changes/2026-08-12-call2-recommend-call3-qa/` |
+| Portal dual-hop (superseded) | Earlier Call 2 = Q&A wording | `changes/archive/2026-08-12-portal-dual-hop-docs/` (**superseded**) |
+| Call 2 recommend + Call 3 Q&A | Breaking renumber | `changes/archive/2026-08-12-call2-recommend-call3-qa/`; ADR-0003 |
 | FR-I-016 (as-built alignment) | Intake — FR-IX-023 summary ≠ recommend | `specs/recommendation-intake/spec.md` |
 | MIME map §3 | Indexing | Requirement: MIME classification map |
 | FR-KG-001 … FR-KG-008 | KG Part A | `specs/knowledge-graph/spec.md` |
 | FR-KG-010 … FR-KG-014 | KG Part B (011 Stage 2) | same |
 | FR-I-001 … FR-I-015 | Intake | `specs/recommendation-intake/spec.md` |
 | FR-010.1 … FR-010.8 | Pipeline | `specs/recommendation-pipeline/spec.md` |
-| FR-P-001 … FR-P-012 | Pipeline | same |
+| FR-P-001 … FR-P-014 | Pipeline | same |
+| FR-P-013 (as-built) | Pipeline — Call 2 quote collapse of unit-need siblings sharing `equipment.id` | `specs/recommendation-pipeline/spec.md` + contract; ADR-0010; `session_recommend.py`; `tests/test_quote_duplicate_collapse.py`; archive `changes/archive/2026-08-20-call2-quote-quantity-collapse/` |
+| FR-P-014 (as-built) | Pipeline — LLM need-decompose timeout retry + keyword fallback | `specs/recommendation-pipeline/spec.md`; ADR-0011; `app/services/llm_need_decomposer.py`; `tests/test_llm_need_decomposer.py`; archive `changes/archive/2026-08-20-llm-need-decompose-timeout/` |
 | US-1 … US-4 + pricing FRs | Dynamic pricing | `specs/dynamic-pricing/spec.md` |
 | US-5 / S6 (as-built) | Dynamic pricing — agent tool `predict_asset_price` → `pricing_client` | `specs/dynamic-pricing/spec.md` + design; `app/agents/tools.py`; `tests/test_predict_asset_price_tool.py`; impl-plan **Phase 6 / S6** · archive `changes/archive/2026-08-12-s6-predict-asset-price-tool/` |
 | S6 change archive | predict_asset_price tool tasks | `changes/archive/2026-08-12-s6-predict-asset-price-tool/` |
@@ -98,11 +109,12 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | S7.2 (as-built) | Equipment recommendation — KG-2 tools `neo4j_cypher_read` (templates) + `trigger_neo4j_populate` (non-blocking no-op); K-3 skip when empty | `specs/equipment-recommendation/spec.md` + design; `app/agents/neo4j_tools.py` · `tool_factory.py`; `tests/test_neo4j_tools.py`; impl-plan **Phase 7 / S7.2** · archive `changes/archive/2026-08-13-s7-2-neo4j-tools/` |
 | S7.2 change archive | Neo4j tool catalog tasks | `changes/archive/2026-08-13-s7-2-neo4j-tools/` |
 | S4 (as-built app) | Fleet LTM read — `FLEET_BACKEND=sql` + `FleetRepository`; D0 map | `specs/spring-entity-repository/fleet-read-contract.md`; `app/repositories/fleet_repository.py`; `tests/test_fleet_repository.py`; impl-plan **Phase 4 / S4 app**; archive `changes/archive/2026-08-13-s4-live-sql-fleet-backend/` |
-| S4 (as-built config T0–T2) | Pack `develop`: 60s poll, `SYNC_TABLE_ALLOWLIST`, METRICS; table-name alignment follow-up | Config repo `Haystack-Fast-API/`; impl-plan **3.12.0**; dual-plane **2.8.0** |
-| S8.1 T3 (as-built config) | `neo4j-populate` SQL→Cypher MERGE; `:Asset`/`:Booking`/`:Category` isolated from `:Document` | Pack spec `005-haystack-neo4j-populate`; impl-plan **3.13.0**; archive `changes/archive/2026-08-13-s8-1-t3-neo4j-populate/` |
-| S8.2 T4 (as-built config) | Post-sync populate trigger + admin HTTP `:8089`; scoped delete; never drop KG-1 | Pack spec 005 T4; impl-plan **3.15.0**; archive `changes/archive/2026-08-13-s8-2-t4-neo4j-populate-trigger/` |
+| S4 (as-built config T0–T2) | 60s poll, `SYNC_TABLE_ALLOWLIST`, METRICS; table-name alignment follow-up | Pack `Haystack-Fast-API/` locally; this repo `deploy-pipeline/` vendors `sync-from-primary.sh` (**ADR-0012**); impl-plan **3.20.0**; dual-plane **2.8.5** |
+| S8.1 T3 (as-built ops) | `neo4j-populate` SQL→Cypher MERGE; `:Asset`/`:Booking`/`:Category` isolated from `:Document` | Pack spec `005-haystack-neo4j-populate`; this repo vendors `populate_neo4j.py` (**ADR-0012**); impl-plan **3.20.0**; archive `changes/archive/2026-08-13-s8-1-t3-neo4j-populate/` |
+| S8.2 T4 (as-built ops) | Post-sync populate trigger + admin HTTP `:8089`; scoped delete; never drop KG-1 | Pack spec 005 T4 + deploy-pipeline copies; impl-plan **3.20.0**; archive `changes/archive/2026-08-13-s8-2-t4-neo4j-populate-trigger/` |
+| HR-244 / ADR-0012 | Academy/paid compose vendors pack workers; no `python -m` from uvicorn image | `deploy-pipeline/ansible/roles/haystack/`; archive `changes/archive/2026-08-28-hr-244-deploy-pipeline-sync-workers/` |
 | S8.3 (as-built app) | Live `neo4j_cypher_read` / `trigger_neo4j_populate` (`NEO4J_BACKEND=bolt`; default fake); FR-KG-011 load | `app/agents/neo4j_tools.py`; `tests/test_neo4j_tools.py` · `test_neo4j_tools_integration.py`; impl-plan **3.16.0**; archive `changes/archive/2026-08-13-s8-3-live-neo4j-tools/` |
-| FR-KG-011 (as-built) | KG-2 persist (pack S8.1–S8.2) + load (app S8.3) | `specs/knowledge-graph/spec.md` |
+| FR-KG-011 (as-built) | KG-2 persist (ops S8.1–S8.2: pack + deploy-pipeline copies) + load (app S8.3) | `specs/knowledge-graph/spec.md`; **ADR-0012** |
 | FR-001 … FR-053 (+ NFR, demo) | Equipment recommendation parent | `specs/equipment-recommendation/spec.md` |
 | Domain invariants | Domain | `specs/domain/spec.md` |
 | Setup / layering / stack | Project setup | `specs/project-setup/spec.md` |
@@ -114,12 +126,14 @@ Migration date: **2026-08-10**. Standards: **OpenSpec** · **GitHub Spec-kit** �
 | Check | Status |
 |-------|--------|
 | OpenSpec `openspec/specs/<cap>/spec.md` for all capabilities | Yes |
-| `### Requirement:` + `#### Scenario:` with WHEN/THEN | Yes (~119 req, ~141 scenarios) |
-| Design as REASONS Canvas (OpenSPDD) for major caps | Yes |
-| Spec-kit constitution | Yes (`.specify/memory/constitution.md`) |
+| `### Requirement:` + `#### Scenario:` with WHEN/THEN | Yes (~172 unique req, ~270 unique scenarios; spring-entity-repository is a schema catalog, not FR format) |
+| Design as REASONS Canvas (OpenSPDD) for major caps | Yes (incl. portal-dual-hop; index `spdd/README.md`) |
+| Spec-kit constitution | Yes (`.specify/memory/constitution.md` 1.1.1) |
 | User stories on product-facing caps | Yes |
-| Contracts for live HTTP | Yes (ingest + project-knowledge query) |
+| Contracts for live HTTP | Yes (ingest + Call 2 get-asset-recommendations + Call 3 project-knowledge query) |
 | Structured agent prompts indexed (OpenSPDD) | Yes |
+| MADR numbered ADR log | Yes (`openspec/adrs/` ADR-0001…0012) |
+| Completed changes archived | Yes (no live `openspec/changes/` except `archive/`) |
 | Testing guides not mislabeled as behaviour SoT | Yes (`docs/testing/`) |
 | Historical HR-65 archived | Yes |
 | Legacy path stubs | **Removed 2026-08-13** (`specification/` deleted; map above) |

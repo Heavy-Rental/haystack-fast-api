@@ -36,3 +36,10 @@ ml-experiments/artifacts/
 
 # Runtime KG JSON from ingest (user-scoped; do not commit)
 artifacts/kg/
+
+# Dynamic-pricing scheduled retrain runtime artifacts (Phase 3d)
+app/services/pricing/artifacts/retrain_state.json
+app/services/pricing/artifacts/model_candidate.pkl
+app/services/pricing/artifacts/current_candidate.json
+app/services/pricing/artifacts/model_previous.pkl
+app/services/pricing/artifacts/current_previous.json

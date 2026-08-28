@@ -36,6 +36,9 @@ Each system prompt encodes A (objective), D (write partition), E (environment / 
 - Copy `asset_id` and `daily_rate` from tool-backed state. Never invent.
 - Empty fleet or missing prices → `item: null` + warning.
 - L-1: sequential barrier after need pipelines.
+- Keep `results_by_need` expanded (one row per unit-need). Do **not** put
+  `quantity` on `RecommendationItem`. Call 2 quote collapse (FR-P-013) is
+  `map_recommend_to_quote`, not Coordinator [8].
 
 Stub helper: `stub_recommend_rationale(description, asset_id)` (`PROJECT_AGENT_MODE=stub`).  
 LLM may rewrite rationale only via `apply_rationale_only` — invented `asset_id` / rates are ignored.
