@@ -19,6 +19,8 @@
 # When this runs
 # --------------
 #   workflow_dispatch only (Actions → this workflow → Run workflow)
+#   Optional input run_name: Actions run name (run-name). Empty = this
+#   workflow's name.
 #
 #   Does NOT run on:
 #     - published GitHub Release (this pipeline creates that Release)
@@ -47,10 +49,17 @@
 # =============================================================================
 
 name: Haystack Release Pipeline Invoke
+run-name: ${{ inputs.run_name || github.workflow }}
 
 on:
   workflow_dispatch:
-
+    inputs:
+      run_name:
+        description: >
+          Name shown for this run in the Actions list (e.g. "Release v1.1.0").
+        required: true
+        type: string
+        
 concurrency:
   group: haystack-release-${{ github.workflow }}-${{ github.repository }}
   cancel-in-progress: false
