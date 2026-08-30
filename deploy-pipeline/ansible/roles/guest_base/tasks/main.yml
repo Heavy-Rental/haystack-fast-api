@@ -36,6 +36,42 @@
     force: true
   when: compose_cli.rc != 0
 
+# A prior guest_base wrote ECS-only awslogs-stream-prefix into daemon.json.
+# Dockerd then exits on start. Drop an invalid file; cloudwatch_logs.yml
+# rewrites a valid config after Docker is up.
+- name: Drop daemon.json dockerd cannot start with
+  ansible.builtin.shell: |
+    set +e
+    CFG=/etc/docker/daemon.json
+    [ -f "${CFG}" ] || exit 0
+    if dockerd --help 2>&1 | grep -q -- '--validate'; then
+      if dockerd --validate --config-file "${CFG}" >/dev/null 2>&1; then
+        exit 0
+      fi
+      rm -f "${CFG}"
+      echo removed
+      exit 0
+    fi
+    python3 - <<'PY'
+    import json
+    import pathlib
+    p = pathlib.Path("/etc/docker/daemon.json")
+    try:
+        data = json.loads(p.read_text())
+    except Exception:
+        p.unlink(missing_ok=True)
+        print("removed")
+        raise SystemExit(0)
+    opts = data.get("log-opts") or {}
+    if "awslogs-stream-prefix" in opts:
+        p.unlink(missing_ok=True)
+        print("removed")
+    PY
+  args:
+    executable: /bin/bash
+  register: docker_daemon_repair
+  changed_when: "'removed' in (docker_daemon_repair.stdout | default(''))"
+
 - name: Start Docker
   ansible.builtin.service:
     name: docker
@@ -146,3 +182,6 @@
         argv: [docker, load, -i, /tmp/app.tar.gz]
       register: docker_load
       changed_when: "'Loaded image' in docker_load.stdout"
+
+- name: CloudWatch Logs (Docker awslogs)
+  ansible.builtin.include_tasks: cloudwatch_logs.yml

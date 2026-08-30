@@ -1,5 +1,4 @@
-# Copied from estate ansible/roles/haystack. Same three services; env aliases (estate ADR 0004) + workers (estate ADR 0011).
-# Repo ADR-0012: vendor pack scripts; do not python -m from the uvicorn image.
+# Copied from estate ansible/roles/haystack. Same three services; env aliases (ADR 0004) + workers (ADR 0011).
 ---
 - name: Haystack image is required
   ansible.builtin.assert:

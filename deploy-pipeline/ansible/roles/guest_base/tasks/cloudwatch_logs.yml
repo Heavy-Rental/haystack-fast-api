@@ -1,0 +1,148 @@
+---
+# Ship container stdout to /heavy-rental/{{ app_role }} via the Docker awslogs
+# driver (dockerd on the host uses the instance profile). No CloudWatch Agent.
+# No new IAM on Academy: if LabRole cannot CreateLogStream, keep json-file.
+#
+# Docker Engine awslogs does not accept ECS option awslogs-stream-prefix.
+# That unknown log-opt makes dockerd refuse to start. Use tag instead.
+- name: Probe CloudWatch Logs for this instance profile
+  ansible.builtin.shell: |
+    set +e
+    GROUP="/heavy-rental/{{ app_role }}"
+    STREAM="ansible-probe-{{ inventory_hostname }}-{{ ansible_date_time.epoch }}"
+    ERR="$(mktemp)"
+    aws logs create-log-stream \
+      --log-group-name "${GROUP}" \
+      --log-stream-name "${STREAM}" \
+      --region "{{ aws_region }}" \
+      2>"${ERR}"
+    RC=$?
+    if [ "${RC}" -eq 0 ]; then
+      aws logs delete-log-stream \
+        --log-group-name "${GROUP}" \
+        --log-stream-name "${STREAM}" \
+        --region "{{ aws_region }}" >/dev/null 2>&1
+      rm -f "${ERR}"
+      echo allowed
+      exit 0
+    fi
+    if grep -qi 'ResourceAlreadyExistsException' "${ERR}"; then
+      rm -f "${ERR}"
+      echo allowed
+      exit 0
+    fi
+    echo denied
+    cat "${ERR}" >&2
+    rm -f "${ERR}"
+    exit 0
+  args:
+    executable: /bin/bash
+  register: cw_logs_probe
+  changed_when: false
+
+- name: Remember whether Docker awslogs is allowed
+  ansible.builtin.set_fact:
+    docker_awslogs_enabled: "{{ (cw_logs_probe.stdout | default('') | trim) == 'allowed' }}"
+
+- name: Warn when CloudWatch Logs is denied
+  ansible.builtin.debug:
+    msg: >-
+      Instance profile cannot CreateLogStream on /heavy-rental/{{ app_role }}.
+      Leaving the json-file log driver. Academy LabRole is Vocareum-owned;
+      paid guests need logs:CreateLogStream and logs:PutLogEvents on that group.
+      {{ cw_logs_probe.stderr | default('') | trim }}
+  when: not (docker_awslogs_enabled | bool)
+
+- name: Docker daemon.json for CloudWatch Logs
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    content: |
+      {
+        "log-driver": "awslogs",
+        "log-opts": {
+          "awslogs-region": "{{ aws_region }}",
+          "awslogs-group": "/heavy-rental/{{ app_role }}",
+          "tag": "{{ app_role }}/{% raw %}{{.Name}}{% endraw %}",
+          "mode": "non-blocking",
+          "max-buffer-size": "4m"
+        }
+      }
+    mode: "0644"
+  when: docker_awslogs_enabled | bool
+  register: docker_daemon_awslogs
+
+- name: Remove awslogs daemon.json when CloudWatch Logs is denied
+  ansible.builtin.file:
+    path: /etc/docker/daemon.json
+    state: absent
+  when: not (docker_awslogs_enabled | bool)
+  register: docker_daemon_revert
+
+- name: Apply the Docker log driver
+  when: (docker_daemon_awslogs.changed | default(false)) or (docker_daemon_revert.changed | default(false))
+  block:
+    - name: Restart Docker to apply the log driver
+      ansible.builtin.service:
+        name: docker
+        state: restarted
+
+    - name: Wait until Docker responds
+      ansible.builtin.command:
+        argv: [docker, info]
+      register: docker_info
+      retries: 10
+      delay: 2
+      until: docker_info.rc == 0
+      changed_when: false
+  rescue:
+    - name: Collect docker.service journal
+      ansible.builtin.command:
+        argv: [journalctl, -u, docker.service, -n, "80", --no-pager]
+      register: docker_journal
+      changed_when: false
+      failed_when: false
+
+    - name: Revert daemon.json so Docker can start
+      ansible.builtin.file:
+        path: /etc/docker/daemon.json
+        state: absent
+
+    - name: Start Docker after log-driver revert
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Wait until Docker responds after revert
+      ansible.builtin.command:
+        argv: [docker, info]
+      register: docker_info_reverted
+      retries: 10
+      delay: 2
+      until: docker_info_reverted.rc == 0
+      changed_when: false
+
+    - name: Remember awslogs is not in effect
+      ansible.builtin.set_fact:
+        docker_awslogs_enabled: false
+        docker_daemon_awslogs: { changed: false }
+        docker_daemon_revert: { changed: false }
+
+    - name: Warn that awslogs was reverted
+      ansible.builtin.debug:
+        msg: >-
+          Docker rejected /etc/docker/daemon.json; reverted to json-file so
+          compose can start.
+          {{ docker_journal.stdout | default('') | trim }}
+
+- name: Stat existing compose file
+  ansible.builtin.stat:
+    path: "{{ compose_dir }}/compose.yml"
+  register: compose_file
+
+- name: Recreate compose stack with the new log driver
+  ansible.builtin.command:
+    argv: [docker, compose, -f, "{{ compose_dir }}/compose.yml", up, -d, --force-recreate]
+  when:
+    - (docker_daemon_awslogs.changed | default(false)) or (docker_daemon_revert.changed | default(false))
+    - compose_file.stat.exists
