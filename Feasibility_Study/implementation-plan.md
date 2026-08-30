@@ -4,11 +4,11 @@
 |-------|--------|
 | **Document type** | Implementation plan (derived from feasibility studies) |
 | **Status** | Plan only — **not** runtime source of truth |
-| **Date** | 2026-08-28 |
-| **Version** | 3.20.0 |
+| **Date** | 2026-08-30 |
+| **Version** | 3.22.0 |
 | **Source studies** | All documents in this folder (feasibility studies + this plan; all GO with phased constraints) |
 | **Repo** | `haystack-fast-api` (app) + related config/Spring repos where noted |
-| **Revision notes** | **3.20.0** HR-244 / ADR-0012: academy/paid deploy vendors pack sync/populate workers; **3.19.0** FR-P-013 quote collapse + FR-P-014 LLM timeout + Phase 3a–3d scheduler as-built + MADR ADRs; **3.18.0** Call 2 quote `equipment.id`=`assets.id` + scores + `PRICING_SCHEMA` + Call 1 extract expansions; **3.17.1** Call 2 `items[].mlPredictedPrice` as-built; **3.17.0** S7.8; **3.16.0** S8.3 live Neo4j; **3.15.0** S8.2 T4 config; **3.14.0** S2b Spring; **3.13.0** S8.1 T3; **3.12.0** S4 T0–T2 config; **3.11.0** S4 app live SQL; **3.10.0** S7.2; **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
+| **Revision notes** | **3.22.0** KG-2 graph modelling study (canonical labels/edges; BookingItem; as-built gaps); **3.21.0** recommend matching / NER study (no NER as-built; domain NER GO with constraints); **3.20.0** HR-244 / ADR-0012: academy/paid deploy vendors pack sync/populate workers; **3.19.0** FR-P-013 quote collapse + FR-P-014 LLM timeout + Phase 3a–3d scheduler as-built + MADR ADRs; **3.18.0** Call 2 quote `equipment.id`=`assets.id` + scores + `PRICING_SCHEMA` + Call 1 extract expansions; **3.17.1** Call 2 `items[].mlPredictedPrice` as-built; **3.17.0** S7.8; **3.16.0** S8.3 live Neo4j; **3.15.0** S8.2 T4 config; **3.14.0** S2b Spring; **3.13.0** S8.1 T3; **3.12.0** S4 T0–T2 config; **3.11.0** S4 app live SQL; **3.10.0** S7.2; **3.9.0** S7.7; **3.8.0** S7.5 + S7.6; **3.7.0** S7.3 + S7.4; **3.6.0** S7.0 + S7.1; **3.5.6** S6; **3.5.5** S5-I1; **3.5.4** S5-I0; **3.5.3** pytest isolation; **3.5.2** S3; **3.5.1** Call 2/3 renumber; **3.5.0** Call 2 recommend HTTP MVP; **3.4.x** portal dual-hop; **3.0.0** stage catalog |
 
 Related studies: [`README.md`](./README.md) · normative product behaviour: [`../openspec/`](../openspec/)
 
@@ -27,6 +27,8 @@ Related studies: [`README.md`](./README.md) · normative product behaviour: [`..
 | **ML pricing multi-agent** | GO in-process `predict_asset_price`; not public HTTP; **Worker [7] fan-out per need** | **Medium** — after fleet candidates exist |
 | **Multi-agent synthesis → assets + prices** | GO as tool-free **Coordinator** merge node; Stage-1 Q&A stays separate | **Medium–High** — enrich **Call 2 recommend** (C/W/D) |
 | **C/W/D role vocabulary** | GO as alias layer over Orchestrator; **§10 A–L templates** (incl. seq/par processing) | **Medium** — Phase 7 full agent contract |
+| **Recommend matching / NER** | MVP keyword match **as-built**; NER **absent**; domain extract **GO with constraints** | **Medium** — follow-on to S7.1/S7.8; default off |
+| **KG-2 graph modelling** | Canonical fleet property graph **defined**; populate/read **partial as-built** | **Medium** — align G1–G3 (plural tables + BookingItem); not a Call 2 rewrite |
 
 **Hard architectural rules (do not violate):**
 
@@ -41,6 +43,7 @@ Related studies: [`README.md`](./README.md) · normative product behaviour: [`..
 - KG-1 (project) and KG-2 (fleet Neo4j) stay separate planes.
 - Spring remains HTTP REST client; resilience lives mostly on Spring + job patterns.
 - Phase 7 agent prompts follow C/W/D **A–L** contracts ([`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) §10).
+- Recommend matching stays **catalog + availability + `predict_price` + rank**; optional domain NER (**S7.9**) must feed decompose/filter — not generic PER/ORG/LOC and not KG transforms as a substitute ([`recommender-matching-and-ner.md`](./recommender-matching-and-ner.md)).
 
 ### 1.2 As-built baseline (today)
 
@@ -436,6 +439,7 @@ Use **stage IDs** in PRs and test names. Every stage below that ships code has a
 | **S7.6** | `tool_traces` / metrics (role, need_id, duration) | 7 | app | S7.3 | **yes** (**as-built**) |
 | **S7.7** | Prompts A–L + tool DI factory | 7 | app | S7.3–7.4 | **yes** (**as-built**) |
 | **S7.8** | Worker [5] live KG-1 vector/KG tools | 7 | app | S7.7 | **yes** (**as-built**) |
+| **S7.9** | Domain NER / entity extract → need constraints (optional) | 7 | app | S7.1 | **yes** if default `off` (**not started**; study only) |
 | **S8** | Neo4j populate + real graph tools | 8 | config+app | seed SQL | optional (**8.1+8.2 as-built** config; **8.3 as-built** app) |
 | **S9.1** | C2 202 jobs / SSE | 9 | app (+ Spring) | HTTP surface | **yes** (fake worker) |
 | **S9.2–S9.5** | Object storage / I2 default / D2 / C3 | 9 | split | metrics-driven | per sub-item |
@@ -991,6 +995,7 @@ Every code-bearing PR **must** use the **PR description template** below (bare m
 | **PR-M** | S8.2 T4 | Ops populate trigger | **As-built (pack + deploy-pipeline copies)** — post-sync HTTP + admin `POST /v1/populate` :8089; scoped delete; KG-1 preserved |
 | **PR-N** | S8.3 | App live Neo4j tools | **As-built** — `BoltNeo4jBackend` + populate HTTP; default `NEO4J_BACKEND=fake`; K-3 unavailable; `@pytest.mark.neo4j`; FR-KG-011 load |
 | **PR-O** | S7.8 | Worker [5] live KG-1 tools | **As-built** — session vector + KG-1 before decompose; soft-fail notes; no invent |
+| **PR-P** | S7.9 | Domain NER / need constraints | **Not started** — study [`recommender-matching-and-ner.md`](./recommender-matching-and-ner.md); default backend off; must change filter/rank not KG-only; **BDD** collision + no-match |
 
 ### PR description template (required bare minimum)
 
@@ -1164,6 +1169,7 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 4. Expected **p95 ingest** and max **file size** (drives C2 timing)?  
 5. Auth Spring→FastAPI (mTLS / API key / mesh)?  
 6. Sync table **allowlist** and lag SLA for availability/pricing?  
+7. Domain NER first backend: extend LLM need JSON vs GLiNER (see [`recommender-matching-and-ner.md`](./recommender-matching-and-ner.md) §5.3)?  
 
 ---
 
@@ -1181,6 +1187,8 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | ML pricing P1–P5 / 1e–2a | Phase 6 |
 | Synthesis R5/M6 | S7.4–S7.5 |
 | C/W/D A–L vocabulary | S7.0–S7.7 + [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) §10 |
+| Recommend matching / NER N0–N6 | **S7.9 TARGET** — [`recommender-matching-and-ner.md`](./recommender-matching-and-ner.md) |
+| KG-2 modelling G0–G5 | **G0 study** — [`kg2-graph-modelling.md`](./kg2-graph-modelling.md); G1–G3 align populate + templates |
 
 ---
 
@@ -1221,4 +1229,6 @@ Each milestone maps to **end-to-end product proof**; stage merge gates use the *
 | BDD process (P10) | **Specified** (§2.2 Given/When/Then; stage PR workflow §2.3) |
 | PR description template | **Specified** (§6 — What & Why + Key Changes required; optional details) |
 | Accuracy validation | **3.2.1** cross-checked against app + OpenSpec |
-| Ready to implement | **As-built through S8.3 / Call 2 quote / Phase 3a–3d / HR-244 deploy workers.** Remaining targets: I2 pgvector default, production-default `RECOMMEND_VIA_AGENT_GRAPH`, table-name pack alignment. New work follows OpenSpec change + MADR when choosing alternatives. |
+| Domain NER / matching constraints (S7.9) | **Study only** — [`recommender-matching-and-ner.md`](./recommender-matching-and-ner.md); not as-built; CI must stay backend-off |
+| KG-2 graph schema (G0) | **Study** — [`kg2-graph-modelling.md`](./kg2-graph-modelling.md). Canonical: BookingItem + plural tables. Populate/read still partial. |
+| Ready to implement | **As-built through S8.3 / Call 2 quote / Phase 3a–3d / HR-244 deploy workers.** Remaining targets: I2 pgvector default, production-default `RECOMMEND_VIA_AGENT_GRAPH`, table-name pack alignment, **S7.9 domain NER** (optional), **KG-2 G1–G3** (BookingItem / plural SQL). New work follows OpenSpec change + MADR when choosing alternatives. |

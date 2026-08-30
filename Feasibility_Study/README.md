@@ -19,7 +19,7 @@ These apply across studies unless a study explicitly narrows scope:
 | **Fleet data path** | **`postgres-primary`** (write SoT) → **`postgres_haystack_sync`** → **`postgres_haystack` / `heavy_rental`** (agent read mirror). |
 | **Default pytest** | `uv run pytest` is CI-safe (memory DocumentStore). `tests/conftest.py` forces mock embedder **dim 384**, stub agents, temp KG dir so host `.env` does not break CI. Vector tools: query embedder mode/dim **must** match session store; tenant filters on `user_id`/`ingest_id`. Optional `@pytest.mark.pgvector` (S5-I1) skipped unless `RUN_PGVECTOR_TESTS=1`. Optional `@pytest.mark.neo4j` (S8.3) skipped unless `RUN_NEO4J_TESTS=1`. Details: [`implementation-plan.md`](./implementation-plan.md) §7.0 · OpenSpec project-setup. |
 
-**How to read:** start with dual-plane for data + request flow; C/W/D for agent roles; implementation plan for phased rollout; other studies for specialty depth (pricing, synthesis, Spring wire, Call 1, SuperComponent).
+**How to read:** start with dual-plane for data + request flow; C/W/D for agent roles; implementation plan for phased rollout; other studies for specialty depth (pricing, synthesis, Spring wire, Call 1, SuperComponent, recommend matching / NER, **KG-2 graph schema**).
 
 | Study | Topic | Version |
 |-------|--------|---------|
@@ -30,12 +30,14 @@ These apply across studies unless a study explicitly narrows scope:
 | [`multi-agent-coordinator-worker-delegator.md`](./multi-agent-coordinator-worker-delegator.md) | C/W/D roles; Call 2 recommend / Call 3 Q&A numbering aligned. **S7.0–S7.8 as-built**; **S8.3 live Neo4j tools as-built**; quote `equipment.id` vs DTO `asset_id`. **ADR-0012** deploy workers. | **2.1.11** |
 | [`indexing-pipeline-supercomponent.md`](./indexing-pipeline-supercomponent.md) | Indexing Pipeline → Haystack SuperComponent (optional packaging for Coordinator gate **[4]**). | **1.2.1** |
 | [`call1-ingest-response-project-summary.md`](./call1-ingest-response-project-summary.md) | Call 1 lean body; FR-IX-023 **as-built** S1a–S1e + file-before-text / multi-need / expanded extract; not Call 2 recommend quote. | **1.3.0** |
+| [`recommender-matching-and-ner.md`](./recommender-matching-and-ner.md) | Call 2 matching audit (keyword MVP, not learned rank); **no NER as-built**; domain entity extraction **GO with constraints** (GLiNER or LLM JSON → decompose + filter; not generic PER/ORG/LOC; not `KG_APPLY_TRANSFORMS`). | **1.0.0** |
+| [`kg2-graph-modelling.md`](./kg2-graph-modelling.md) | **KG-2** property graph: `:Asset`/`:Category`/`:Booking`/`:BookingItem`/`:ReturnRecord`; edges `IN_CATEGORY`, `FOR_ASSET` from **item**, `FOR_BOOKING`. As-built populate is a partial singular-table projection; Attachment TARGET. Does not pick Call 2 `asset_id`. | **1.0.0** |
 
 ### Implementation plan
 
 | Document | Topic | Version |
 |----------|--------|---------|
-| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. **S2a+S2b as-built**; **S3 as-built**; **S4 as-built**; **S5-I0+I1 as-built**; **S6 as-built**; **S7.0–S7.8 as-built**; **S8.1–S8.3 as-built**; Call 2 quote `equipment.id`=`assets.id` + scores + **FR-P-013/014**; Phase 3a–3d scheduler as-built. **§7.0 default pytest isolation** (mock dim 384). **HR-244 / ADR-0012** deploy-pipeline workers. | **3.20.0** |
+| [`implementation-plan.md`](./implementation-plan.md) | Stage catalog; Call 2=recommend, Call 3=chatbot Q&A; portal dual-hop; TDD/BDD. **S2a+S2b as-built**; **S3 as-built**; **S4 as-built**; **S5-I0+I1 as-built**; **S6 as-built**; **S7.0–S7.8 as-built**; **S8.1–S8.3 as-built**; Call 2 quote `equipment.id`=`assets.id` + scores + **FR-P-013/014**; Phase 3a–3d scheduler as-built. **§7.0 default pytest isolation** (mock dim 384). **HR-244 / ADR-0012** deploy-pipeline workers. **S7.9** domain NER TARGET; **KG-2 modelling G0** (study). | **3.22.0** |
 | [`phase2-s2a-haystack-implementation-plan.md`](./phase2-s2a-haystack-implementation-plan.md) | **Phase 2 / S2a only** — haystack-fast-api: `Idempotency-Key`, correlation logging, docs. **Implemented** (FR-IX-024/025; §7 test runbook + conftest isolation). | **1.1.3** |
 | [`phase2-s2b-spring-implementation-plan.md`](./phase2-s2b-spring-implementation-plan.md) | **S2b as-built (Spring repo)** — client, Resilience4j, saga. Pointer; canonical plan **v2.1.1** in Spring. | **2.0.1** |
 
